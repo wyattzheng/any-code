@@ -1,10 +1,11 @@
 .tab-bar {
     display: flex;
     align-items: center;
-    height: var(--tab-height);
+    min-height: var(--tab-height);
     background: var(--color-surface);
     border-top: 1px solid var(--color-border);
-    padding: 0 4px;
+    padding: 6px 12px;
+    gap: 4px;
     flex-shrink: 0;
     z-index: 100;
 }
@@ -27,7 +28,8 @@
 }
 
 .tab-item.active {
-    color: var(--color-accent);
+    background: var(--color-surface-hover);
+    color: var(--color-text);
 }
 
 .tab-icon {
