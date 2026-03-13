@@ -7,16 +7,20 @@ export function FileBrowser() {
                 <div className="panel-header">📁 文件</div>
                 <div className="file-tree">
                     <div className="file-tree-item folder">
-                        <span>📂 src/</span>
+                        <span className="file-icon">📂</span>
+                        <span className="file-name">src/</span>
                     </div>
                     <div className="file-tree-item file indent">
-                        <span>📄 main.tsx</span>
+                        <span className="file-icon">📄</span>
+                        <span className="file-name">main.tsx</span>
                     </div>
                     <div className="file-tree-item file indent">
-                        <span>📄 App.tsx</span>
+                        <span className="file-icon">📄</span>
+                        <span className="file-name">App.tsx</span>
                     </div>
                     <div className="file-tree-item file">
-                        <span>📄 package.json</span>
+                        <span className="file-icon">📄</span>
+                        <span className="file-name">package.json</span>
                     </div>
                 </div>
             </div>

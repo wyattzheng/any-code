@@ -34,6 +34,7 @@
 .file-tree-item {
     padding: 8px 12px;
     font-size: 13px;
+    line-height: 1;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -42,6 +43,17 @@
 
 .file-tree-item:active {
     background: var(--color-surface-hover);
+}
+
+.file-icon {
+    font-size: 14px;
+    flex-shrink: 0;
+}
+
+.file-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .file-tree-item.indent {
