@@ -1,6 +1,7 @@
 import type { TabId } from "../App";
 import { FileBrowser } from "./FileBrowser";
 import { ChangesView } from "./ChangesView";
+import { PreviewTab } from "./PreviewTab";
 import "./MainView.css";
 
 interface MainViewProps {
@@ -12,9 +13,10 @@ export function MainView({ activeTab }: MainViewProps) {
         <div className="main-view">
             {activeTab === "files" && <FileBrowser />}
             {activeTab === "changes" && <ChangesView />}
+            {activeTab === "preview" && <PreviewTab />}
 
             {/* 动态 Tab：渲染 iframe 访问 agent web 项目路由 */}
-            {activeTab !== "files" && activeTab !== "changes" && (
+            {activeTab !== "files" && activeTab !== "changes" && activeTab !== "preview" && (
                 <iframe
                     className="main-view-iframe"
                     src={activeTab}
@@ -24,3 +26,4 @@ export function MainView({ activeTab }: MainViewProps) {
         </div>
     );
 }
+
