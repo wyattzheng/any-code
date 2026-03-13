@@ -8,9 +8,8 @@ export function PreviewTab() {
         return (
             <div className="preview-tab">
                 <div className="preview-placeholder">
-                    <span className="preview-placeholder-icon">👁</span>
-                    <p className="preview-placeholder-text">等待 AI 填充预览界面...</p>
-                    <p className="preview-placeholder-hint">AI 生成界面后将在此处展示</p>
+                    <span className="preview-placeholder-icon">🖥</span>
+                    <p className="preview-placeholder-text">通过对话让 AI 生成界面，结果将展示在这里</p>
                 </div>
             </div>
         );

@@ -14,6 +14,14 @@ export function TabBar({ activeTab, onTabChange }: TabBarProps) {
             <div className="tab-spacer" />
 
             <button
+                className={`tab-item ${activeTab === "preview" ? "active" : ""}`}
+                onClick={() => onTabChange("preview")}
+            >
+                <span className="tab-icon">🖥</span>
+                <span className="tab-label">预览</span>
+            </button>
+
+            <button
                 className={`tab-item ${activeTab === "files" ? "active" : ""}`}
                 onClick={() => onTabChange("files")}
             >
@@ -27,14 +35,6 @@ export function TabBar({ activeTab, onTabChange }: TabBarProps) {
             >
                 <span className="tab-icon">📝</span>
                 <span className="tab-label">变更</span>
-            </button>
-
-            <button
-                className={`tab-item ${activeTab === "preview" ? "active" : ""}`}
-                onClick={() => onTabChange("preview")}
-            >
-                <span className="tab-icon">👁</span>
-                <span className="tab-label">预览</span>
             </button>
         </nav>
     );
