@@ -64,7 +64,7 @@ textarea {
 }
 
 .resize-handle {
-    height: 24px;
+    height: 20px;
     background: var(--color-surface);
     border-top: 2px solid var(--color-border);
     display: flex;
