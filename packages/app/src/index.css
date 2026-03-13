@@ -11,7 +11,7 @@
     --color-success: #22c55e;
     --color-warning: #f59e0b;
 
-    --tab-height: 52px;
+    --tab-height: 48px;
     --radius: 10px;
     --radius-sm: 6px;
 
@@ -27,7 +27,9 @@
     box-sizing: border-box;
 }
 
-html, body, #root {
+html,
+body,
+#root {
     height: 100%;
     width: 100%;
     overflow: hidden;
@@ -52,7 +54,8 @@ button {
     -webkit-tap-highlight-color: transparent;
 }
 
-input, textarea {
+input,
+textarea {
     font-family: inherit;
     border: none;
     background: none;
