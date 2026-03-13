@@ -1,22 +1,23 @@
 .changes-view {
     height: 100%;
     display: flex;
-    flex-direction: column;
+    flex-direction: column-reverse;
 }
 
 .changes-list {
-    border-bottom: 1px solid var(--color-border);
-    max-height: 40%;
+    border-top: 1px solid var(--color-border);
+    height: 200px;
+    flex-shrink: 0;
     overflow-y: auto;
 }
 
 .change-items {
-    padding: 8px 0;
+    padding: 4px 0;
 }
 
 .change-item {
-    padding: 10px 16px;
-    font-size: 14px;
+    padding: 8px 12px;
+    font-size: 13px;
     display: flex;
     align-items: center;
     gap: 10px;
@@ -28,13 +29,13 @@
 }
 
 .change-badge {
-    width: 22px;
-    height: 22px;
-    border-radius: 4px;
+    width: 20px;
+    height: 20px;
+    border-radius: 3px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 700;
     flex-shrink: 0;
 }
@@ -60,25 +61,11 @@
 }
 
 .diff-content {
-    padding: 16px;
+    padding: 10px 12px;
     font-family: var(--font-mono);
-    font-size: 13px;
-    line-height: 1.6;
+    font-size: 12px;
+    line-height: 1.5;
     color: var(--color-text-dim);
     white-space: pre-wrap;
     word-break: break-all;
-}
-
-@media (min-width: 768px) {
-    .changes-view {
-        flex-direction: row;
-    }
-
-    .changes-list {
-        width: 280px;
-        max-height: none;
-        border-bottom: none;
-        border-right: 1px solid var(--color-border);
-        flex-shrink: 0;
-    }
 }
