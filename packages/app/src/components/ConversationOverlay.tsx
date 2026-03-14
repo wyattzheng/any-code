@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from "react";
-import { MicIcon, KeyboardIcon, SendIcon, CloseIcon } from "./Icons";
+import { MicIcon, KeyboardIcon, SendIcon, CloseIcon, ChatIcon } from "./Icons";
 import "./ConversationOverlay.css";
 
 export function ConversationOverlay() {
@@ -121,13 +121,18 @@ export function ConversationOverlay() {
                     </>
                 ) : (
                     <>
-                        <button
-                            className={`mic-btn ${recording ? "recording" : ""}`}
-                            onMouseDown={handleMicMouseDown}
-                            onTouchStart={handleMicTouchStart}
-                        >
-                            <MicIcon />
-                        </button>
+                        <div className="mic-wrapper">
+                            {recording && (
+                                <div className="mic-tooltip">录音中<span className="dot-anim" /></div>
+                            )}
+                            <button
+                                className={`mic-btn ${recording ? "recording" : ""}`}
+                                onMouseDown={handleMicMouseDown}
+                                onTouchStart={handleMicTouchStart}
+                            >
+                                <MicIcon />
+                            </button>
+                        </div>
                         <button className="text-toggle-btn" onClick={() => setShowTextInput(true)}><KeyboardIcon /></button>
                     </>
                 )}
