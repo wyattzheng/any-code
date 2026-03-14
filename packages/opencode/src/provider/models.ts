@@ -1,4 +1,4 @@
-import { Global } from "../util/global"
+import { Instance } from "../project/instance"
 import { Log } from "../util/log"
 import path from "path"
 import z from "zod"
@@ -13,7 +13,7 @@ import { Filesystem } from "../util/filesystem"
 
 export namespace ModelsDev {
   const log = Log.create({ service: "models.dev" })
-  const filepath = path.join(Global.Path.cache, "models.json")
+  const filepath = path.join(Instance.paths.cache, "models.json")
 
   export const Model = z.object({
     id: z.string(),

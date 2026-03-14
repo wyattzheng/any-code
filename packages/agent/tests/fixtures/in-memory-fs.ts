@@ -39,13 +39,21 @@ export class InMemoryFS implements VirtualFileSystem {
 
     async readText(p: string): Promise<string> {
         const content = this.files.get(p)
-        if (content === undefined) throw new Error(`ENOENT: no such file: ${p}`)
+        if (content === undefined) {
+            const err = new Error(`ENOENT: no such file: ${p}`) as NodeJS.ErrnoException
+            err.code = "ENOENT"
+            throw err
+        }
         return typeof content === "string" ? content : new TextDecoder().decode(content)
     }
 
     async readBytes(p: string): Promise<Uint8Array> {
         const content = this.files.get(p)
-        if (content === undefined) throw new Error(`ENOENT: no such file: ${p}`)
+        if (content === undefined) {
+            const err = new Error(`ENOENT: no such file: ${p}`) as NodeJS.ErrnoException
+            err.code = "ENOENT"
+            throw err
+        }
         return typeof content === "string" ? new TextEncoder().encode(content) : content
     }
 

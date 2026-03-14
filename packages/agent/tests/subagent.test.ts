@@ -1,3 +1,4 @@
+import { testPaths } from "./_test-paths"
 /**
  * Test: Subagent (task tool) — spawns a child agent session
  *
@@ -31,6 +32,7 @@ describe("CodeAgent: subagent (task tool)", () => {
             directory: tmpDir,
             skipPlugins: true,
             fs: new NodeFS(),
+            paths: testPaths(),
             provider: {
                 id: "openai",
                 apiKey: "test-key-not-real",

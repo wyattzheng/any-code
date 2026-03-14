@@ -15,7 +15,6 @@ import { Env } from "../util/env"
 import { Instance } from "../project/instance"
 import { Flag } from "../util/flag"
 import { iife } from "@/util/iife"
-import { Global } from "../util/global"
 import path from "path"
 import { Filesystem } from "../util/filesystem"
 
@@ -1321,7 +1320,7 @@ export namespace Provider {
 
     const providers = await list()
     const recent = (await Filesystem.readJson<{ recent?: { providerID: ProviderID; modelID: ModelID }[] }>(
-      path.join(Global.Path.state, "model.json"),
+      path.join(Instance.paths.state, "model.json"),
     )
       .then((x) => (Array.isArray(x.recent) ? x.recent : []))
       .catch(() => [])) as { providerID: ProviderID; modelID: ModelID }[]

@@ -1,3 +1,4 @@
+import { testPaths } from "./_test-paths"
 /**
  * Test: Bash tool — SSE event handling
  *
@@ -26,6 +27,7 @@ describe("CodeAgent: bash tool", () => {
             directory: tmpDir,
             skipPlugins: true,
             fs: new NodeFS(),
+            paths: testPaths(),
             provider: {
                 id: "openai",
                 apiKey: "test-key-not-real",

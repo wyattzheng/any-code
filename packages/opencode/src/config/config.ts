@@ -6,7 +6,6 @@ import os from "os"
 import z from "zod"
 import { ModelsDev } from "../provider/models"
 import { mergeDeep, pipe, unique } from "remeda"
-import { Global } from "../util/global"
 import fs from "fs/promises"
 import { lazy } from "../util/lazy"
 import { NamedError } from "@/util/error"
@@ -1213,12 +1212,12 @@ export namespace Config {
   export const global = lazy(async () => {
     let result: Info = pipe(
       {},
-      mergeDeep(await loadFile(path.join(Global.Path.config, "config.json"))),
-      mergeDeep(await loadFile(path.join(Global.Path.config, "opencode.json"))),
-      mergeDeep(await loadFile(path.join(Global.Path.config, "opencode.jsonc"))),
+      mergeDeep(await loadFile(path.join(Instance.paths.config, "config.json"))),
+      mergeDeep(await loadFile(path.join(Instance.paths.config, "opencode.json"))),
+      mergeDeep(await loadFile(path.join(Instance.paths.config, "opencode.jsonc"))),
     )
 
-    const legacy = path.join(Global.Path.config, "config")
+    const legacy = path.join(Instance.paths.config, "config")
     if (existsSync(legacy)) {
       await import(pathToFileURL(legacy).href, {
         with: {
@@ -1230,7 +1229,7 @@ export namespace Config {
           if (provider && model) result.model = `${provider}/${model}`
           result["$schema"] = "https://opencode.ai/config.json"
           result = mergeDeep(result, rest)
-          await Filesystem.writeJson(path.join(Global.Path.config, "config.json"), result)
+          await Filesystem.writeJson(path.join(Instance.paths.config, "config.json"), result)
           await fs.unlink(legacy)
         })
         .catch(() => {})
@@ -1330,7 +1329,7 @@ export namespace Config {
 
   function globalConfigFile() {
     const candidates = ["opencode.jsonc", "opencode.json", "config.json"].map((file) =>
-      path.join(Global.Path.config, file),
+      path.join(Instance.paths.config, file),
     )
     for (const file of candidates) {
       if (existsSync(file)) return file

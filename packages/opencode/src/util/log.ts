@@ -1,7 +1,7 @@
 import path from "path"
 import fs from "fs/promises"
 import { createWriteStream } from "fs"
-import { Global } from "../util/global"
+import { Instance } from "../project/instance"
 import z from "zod"
 import { Glob } from "./glob"
 
@@ -59,10 +59,10 @@ export namespace Log {
 
   export async function init(options: Options) {
     if (options.level) level = options.level
-    cleanup(Global.Path.log)
+    cleanup(Instance.paths.log)
     if (options.print) return
     logpath = path.join(
-      Global.Path.log,
+      Instance.paths.log,
       options.dev ? "dev.log" : new Date().toISOString().split(".")[0].replace(/:/g, "") + ".log",
     )
     await fs.truncate(logpath).catch(() => {})

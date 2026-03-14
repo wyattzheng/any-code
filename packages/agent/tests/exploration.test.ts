@@ -1,3 +1,4 @@
+import { testPaths } from "./_test-paths"
 /**
  * Test: Multi-tool exploration — find the core phrase
  *
@@ -71,6 +72,7 @@ describe("CodeAgent: multi-tool exploration", () => {
             directory: tmpDir,
             skipPlugins: true,
             fs: new NodeFS(),
+            paths: testPaths(),
             provider: {
                 id: "openai",
                 apiKey: "test-key-not-real",

@@ -6,7 +6,6 @@ import { Instance } from "../project/instance"
 import { NamedError } from "@/util/error"
 import { ConfigMarkdown } from "../config/markdown"
 import { Log } from "../util/log"
-import { Global } from "@/util/global"
 import { Filesystem } from "@/util/filesystem"
 import { Flag } from "@/util/flag"
 import { Bus } from "@/bus"
@@ -108,7 +107,7 @@ export namespace Skill {
     // Load global (home) first, then project-level (so project-level overwrites)
     if (!Flag.OPENCODE_DISABLE_EXTERNAL_SKILLS) {
       for (const dir of EXTERNAL_DIRS) {
-        const root = path.join(Global.Path.home, dir)
+        const root = path.join(Instance.paths.home, dir)
         if (!(await Filesystem.isDir(root))) continue
         await scanExternal(root, "global")
       }

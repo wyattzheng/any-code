@@ -9,12 +9,23 @@ import { Filesystem } from "@/util/filesystem"
 import { InstanceState } from "@/util/instance-state"
 import type { VFS } from "@/util/vfs"
 
+export interface InstancePaths {
+  data: string
+  bin: string
+  log: string
+  cache: string
+  config: string
+  state: string
+  home: string
+}
+
 interface Context {
   directory: string
   worktree: string
   project: Project.Info
   scopeId: string
   vfs?: VFS
+  paths?: InstancePaths
   config?: Record<string, unknown>
   instructions?: string[]
 }
@@ -48,32 +59,53 @@ function boot(input: {
   project?: Project.Info
   worktree?: string
   vfs?: VFS
+  paths?: InstancePaths
   config?: Record<string, unknown>
   instructions?: string[]
 }) {
   return iife(async () => {
-    const ctx: Context =
-      input.project && input.worktree
-        ? {
-            directory: input.directory,
-            worktree: input.worktree,
-            project: input.project,
-            scopeId: input.scopeId,
-            vfs: input.vfs,
-            config: input.config,
-            instructions: input.instructions,
-          }
-        : {
-            ...(await Project.fromDirectory(input.directory).then(({ project, sandbox }) => ({
-              directory: input.directory,
-              worktree: sandbox,
-              project,
-            }))),
-            scopeId: input.scopeId,
-            vfs: input.vfs,
-            config: input.config,
-            instructions: input.instructions,
-          }
+    if (input.project && input.worktree) {
+      const ctx: Context = {
+        directory: input.directory,
+        worktree: input.worktree,
+        project: input.project,
+        scopeId: input.scopeId,
+        vfs: input.vfs,
+        paths: input.paths,
+        config: input.config,
+        instructions: input.instructions,
+      }
+      await context.provide(ctx, async () => {
+        await input.init?.()
+      })
+      return ctx
+    }
+
+    // Need to discover project — but Project.fromDirectory uses Filesystem
+    // which needs Instance.vfs. Provide a temporary context first.
+    const tempCtx: Context = {
+      directory: input.directory,
+      worktree: input.directory,
+      project: { id: "temp", path: input.directory } as any,
+      scopeId: input.scopeId,
+      vfs: input.vfs,
+      paths: input.paths,
+      config: input.config,
+      instructions: input.instructions,
+    }
+    const { project, sandbox } = await context.provide(tempCtx, () =>
+      Project.fromDirectory(input.directory),
+    )
+    const ctx: Context = {
+      directory: input.directory,
+      worktree: sandbox,
+      project,
+      scopeId: input.scopeId,
+      vfs: input.vfs,
+      paths: input.paths,
+      config: input.config,
+      instructions: input.instructions,
+    }
     await context.provide(ctx, async () => {
       await input.init?.()
     })
@@ -100,6 +132,7 @@ export const Instance = {
     init?: () => Promise<any>
     fn: () => R
     vfs?: VFS
+    paths?: InstancePaths
     config?: Record<string, unknown>
     instructions?: string[]
   }): Promise<R> {
@@ -115,16 +148,21 @@ export const Instance = {
           directory,
           scopeId,
           init: input.init,
+          vfs: input.vfs,
+          paths: input.paths,
+          config: input.config,
+          instructions: input.instructions,
         }),
       )
     }
     const ctx = await existing
     // Allow overriding VFS/config/instructions per provide() call
     const ctxWithOverrides =
-      input.vfs || input.config || input.instructions
+      input.vfs || input.paths || input.config || input.instructions
         ? {
             ...ctx,
             ...(input.vfs && { vfs: input.vfs }),
+            ...(input.paths && { paths: input.paths }),
             ...(input.config && { config: input.config }),
             ...(input.instructions && { instructions: input.instructions }),
           }
@@ -152,6 +190,11 @@ export const Instance = {
   },
   get config(): Record<string, unknown> | undefined {
     return context.use().config
+  },
+  get paths(): InstancePaths {
+    const ctx = context.use()
+    if (!ctx.paths) throw new Error("Paths not provided. Pass paths via Instance.provide({ paths })")
+    return ctx.paths
   },
   get instructions(): string[] | undefined {
     return context.use().instructions

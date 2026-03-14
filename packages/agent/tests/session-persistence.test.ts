@@ -1,3 +1,4 @@
+import { testPaths } from "./_test-paths"
 /**
  * Test: Session persistence
  *
@@ -20,6 +21,7 @@ describe("CodeAgent: session persistence", () => {
             directory: tmpDir,
             skipPlugins: true,
             fs: new NodeFS(),
+            paths: testPaths(),
             provider: {
                 id: "openai",
                 apiKey: "test-key-not-real",

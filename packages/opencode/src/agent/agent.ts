@@ -16,7 +16,6 @@ import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 import { PermissionNext } from "@/permission/next"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
-import { Global } from "@/util/global"
 import path from "path"
 import { Plugin } from "@/util/plugin"
 import { Skill } from "../skill"
@@ -100,12 +99,12 @@ export namespace Agent {
             question: "allow",
             plan_exit: "allow",
             external_directory: {
-              [path.join(Global.Path.data, "plans", "*")]: "allow",
+              [path.join(Instance.paths.data, "plans", "*")]: "allow",
             },
             edit: {
               "*": "deny",
               [path.join(".opencode", "plans", "*.md")]: "allow",
-              [path.relative(Instance.worktree, path.join(Global.Path.data, path.join("plans", "*.md")))]: "allow",
+              [path.relative(Instance.worktree, path.join(Instance.paths.data, path.join("plans", "*.md")))]: "allow",
             },
           }),
           user,

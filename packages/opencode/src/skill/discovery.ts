@@ -1,7 +1,7 @@
 import path from "path"
-import { mkdir } from "fs/promises"
+
 import { Log } from "../util/log"
-import { Global } from "../util/global"
+import { Instance } from "../project/instance"
 import { Filesystem } from "../util/filesystem"
 
 export namespace Discovery {
@@ -16,7 +16,7 @@ export namespace Discovery {
   }
 
   export function dir() {
-    return path.join(Global.Path.cache, "skills")
+    return path.join(Instance.paths.cache, "skills")
   }
 
   async function get(url: string, dest: string): Promise<boolean> {
@@ -27,7 +27,11 @@ export namespace Discovery {
           log.error("failed to download", { url, status: response.status })
           return false
         }
-        if (response.body) await Filesystem.writeStream(dest, response.body)
+        if (response.body) {
+          const bytes = new Uint8Array(await response.arrayBuffer())
+          await Filesystem.mkdir(path.dirname(dest))
+          await Filesystem.write(dest, bytes)
+        }
         return true
       })
       .catch((err) => {
@@ -83,7 +87,7 @@ export namespace Discovery {
           skill.files.map(async (file) => {
             const link = new URL(file, `${host}/${skill.name}/`).href
             const dest = path.join(root, file)
-            await mkdir(path.dirname(dest), { recursive: true })
+            await Filesystem.mkdir(path.dirname(dest))
             await get(link, dest)
           }),
         )

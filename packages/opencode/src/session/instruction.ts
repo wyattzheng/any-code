@@ -1,6 +1,5 @@
 import path from "path"
 import os from "os"
-import { Global } from "../util/global"
 import { Filesystem } from "../util/filesystem"
 import { Config } from "../config/config"
 import { Instance } from "../project/instance"
@@ -22,7 +21,7 @@ function globalFiles() {
   if (Flag.OPENCODE_CONFIG_DIR) {
     files.push(path.join(Flag.OPENCODE_CONFIG_DIR, "AGENTS.md"))
   }
-  files.push(path.join(Global.Path.config, "AGENTS.md"))
+  files.push(path.join(Instance.paths.config, "AGENTS.md"))
   if (!Flag.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT) {
     files.push(path.join(os.homedir(), ".claude", "CLAUDE.md"))
   }

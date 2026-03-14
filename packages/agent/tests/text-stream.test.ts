@@ -1,3 +1,4 @@
+import { testPaths } from "./_test-paths"
 /**
  * Test: Text streaming flow
  *
@@ -19,6 +20,7 @@ describe("CodeAgent text streaming", () => {
             directory: tmpDir,
             skipPlugins: true,
             fs: new NodeFS(),
+            paths: testPaths(),
             provider: {
                 // Use openai provider so ai-sdk makes calls to /v1/chat/completions
                 // MSW will intercept these

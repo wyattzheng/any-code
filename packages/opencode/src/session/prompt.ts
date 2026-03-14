@@ -1,6 +1,6 @@
 import path from "path"
 import os from "os"
-import fs from "fs/promises"
+
 import z from "zod"
 import { Filesystem } from "../util/filesystem"
 import { SessionID, MessageID, PartID } from "./schema"
@@ -205,7 +205,7 @@ export namespace SessionPrompt {
           ? path.join(os.homedir(), name.slice(2))
           : path.resolve(Instance.worktree, name)
 
-        const stats = await fs.stat(filepath).catch(() => undefined)
+        const stats = await Filesystem.stat(filepath).catch(() => undefined)
         if (!stats) {
           const agent = await Agent.get(name)
           if (agent) {
@@ -217,7 +217,7 @@ export namespace SessionPrompt {
           return
         }
 
-        if (stats.isDirectory()) {
+        if (stats.isDirectory) {
           parts.push({
             type: "file",
             url: pathToFileURL(filepath).href,
@@ -943,9 +943,9 @@ export namespace SessionPrompt {
               // have to normalize, symbol search returns absolute paths
               // Decode the pathname since URL constructor doesn't automatically decode it
               const filepath = fileURLToPath(part.url)
-              const s = Filesystem.stat(filepath)
+              const s = await Filesystem.stat(filepath)
 
-              if (s?.isDirectory()) {
+              if (s?.isDirectory) {
                 part.mime = "application/x-directory"
               }
 
@@ -1234,7 +1234,7 @@ export namespace SessionPrompt {
     if (input.agent.name === "plan" && assistantMessage?.info.agent !== "plan") {
       const plan = Session.plan(input.session)
       const exists = await Filesystem.exists(plan)
-      if (!exists) await fs.mkdir(path.dirname(plan), { recursive: true })
+      if (!exists) await Filesystem.mkdir(path.dirname(plan))
       const part = await Session.updatePart({
         id: PartID.ascending(),
         messageID: userMessage.info.id,

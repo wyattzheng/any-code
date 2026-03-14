@@ -1,9 +1,8 @@
 import path from "path"
-import fs from "fs/promises"
+
 import { Filesystem } from "../util/filesystem"
 import { Log } from "../util/log"
 import { Flag } from "../util/flag"
-import { Global } from "../util/global"
 import z from "zod"
 import { Config } from "../config/config"
 import { Instance } from "../project/instance"
@@ -33,10 +32,7 @@ export namespace Snapshot {
     const cfg = await Config.get()
     if (cfg.snapshot === false) return
     const git = gitdir()
-    const exists = await fs
-      .stat(git)
-      .then(() => true)
-      .catch(() => false)
+    const exists = await Filesystem.exists(git)
     if (!exists) return
     const result = await Process.run(["git", ...args(git, ["gc", `--prune=${prune}`])], {
       cwd: Instance.directory,
@@ -58,7 +54,8 @@ export namespace Snapshot {
     const cfg = await Config.get()
     if (cfg.snapshot === false) return
     const git = gitdir()
-    if (await fs.mkdir(git, { recursive: true })) {
+    if (!(await Filesystem.exists(git))) {
+      await Filesystem.mkdir(git)
       await Process.run(["git", "init"], {
         env: {
           ...process.env,
@@ -209,7 +206,7 @@ export namespace Snapshot {
             })
           } else {
             log.info("file did not exist in snapshot, deleting", { file })
-            await fs.unlink(file).catch(() => {})
+            await Filesystem.remove(file).catch(() => {})
           }
         }
         files.add(file)
@@ -364,7 +361,7 @@ export namespace Snapshot {
 
   function gitdir() {
     const project = Instance.project
-    return path.join(Global.Path.data, "snapshot", project.id)
+    return path.join(Instance.paths.data, "snapshot", project.id)
   }
 
   async function add(git: string) {
@@ -390,7 +387,7 @@ export namespace Snapshot {
   async function syncExclude(git: string) {
     const file = await excludes()
     const target = path.join(git, "info", "exclude")
-    await fs.mkdir(path.join(git, "info"), { recursive: true })
+    await Filesystem.mkdir(path.join(git, "info"))
     if (!file) {
       await Filesystem.write(target, "")
       return
@@ -406,10 +403,7 @@ export namespace Snapshot {
       nothrow: true,
     }).then((x) => x.text)
     if (!file.trim()) return
-    const exists = await fs
-      .stat(file.trim())
-      .then(() => true)
-      .catch(() => false)
+    const exists = await Filesystem.exists(file.trim())
     if (!exists) return
     return file.trim()
   }

@@ -5,7 +5,7 @@ import { type ParseError as JsoncParseError, parse as parseJsonc, printParseErro
 import { NamedError } from "@/util/error"
 import { Filesystem } from "@/util/filesystem"
 import { Flag } from "@/util/flag"
-import { Global } from "@/util/global"
+import { Instance } from "@/project/instance"
 
 export namespace ConfigPaths {
   export async function projectFiles(name: string, directory: string, worktree: string) {
@@ -21,7 +21,7 @@ export namespace ConfigPaths {
 
   export async function directories(directory: string, worktree: string) {
     return [
-      Global.Path.config,
+      Instance.paths.config,
       ...(!Flag.OPENCODE_DISABLE_PROJECT_CONFIG
         ? await Array.fromAsync(
             Filesystem.up({
@@ -34,8 +34,8 @@ export namespace ConfigPaths {
       ...(await Array.fromAsync(
         Filesystem.up({
           targets: [".opencode"],
-          start: Global.Path.home,
-          stop: Global.Path.home,
+          start: Instance.paths.home,
+          stop: Instance.paths.home,
         }),
       )),
       ...(Flag.OPENCODE_CONFIG_DIR ? [Flag.OPENCODE_CONFIG_DIR] : []),

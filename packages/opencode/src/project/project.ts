@@ -10,7 +10,7 @@ import { fn } from "@/util/fn"
 import { BusEvent } from "@/bus/bus-event"
 import { iife } from "@/util/iife"
 import { GlobalBus } from "@/bus/global"
-import { existsSync } from "fs"
+
 import { git } from "../util/git"
 import { Glob } from "../util/glob"
 import { which } from "../util/which"
@@ -244,7 +244,7 @@ export namespace Project {
     }
     if (data.sandbox !== result.worktree && !result.sandboxes.includes(data.sandbox))
       result.sandboxes.push(data.sandbox)
-    result.sandboxes = result.sandboxes.filter((x) => existsSync(x))
+    result.sandboxes = (await Promise.all(result.sandboxes.map(async (x) => ({ x, exists: await Filesystem.exists(x) })))).filter(r => r.exists).map(r => r.x)
     const insert = {
       id: result.id,
       worktree: result.worktree,
@@ -305,7 +305,7 @@ export namespace Project {
     const shortest = matches.sort((a, b) => a.length - b.length)[0]
     if (!shortest) return
     const buffer = await Filesystem.readBytes(shortest)
-    const base64 = buffer.toString("base64")
+    const base64 = Buffer.from(buffer).toString("base64")
     const mime = Filesystem.mimeType(shortest) || "image/png"
     const url = `data:${mime};base64,${base64}`
     await update({
@@ -401,8 +401,8 @@ export namespace Project {
     const data = fromRow(row)
     const valid: string[] = []
     for (const dir of data.sandboxes) {
-      const s = Filesystem.stat(dir)
-      if (s?.isDirectory()) valid.push(dir)
+      const s = await Filesystem.stat(dir)
+      if (s?.isDirectory) valid.push(dir)
     }
     return valid
   }

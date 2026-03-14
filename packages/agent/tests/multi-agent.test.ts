@@ -1,3 +1,4 @@
+import { testPaths } from "./_test-paths"
 /**
  * Test: Multi-agent isolation
  *
@@ -28,12 +29,14 @@ describe("CodeAgent: multi-agent isolation", () => {
             directory: tmpDir,
             skipPlugins: true,
             fs: new NodeFS(),
+            paths: testPaths(),
             provider: { id: "openai", apiKey: "key1", model: "gpt-4o" },
         })
         const agent2 = new CodeAgent({
             directory: tmpDir,
             skipPlugins: true,
             fs: new NodeFS(),
+            paths: testPaths(),
             provider: { id: "openai", apiKey: "key2", model: "gpt-4o" },
         })
 
@@ -72,6 +75,7 @@ describe("CodeAgent: multi-agent isolation", () => {
             directory: tmpDir,
             skipPlugins: true,
             fs: memFS1,
+            paths: testPaths(),
             provider: {
                 id: "openai",
                 apiKey: "test-key-not-real",
@@ -84,6 +88,7 @@ describe("CodeAgent: multi-agent isolation", () => {
             directory: tmpDir,
             skipPlugins: true,
             fs: memFS2,
+            paths: testPaths(),
             provider: {
                 id: "openai",
                 apiKey: "test-key-not-real",

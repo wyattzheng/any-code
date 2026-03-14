@@ -2,14 +2,13 @@ import { BusEvent } from "@/bus/bus-event"
 import z from "zod"
 import { formatPatch, structuredPatch } from "diff"
 import path from "path"
-import fs from "fs"
+
 import ignore from "ignore"
 import { Log } from "../util/log"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Ripgrep } from "./ripgrep"
 import fuzzysort from "fuzzysort"
-import { Global } from "../util/global"
 import { git } from "@/util/git"
 import { Protected } from "./protected"
 
@@ -337,7 +336,7 @@ export namespace File {
     let cache: Entry = { files: [], dirs: [] }
     let fetching = false
 
-    const isGlobalHome = Instance.directory === Global.Path.home && Instance.project.id === "global"
+    const isGlobalHome = Instance.directory === Instance.paths.home && Instance.project.id === "global"
 
     const fn = async (result: Entry) => {
       // Disable scanning if in root of file system
@@ -352,19 +351,19 @@ export namespace File {
         const shouldIgnore = (name: string) => name.startsWith(".") || ignore.has(name)
         const shouldIgnoreNested = (name: string) => name.startsWith(".") || ignoreNested.has(name)
 
-        const top = await fs.promises
-          .readdir(Instance.directory, { withFileTypes: true })
-          .catch(() => [] as fs.Dirent[])
+        const top = await Instance.vfs
+          .readDir(Instance.directory)
+          .catch(() => [] as { name: string; isDirectory: boolean }[])
 
         for (const entry of top) {
-          if (!entry.isDirectory()) continue
+          if (!entry.isDirectory) continue
           if (shouldIgnore(entry.name)) continue
           dirs.add(entry.name + "/")
 
           const base = path.join(Instance.directory, entry.name)
-          const children = await fs.promises.readdir(base, { withFileTypes: true }).catch(() => [] as fs.Dirent[])
+          const children = await Instance.vfs.readDir(base).catch(() => [] as { name: string; isDirectory: boolean }[])
           for (const child of children) {
-            if (!child.isDirectory()) continue
+            if (!child.isDirectory) continue
             if (shouldIgnoreNested(child.name)) continue
             dirs.add(entry.name + "/" + child.name + "/")
           }
@@ -587,15 +586,13 @@ export namespace File {
     }
 
     const nodes: Node[] = []
-    for (const entry of await fs.promises
-      .readdir(resolved, {
-        withFileTypes: true,
-      })
-      .catch(() => [])) {
+    for (const entry of await Instance.vfs
+      .readDir(resolved)
+      .catch(() => [] as { name: string; isDirectory: boolean }[])) {
       if (exclude.includes(entry.name)) continue
       const fullPath = path.join(resolved, entry.name)
       const relativePath = path.relative(Instance.directory, fullPath)
-      const type = entry.isDirectory() ? "directory" : "file"
+      const type = entry.isDirectory ? "directory" : "file"
       nodes.push({
         name: entry.name,
         path: relativePath,

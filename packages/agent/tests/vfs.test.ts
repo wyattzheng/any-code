@@ -1,3 +1,4 @@
+import { testPaths } from "./_test-paths"
 /**
  * Test: VFS interface — NodeFS implementation
  *
@@ -129,6 +130,7 @@ describe("CodeAgent: VFS integration", () => {
             directory: "/tmp/test",
             provider: { id: "openai", apiKey: "test", model: "gpt-4o" },
             fs: nodeFs,
+            paths: testPaths(),
         })
         expect(agent.fs).toBeDefined()
         expect(agent.fs).toBe(nodeFs)
@@ -154,6 +156,7 @@ describe("CodeAgent: VFS integration", () => {
             directory: "/tmp/test",
             provider: { id: "openai", apiKey: "test", model: "gpt-4o" },
             fs: customFS,
+            paths: testPaths(),
         })
 
         // Verify it's using our custom FS

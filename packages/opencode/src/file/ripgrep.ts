@@ -1,6 +1,6 @@
 // Ripgrep utility functions
 import path from "path"
-import { Global } from "../util/global"
+import { Instance } from "../project/instance"
 import fs from "fs/promises"
 import z from "zod"
 import { NamedError } from "@/util/error"
@@ -134,7 +134,7 @@ export namespace Ripgrep {
       if (stat?.isFile()) return { filepath: system }
       log.warn("bun.which returned invalid rg path", { filepath: system })
     }
-    const filepath = path.join(Global.Path.bin, "rg" + (process.platform === "win32" ? ".exe" : ""))
+    const filepath = path.join(Instance.paths.bin, "rg" + (process.platform === "win32" ? ".exe" : ""))
 
     if (!(await Filesystem.exists(filepath))) {
       const platformKey = `${process.arch}-${process.platform}` as keyof typeof PLATFORM
@@ -149,7 +149,7 @@ export namespace Ripgrep {
       if (!response.ok) throw new DownloadFailedError({ url, status: response.status })
 
       const arrayBuffer = await response.arrayBuffer()
-      const archivePath = path.join(Global.Path.bin, filename)
+      const archivePath = path.join(Instance.paths.bin, filename)
       await Filesystem.write(archivePath, Buffer.from(arrayBuffer))
       if (config.extension === "tar.gz") {
         const args = ["tar", "-xzf", archivePath, "--strip-components=1"]
@@ -158,7 +158,7 @@ export namespace Ripgrep {
         if (platformKey.endsWith("-linux")) args.push("--wildcards", "*/rg")
 
         const proc = Process.spawn(args, {
-          cwd: Global.Path.bin,
+          cwd: Instance.paths.bin,
           stderr: "pipe",
           stdout: "pipe",
         })
