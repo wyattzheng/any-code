@@ -14,7 +14,6 @@ export { ToolRegistry } from "./tool/registry"
 export { Provider } from "./provider/provider"
 export { Config } from "./config/config"
 export { Bus } from "./bus"
-export { Instance } from "./project/instance"
 export { Log } from "./util/log"
 export { Database } from "./storage/db"
 

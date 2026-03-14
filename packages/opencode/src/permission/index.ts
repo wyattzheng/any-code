@@ -6,7 +6,6 @@ import { SessionID, MessageID } from "@/session/schema"
 import z from "zod"
 import { Log } from "../util/log"
 import { Plugin } from "../util/plugin"
-import { Instance } from "../project/instance"
 import { Wildcard } from "../util/wildcard"
 import { PermissionID } from "./schema"
 

@@ -5,7 +5,6 @@ import { Bus } from "@/bus"
 import path from "path"
 import z from "zod"
 import { Log } from "@/util/log"
-import { Instance } from "./instance"
 import { FileWatcher } from "@/file/watcher"
 import { git } from "@/util/git"
 

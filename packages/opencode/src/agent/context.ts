@@ -1,9 +1,17 @@
 import { Project } from "../project/project"
-import { InstancePaths } from "../project/instance"
 import { VFS } from "../util/vfs"
 import { SearchProvider } from "../util/search"
 import { State } from "../project/state"
 
+export interface InstancePaths {
+    data: string
+    bin: string
+    log: string
+    cache: string
+    config: string
+    state: string
+    home: string
+}
 
 export interface AgentContext {
     /** Unique scope identifier for state isolation */

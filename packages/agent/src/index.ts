@@ -190,7 +190,7 @@ export class CodeAgent {
     private initialized = false
     private _fs: import("./vfs").VirtualFileSystem | undefined
     private _search: import("@any-code/opencode/util/search").SearchProvider
-    /** Unique scope identifier for Instance isolation */
+    /** Unique scope identifier for context isolation */
     readonly scopeId: string
 
     constructor(options: CodeAgentOptions) {
@@ -322,18 +322,15 @@ export class CodeAgent {
     async createSession(title?: string): Promise<CodeAgentSession> {
         this.assertInitialized()
 
-        const instanceMod = await import("@any-code/opencode/project/instance")
-        return instanceMod.Instance.provide(this.agentContext, async () => {
-            const sessionMod = await import("@any-code/opencode/session/index")
-            const session = await sessionMod.Session.create(this.agentContext, {
-                title,
-            })
-            return {
-                id: session.id,
-                title: session.title,
-                createdAt: session.time.created,
-            }
+        const sessionMod = await import("@any-code/opencode/session/index")
+        const session = await sessionMod.Session.create(this.agentContext, {
+            title,
         })
+        return {
+            id: session.id,
+            title: session.title,
+            createdAt: session.time.created,
+        }
     }
 
     /**
@@ -359,11 +356,9 @@ export class CodeAgent {
             }
         }
 
-        // Start the agent loop in the background, providing the Instance context
+        // Start the agent loop in the background
         const promptPromise = (async () => {
-            const instanceMod = await import("@any-code/opencode/project/instance")
-            return instanceMod.Instance.provide(this.agentContext, async () => {
-                // Subscribe to message part events (inside Instance context)
+                // Subscribe to message part events
                 const unsubs: (() => void)[] = []
 
                 try {
@@ -516,7 +511,6 @@ export class CodeAgent {
                         unsub()
                     }
                 }
-            })
         })()
 
         // Yield events as they come in
@@ -544,11 +538,8 @@ export class CodeAgent {
     async abort(sessionId: string): Promise<void> {
         this.assertInitialized()
 
-        const instanceMod = await import("@any-code/opencode/project/instance")
-        return instanceMod.Instance.provide(this.agentContext, async () => {
-            const { SessionPrompt } = await import("@any-code/opencode/session/prompt")
-            await SessionPrompt.cancel(this.agentContext, sessionId as any)
-        })
+        const { SessionPrompt } = await import("@any-code/opencode/session/prompt")
+        await SessionPrompt.cancel(this.agentContext, sessionId as any)
     }
 
     /**

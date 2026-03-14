@@ -17,7 +17,6 @@ import { ProjectTable } from "../project/project.sql"
 import { Storage } from "@/storage/storage"
 import { Log } from "../util/log"
 import { MessageV2 } from "./message-v2"
-import { Instance } from "../project/instance"
 
 import { fn } from "@/util/fn"
 import { Command } from "../command"
