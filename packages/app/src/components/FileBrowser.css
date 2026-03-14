@@ -71,7 +71,12 @@
 }
 
 .file-tree-item.indent {
-    padding-left: 24px;
+    padding-left: 46px;
+}
+
+/* 根级文件：跳过 chevron 宽度对齐文件夹图标 */
+.file-tree-item.file:not(.indent) {
+    padding-left: 30px;
 }
 
 .file-content {
