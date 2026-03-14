@@ -11,7 +11,7 @@ import z from "zod"
 import path from "path"
 import { readFileSync, readdirSync, existsSync } from "fs"
 import * as schema from "./schema"
-import { Installation } from "../stubs/installation"
+import { Installation } from "../util/installation"
 import { Flag } from "../util/flag"
 import { iife } from "@/util/iife"
 

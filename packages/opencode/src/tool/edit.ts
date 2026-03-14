@@ -6,7 +6,7 @@
 import z from "zod"
 import * as path from "path"
 import { Tool } from "./tool"
-import { LSP } from "../stubs/lsp"
+import { LSP } from "../util/lsp"
 import { createTwoFilesPatch, diffLines } from "diff"
 import DESCRIPTION from "./edit.txt"
 import { File } from "../file"
