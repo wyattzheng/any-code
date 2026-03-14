@@ -1,4 +1,5 @@
 import type { TabId } from "../App";
+import { MonitorIcon, FolderIcon, DiffIcon } from "./Icons";
 import "./TabBar.css";
 
 interface TabBarProps {
@@ -17,7 +18,7 @@ export function TabBar({ activeTab, onTabChange }: TabBarProps) {
                 className={`tab-item ${activeTab === "preview" ? "active" : ""}`}
                 onClick={() => onTabChange("preview")}
             >
-                <span className="tab-icon">🖥</span>
+                <span className="tab-icon"><MonitorIcon /></span>
                 <span className="tab-label">预览</span>
             </button>
 
@@ -25,7 +26,7 @@ export function TabBar({ activeTab, onTabChange }: TabBarProps) {
                 className={`tab-item ${activeTab === "files" ? "active" : ""}`}
                 onClick={() => onTabChange("files")}
             >
-                <span className="tab-icon">📁</span>
+                <span className="tab-icon"><FolderIcon /></span>
                 <span className="tab-label">文件</span>
             </button>
 
@@ -33,9 +34,10 @@ export function TabBar({ activeTab, onTabChange }: TabBarProps) {
                 className={`tab-item ${activeTab === "changes" ? "active" : ""}`}
                 onClick={() => onTabChange("changes")}
             >
-                <span className="tab-icon">📝</span>
+                <span className="tab-icon"><DiffIcon /></span>
                 <span className="tab-label">变更</span>
             </button>
         </nav>
     );
 }
+
