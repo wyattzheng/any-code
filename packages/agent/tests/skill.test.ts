@@ -16,7 +16,7 @@ import { describe, it, expect, beforeAll } from "vitest"
 import { CodeAgent } from "../src/index"
 import { InMemoryFS } from "./fixtures/in-memory-fs"
 import { InMemorySearchProvider } from "./fixtures/search-memory"
-import path from "path"
+import { Skill } from "@any-code/opencode/skill/skill"
 
 describe("Skill: auto-loading from designated directories", () => {
     let agent: CodeAgent
@@ -97,23 +97,14 @@ describe("Skill: auto-loading from designated directories", () => {
     }, 60_000)
 
     it("should auto-discover skills from .opencode/skills/ and load them", async () => {
-        const { Instance } = await import("@any-code/opencode/project/instance")
-        const skills = await Instance.provide(agent.agentContext, async () => {
-            const { Skill } = await import("@any-code/opencode/skill/skill")
-            return Skill.all(agent.agentContext)
-        })
-
+        const skills = await Skill.all(agent.agentContext)
         const names = skills.map((s: any) => s.name).sort()
         expect(names).toContain("greet")
         expect(names).toContain("deploy")
     })
 
     it("should load the full skill content and resolve the SKILL.md location", async () => {
-        const { Instance } = await import("@any-code/opencode/project/instance")
-        const skill = await Instance.provide(agent.agentContext, async () => {
-            const { Skill } = await import("@any-code/opencode/skill/skill")
-            return Skill.get(agent.agentContext, "greet")
-        })
+        const skill = await Skill.get(agent.agentContext, "greet")
 
         expect(skill).toBeDefined()
         expect(skill!.name).toBe("greet")
@@ -124,11 +115,7 @@ describe("Skill: auto-loading from designated directories", () => {
     })
 
     it("should auto-discover skills from .agents/skills/ (external agent-compatible)", async () => {
-        const { Instance } = await import("@any-code/opencode/project/instance")
-        const skill = await Instance.provide(agent.agentContext, async () => {
-            const { Skill } = await import("@any-code/opencode/skill/skill")
-            return Skill.get(agent.agentContext, "lint")
-        })
+        const skill = await Skill.get(agent.agentContext, "lint")
 
         expect(skill).toBeDefined()
         expect(skill!.name).toBe("lint")
@@ -137,11 +124,7 @@ describe("Skill: auto-loading from designated directories", () => {
     })
 
     it("should auto-discover nested skill directories", async () => {
-        const { Instance } = await import("@any-code/opencode/project/instance")
-        const skill = await Instance.provide(agent.agentContext, async () => {
-            const { Skill } = await import("@any-code/opencode/skill/skill")
-            return Skill.get(agent.agentContext, "formatter")
-        })
+        const skill = await Skill.get(agent.agentContext, "formatter")
 
         expect(skill).toBeDefined()
         expect(skill!.name).toBe("formatter")
@@ -150,11 +133,7 @@ describe("Skill: auto-loading from designated directories", () => {
     })
 
     it("should make auto-loaded skills visible via available()", async () => {
-        const { Instance } = await import("@any-code/opencode/project/instance")
-        const availableSkills = await Instance.provide(agent.agentContext, async () => {
-            const { Skill } = await import("@any-code/opencode/skill/skill")
-            return Skill.available(agent.agentContext)
-        })
+        const availableSkills = await Skill.available(agent.agentContext)
 
         const names = availableSkills.map((s: any) => s.name)
         expect(names).toContain("greet")
@@ -162,21 +141,12 @@ describe("Skill: auto-loading from designated directories", () => {
     })
 
     it("should return undefined for non-existent skill name", async () => {
-        const { Instance } = await import("@any-code/opencode/project/instance")
-        const skill = await Instance.provide(agent.agentContext, async () => {
-            const { Skill } = await import("@any-code/opencode/skill/skill")
-            return Skill.get(agent.agentContext, "nonexistent")
-        })
-
+        const skill = await Skill.get(agent.agentContext, "nonexistent")
         expect(skill).toBeUndefined()
     })
 
     it("should silently ignore malformed SKILL.md (no name field)", async () => {
-        const { Instance } = await import("@any-code/opencode/project/instance")
-        const skills = await Instance.provide(agent.agentContext, async () => {
-            const { Skill } = await import("@any-code/opencode/skill/skill")
-            return Skill.all(agent.agentContext)
-        })
+        const skills = await Skill.all(agent.agentContext)
 
         const names = skills.map((s: any) => s.name)
         expect(names).not.toContain("broken")
@@ -184,21 +154,14 @@ describe("Skill: auto-loading from designated directories", () => {
     })
 
     it("should track skill directories for all loaded skills", async () => {
-        const { Instance } = await import("@any-code/opencode/project/instance")
-        const dirs = await Instance.provide(agent.agentContext, async () => {
-            const { Skill } = await import("@any-code/opencode/skill/skill")
-            return Skill.dirs(agent.agentContext)
-        })
-
+        const dirs = await Skill.dirs(agent.agentContext)
         expect(dirs.length).toBeGreaterThanOrEqual(2)
     })
 })
 
 describe("Skill.fmt()", () => {
     it("should format skills in verbose mode", async () => {
-        const { Skill } = await import("@any-code/opencode/skill/skill")
-
-        const skills: import("@any-code/opencode/skill/skill").Skill.Info[] = [
+        const skills: Skill.Info[] = [
             { name: "test-skill", description: "A test", location: "/tmp/test/SKILL.md", content: "body" },
         ]
 
@@ -209,9 +172,7 @@ describe("Skill.fmt()", () => {
     })
 
     it("should format skills in non-verbose mode", async () => {
-        const { Skill } = await import("@any-code/opencode/skill/skill")
-
-        const skills: import("@any-code/opencode/skill/skill").Skill.Info[] = [
+        const skills: Skill.Info[] = [
             { name: "test-skill", description: "A test", location: "/tmp/test/SKILL.md", content: "body" },
         ]
 
@@ -222,7 +183,6 @@ describe("Skill.fmt()", () => {
     })
 
     it("should return 'No skills' message for empty list", async () => {
-        const { Skill } = await import("@any-code/opencode/skill/skill")
         const output = Skill.fmt([], { verbose: false })
         expect(output).toContain("No skills")
     })

@@ -66,48 +66,23 @@ describe("CodeAgent: session persistence", () => {
         const session = await agent.createSession("Persistent Session")
 
         // Verify we can access the session through the underlying Session module
-        const { Instance } = await import("@any-code/opencode/project/instance")
-        const sessionData = await Instance.provide({
-            directory: tmpDir,
-            worktree: tmpDir,
-            scopeId: 'test',
-            fs: new NodeFS(),
-            paths,
-            project: { id: 'global', worktree: tmpDir } as any,
-            config: {} as any,
-            instructions: [],
-            containsPath: () => true,
-        } as any, async () => {
-                const { Session } = await import("@any-code/opencode/session/index")
-                return Session.get(session.id)
-        })
+        const { Session } = await import("@any-code/opencode/session/index")
+        const sessions = [...Session.list(agent.agentContext)]
+        const found = sessions.find(s => s.id === session.id)
 
-        expect(sessionData).toBeDefined()
-        expect(sessionData.id).toBe(session.id)
+        expect(found).toBeDefined()
+        expect(found!.id).toBe(session.id)
     })
 
     it("should list all created sessions", async () => {
         // Create a fresh session to ensure at least one exists
         await agent.createSession("Listed Session")
 
-        const { Instance } = await import("@any-code/opencode/project/instance")
-        const ctx = {
-            directory: tmpDir,
-            worktree: tmpDir,
-            scopeId: 'test',
-            fs: new NodeFS(),
-            paths,
-            project: { id: 'global', worktree: tmpDir } as any,
-            config: {} as any,
-            instructions: [],
-            containsPath: () => true,
-        } as any
-        const sessions = await Instance.provide(ctx, async () => {
-                const { Session } = await import("@any-code/opencode/session/index")
-                return [...Session.list(ctx)]
-        })
+        const { Session } = await import("@any-code/opencode/session/index")
+        const sessions = [...Session.list(agent.agentContext)]
 
         // Should have at least the sessions created in this describe block
         expect(sessions.length).toBeGreaterThanOrEqual(1)
     })
 })
+
