@@ -7,7 +7,7 @@ import z from "zod"
 import { type ProviderMetadata } from "ai"
 import { Config } from "../config/config"
 import { Flag } from "../util/flag"
-import { Installation } from "../stubs/installation"
+import { Installation } from "../util/installation"
 
 import { Database, NotFoundError, eq, and, or, gte, isNull, desc, like, inArray, lt } from "../storage/db"
 import type { SQL } from "../storage/db"
