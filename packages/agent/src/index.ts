@@ -30,7 +30,7 @@
  * ```
  */
 
-import type { ToolDefinition } from "@opencode-ai/plugin"
+import type { ToolDefinition } from "@any-code/opencode/plugin"
 export type { VirtualFileSystem, VFSStat, VFSDirEntry, GrepOptions, GrepMatch } from "./vfs"
 export { NodeFS } from "./vfs-node"
 

@@ -2,7 +2,8 @@ import { Effect, Layer, Record, ServiceMap, Struct } from "effect"
 import { Instance } from "@/project/instance"
 import { Plugin } from "../plugin"
 import { filter, fromEntries, map, pipe } from "remeda"
-import type { AuthOuathResult } from "@opencode-ai/plugin"
+// AuthOauthResult inlined (opencode-plugin removed)
+type AuthOauthResult = { url: string; instructions: string; method: string; callback: (...args: any[]) => Promise<any> }
 import { NamedError } from "@opencode-ai/util/error"
 import * as Auth from "@/auth/service"
 import { InstanceState } from "@/util/instance-state"
