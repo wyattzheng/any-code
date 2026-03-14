@@ -142,6 +142,64 @@ export class NodeSearchProvider implements SearchProvider {
         await walk(options.cwd, 0)
         return results
     }
+
+    async tree(options: { cwd: string; limit?: number; signal?: AbortSignal }): Promise<string> {
+        const limit = options.limit ?? 50
+        const files = await this.listFiles({ cwd: options.cwd, signal: options.signal })
+        interface Node {
+            name: string
+            children: Map<string, Node>
+        }
+
+        function dir(node: Node, name: string) {
+            const existing = node.children.get(name)
+            if (existing) return existing
+            const next = { name, children: new Map() }
+            node.children.set(name, next)
+            return next
+        }
+
+        const root: Node = { name: "", children: new Map() }
+        for (const file of files) {
+            if (file.includes(".opencode")) continue
+            const parts = file.split(/[\/\\]/)
+            if (parts.length < 2) continue
+            let node = root
+            for (const part of parts.slice(0, -1)) {
+                node = dir(node, part)
+            }
+        }
+
+        function count(node: Node): number {
+            let total = 0
+            for (const child of node.children.values()) {
+                total += 1 + count(child)
+            }
+            return total
+        }
+
+        const total = count(root)
+        const lines: string[] = []
+        const queue: { node: Node; path: string }[] = []
+        
+        for (const child of Array.from(root.children.values()).sort((a, b) => a.name.localeCompare(b.name))) {
+            queue.push({ node: child, path: child.name })
+        }
+
+        let used = 0
+        for (let i = 0; i < queue.length && used < limit; i++) {
+            const { node, path: p } = queue[i]
+            lines.push(p)
+            used++
+            for (const child of Array.from(node.children.values()).sort((a, b) => a.name.localeCompare(b.name))) {
+                queue.push({ node: child, path: `${p}/${child.name}` })
+            }
+        }
+
+        if (total > used) lines.push(`[${total - used} truncated]`)
+
+        return lines.join("\n")
+    }
 }
 
 /** Simple glob matching: supports *.ext and *.{ext1,ext2} patterns */
