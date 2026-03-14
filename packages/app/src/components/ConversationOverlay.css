@@ -1,7 +1,7 @@
 .conversation-panel {
     position: absolute;
-    bottom: calc(var(--tab-height) + 12px);
-    right: 12px;
+    top: 20px;
+    right: 20px;
     z-index: 50;
     width: 220px;
     max-height: 60%;
