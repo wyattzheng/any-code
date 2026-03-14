@@ -60,6 +60,9 @@ export interface CodeAgentOptions {
 
     /** Additional opencode config overrides */
     config?: Record<string, unknown>
+
+    /** Skip plugin initialization (useful for testing when MCP/server deps are not available) */
+    skipPlugins?: boolean
 }
 
 export interface CodeAgentSession {
@@ -163,9 +166,11 @@ export class CodeAgent {
                     // The prompt will be appended in the chat method
                 }
 
-                // Initialize plugins
-                const { Plugin } = await import("@any-code/opencode/plugin")
-                await Plugin.init()
+                // Initialize plugins (skip if in test/lightweight mode)
+                if (!this.options.skipPlugins) {
+                    const { Plugin } = await import("@any-code/opencode/plugin")
+                    await Plugin.init()
+                }
             },
             fn: () => { },
         })
@@ -184,8 +189,8 @@ export class CodeAgent {
         return Instance.provide({
             directory: this.options.directory,
             fn: async () => {
-                const { Session } = await import("@any-code/opencode/session/index")
-                const session = await Session.create({
+                const sessionMod = await import("@any-code/opencode/session/index")
+                const session = await sessionMod.Session.create({
                     title,
                 })
                 return {
@@ -207,12 +212,10 @@ export class CodeAgent {
     ): AsyncGenerator<CodeAgentEvent> {
         this.assertInitialized()
 
-        const { Instance } = await import("@any-code/opencode/project/instance")
-        const { Bus } = await import("@any-code/opencode/bus/index")
-        const { MessageV2 } = await import("@any-code/opencode/session/message-v2")
-        const { Session } = await import("@any-code/opencode/session/index")
+        const instanceMod = await import("@any-code/opencode/project/instance")
+        const Instance = instanceMod.Instance
 
-        // Set up event stream
+        // Set up event stream (shared across context boundary)
         const events: CodeAgentEvent[] = []
         let resolve: (() => void) | null = null
         let done = false
@@ -225,68 +228,76 @@ export class CodeAgent {
             }
         }
 
-        // Subscribe to message part events
-        const unsubs: (() => void)[] = []
-
-        unsubs.push(
-            Bus.subscribe(MessageV2.Event.PartDelta, (payload) => {
-                if (payload.sessionID !== sessionId) return
-                push({
-                    type: "text_delta",
-                    content: payload.delta,
-                })
-            }),
-        )
-
-        unsubs.push(
-            Bus.subscribe(MessageV2.Event.PartUpdated, (payload) => {
-                const part = payload.part
-                if (part.sessionID !== sessionId) return
-
-                if (part.type === "tool" && part.state.status === "running") {
-                    push({
-                        type: "tool_call_start",
-                        toolName: part.tool,
-                        toolArgs: part.state.input as Record<string, unknown>,
-                    })
-                }
-                if (part.type === "tool" && part.state.status === "completed") {
-                    push({
-                        type: "tool_call_done",
-                        toolName: part.tool,
-                        toolOutput: part.state.output,
-                    })
-                }
-                if (part.type === "tool" && part.state.status === "error") {
-                    push({
-                        type: "error",
-                        error: part.state.error,
-                    })
-                }
-            }),
-        )
-
-        unsubs.push(
-            Bus.subscribe(Session.Event.Error, (payload) => {
-                if (payload.sessionID !== sessionId) return
-                push({
-                    type: "error",
-                    error: payload.error?.message ?? "Unknown error",
-                })
-            }),
-        )
-
-        // Start the agent loop in the background
+        // Start the agent loop in the background, including subscriptions inside Instance context
         const promptPromise = Instance.provide({
             directory: this.options.directory,
             fn: async () => {
-                const { SessionPrompt } = await import("@any-code/opencode/session/prompt")
-                const { Provider } = await import("@any-code/opencode/provider/provider")
+                const busMod = await import("@any-code/opencode/bus/index")
+                const Bus = busMod.Bus
+                const msgMod = await import("@any-code/opencode/session/message-v2")
+                const MessageV2 = msgMod.MessageV2
+                const sessionMod = await import("@any-code/opencode/session/index")
+                const Session = sessionMod.Session
 
-                const providerID = this.options.provider.id
-                const modelID = this.options.provider.model
+                // Subscribe to message part events (inside Instance context)
+                const unsubs: (() => void)[] = []
+
+                unsubs.push(
+                    Bus.subscribe(MessageV2.Event.PartDelta, (payload: any) => {
+                        const props = payload.properties
+                        if (props.sessionID !== sessionId) return
+                        push({
+                            type: "text_delta",
+                            content: props.delta,
+                        })
+                    }),
+                )
+
+                unsubs.push(
+                    Bus.subscribe(MessageV2.Event.PartUpdated, (payload: any) => {
+                        const part = payload.properties?.part
+                        if (!part || part.sessionID !== sessionId) return
+
+                        if (part.type === "tool" && part.state.status === "running") {
+                            push({
+                                type: "tool_call_start",
+                                toolName: part.tool,
+                                toolArgs: part.state.input as Record<string, unknown>,
+                            })
+                        }
+                        if (part.type === "tool" && part.state.status === "completed") {
+                            push({
+                                type: "tool_call_done",
+                                toolName: part.tool,
+                                toolOutput: part.state.output,
+                            })
+                        }
+                        if (part.type === "tool" && part.state.status === "error") {
+                            push({
+                                type: "error",
+                                error: part.state.error,
+                            })
+                        }
+                    }),
+                )
+
+                unsubs.push(
+                    Bus.subscribe(Session.Event.Error, (payload: any) => {
+                        const props = payload.properties
+                        if (props.sessionID !== sessionId) return
+                        push({
+                            type: "error",
+                            error: props.error?.message ?? "Unknown error",
+                        })
+                    }),
+                )
 
                 try {
+                    const { SessionPrompt } = await import("@any-code/opencode/session/prompt")
+
+                    const providerID = this.options.provider.id
+                    const modelID = this.options.provider.model
+
                     await SessionPrompt.prompt({
                         sessionID: sessionId as any,
                         model: {
@@ -309,6 +320,10 @@ export class CodeAgent {
                 } finally {
                     done = true
                     push({ type: "done" })
+                    // Cleanup subscriptions
+                    for (const unsub of unsubs) {
+                        unsub()
+                    }
                 }
             },
         })
@@ -327,10 +342,8 @@ export class CodeAgent {
                 }
             }
         } finally {
-            // Cleanup subscriptions
-            for (const unsub of unsubs) {
-                unsub()
-            }
+            // Wait for the prompt to finish
+            await promptPromise.catch(() => { })
         }
     }
 

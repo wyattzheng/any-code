@@ -1,6 +1,5 @@
 import BetterSqlite3 from "better-sqlite3"
 import { drizzle, type BetterSQLite3Database } from "drizzle-orm/better-sqlite3"
-import { migrate } from "drizzle-orm/better-sqlite3/migrator"
 import { type SQLiteTransaction } from "drizzle-orm/sqlite-core"
 export * from "drizzle-orm"
 import { Context } from "../util/context"
@@ -80,6 +79,50 @@ export namespace Database {
     return sql.sort((a, b) => a.timestamp - b.timestamp)
   }
 
+  /**
+   * Manual migration runner — replaces drizzle-orm's built-in migrate()
+   * because better-sqlite3 migrator only accepts { migrationsFolder },
+   * while we need to support the bundled array format (OPENCODE_MIGRATIONS).
+   */
+  function applyMigrations(sqlite: BetterSqlite3.Database, entries: Journal) {
+    // Create migration tracking table if it doesn't exist
+    sqlite.exec(`
+      CREATE TABLE IF NOT EXISTS "__drizzle_migrations" (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        hash TEXT NOT NULL,
+        created_at INTEGER
+      )
+    `)
+
+    const applied = new Set(
+      sqlite
+        .prepare(`SELECT hash FROM "__drizzle_migrations"`)
+        .all()
+        .map((row: any) => row.hash as string),
+    )
+
+    log.info("applyMigrations", { entryCount: entries.length, applied: [...applied] })
+
+    for (const entry of entries) {
+      const hash = entry.name
+      if (applied.has(hash)) {
+        log.info("skipping migration (already applied)", { hash })
+        continue
+      }
+
+      log.info("executing migration", { hash, sqlLength: entry.sql.length })
+      sqlite.exec(entry.sql)
+      sqlite
+        .prepare(`INSERT INTO "__drizzle_migrations" (hash, created_at) VALUES (?, ?)`)
+        .run(hash, entry.timestamp)
+      log.info("migration applied", { hash })
+    }
+
+    // Verify tables
+    const tables = sqlite.prepare("SELECT name FROM sqlite_master WHERE type='table'").all()
+    log.info("tables after migration", { tables })
+  }
+
   export const Client = lazy(() => {
     log.info("opening database", { path: Path })
 
@@ -93,7 +136,7 @@ export namespace Database {
     sqlite.pragma("foreign_keys = ON")
     sqlite.pragma("wal_checkpoint(PASSIVE)")
 
-    const db = drizzle(sqlite)
+    const db = drizzle({ client: sqlite })
 
     // Apply schema migrations
     const entries =
@@ -110,7 +153,7 @@ export namespace Database {
           item.sql = "select 1;"
         }
       }
-      migrate(db, entries)
+      applyMigrations(sqlite, entries)
     }
 
     return db
