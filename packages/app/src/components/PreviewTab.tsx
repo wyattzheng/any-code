@@ -1,3 +1,4 @@
+import { MonitorIcon } from "./Icons";
 import "./PreviewTab.css";
 
 export function PreviewTab() {
@@ -8,7 +9,7 @@ export function PreviewTab() {
         return (
             <div className="preview-tab">
                 <div className="preview-placeholder">
-                    <span className="preview-placeholder-icon">🖥</span>
+                    <span className="preview-placeholder-icon"><MonitorIcon size={36} /></span>
                     <p className="preview-placeholder-text">通过对话让 AI 生成界面，结果将展示在这里</p>
                 </div>
             </div>

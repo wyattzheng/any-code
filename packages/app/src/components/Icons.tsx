@@ -75,3 +75,46 @@ export function DiffIcon({ size = 18, color = "currentColor" }: IconProps) {
         </svg>
     );
 }
+
+export function FolderOpenIcon({ size = 14, color = "currentColor" }: IconProps) {
+    return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M5 19l2.757-7.351A1 1 0 0 1 8.693 11H21.18a1 1 0 0 1 .935 1.354l-2.296 6.292A1 1 0 0 1 18.882 19z" />
+            <path d="M2 11V5a2 2 0 0 1 2-2h4l2 3h6a2 2 0 0 1 2 2v1" />
+        </svg>
+    );
+}
+
+export function FileDocIcon({ size = 14, color = "currentColor" }: IconProps) {
+    return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+        </svg>
+    );
+}
+
+export function AddedIcon({ size = 12, color = "currentColor" }: IconProps) {
+    return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="3" strokeLinecap="round">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+    );
+}
+
+export function ModifiedIcon({ size = 12, color = "currentColor" }: IconProps) {
+    return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="3" strokeLinecap="round">
+            <circle cx="12" cy="12" r="6" fill={color} />
+        </svg>
+    );
+}
+
+export function DeletedIcon({ size = 12, color = "currentColor" }: IconProps) {
+    return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="3" strokeLinecap="round">
+            <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+    );
+}

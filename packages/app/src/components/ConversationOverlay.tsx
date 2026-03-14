@@ -96,7 +96,7 @@ export function ConversationOverlay() {
                 onMouseDown={handleMouseDown}
                 onTouchStart={handleTouchStart}
             >
-                💬 对话
+                对话
             </div>
 
             <div className="conversation-messages">
