@@ -1,0 +1,47 @@
+interface IconProps {
+    size?: number;
+    color?: string;
+}
+
+export function MicIcon({ size = 18, color = "currentColor" }: IconProps) {
+    return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="9" y="2" width="6" height="12" rx="3" />
+            <path d="M5 10a7 7 0 0 0 14 0" />
+            <line x1="12" y1="19" x2="12" y2="22" />
+            <line x1="8" y1="22" x2="16" y2="22" />
+        </svg>
+    );
+}
+
+export function KeyboardIcon({ size = 18, color = "currentColor" }: IconProps) {
+    return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="2" y="5" width="20" height="14" rx="2" />
+            <line x1="6" y1="9" x2="6" y2="9" />
+            <line x1="10" y1="9" x2="10" y2="9" />
+            <line x1="14" y1="9" x2="14" y2="9" />
+            <line x1="18" y1="9" x2="18" y2="9" />
+            <line x1="6" y1="13" x2="6" y2="13" />
+            <line x1="18" y1="13" x2="18" y2="13" />
+            <line x1="9" y1="13" x2="15" y2="13" />
+        </svg>
+    );
+}
+
+export function SendIcon({ size = 14, color = "currentColor" }: IconProps) {
+    return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill={color} stroke="none">
+            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+        </svg>
+    );
+}
+
+export function CloseIcon({ size = 14, color = "currentColor" }: IconProps) {
+    return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round">
+            <line x1="6" y1="6" x2="18" y2="18" />
+            <line x1="18" y1="6" x2="6" y2="18" />
+        </svg>
+    );
+}
