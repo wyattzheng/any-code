@@ -7,7 +7,6 @@
   "private": true,
   "exports": {
     ".": "./src/index.ts",
-    "./plugin": "./src/plugin/index.ts",
     "./*": "./src/*.ts"
   },
   "devDependencies": {

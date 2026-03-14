@@ -16,7 +16,7 @@ import { Shell } from "@/util/shell"
 
 import { BashArity } from "@/permission/arity"
 import { Truncate } from "./truncation"
-import { Plugin } from "@/plugin"
+import { Plugin } from "@/util/plugin"
 
 const MAX_METADATA_LENGTH = 30_000
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000

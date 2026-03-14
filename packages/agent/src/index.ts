@@ -30,7 +30,7 @@
  * ```
  */
 
-import type { ToolDefinition } from "@any-code/opencode/plugin"
+import type { ToolDefinition } from "@any-code/opencode/util/plugin"
 export type { VirtualFileSystem, VFSStat, VFSDirEntry, GrepOptions, GrepMatch } from "./vfs"
 export { NodeFS } from "./vfs-node"
 
@@ -239,14 +239,14 @@ export class CodeAgent {
 
                 // Register custom system prompt via plugin hooks
                 if (this.options.systemPrompt) {
-                    const { Plugin } = await import("@any-code/opencode/plugin")
+                    const { Plugin } = await import("@any-code/opencode/util/plugin")
                     // We'll inject the system prompt via the hook system
                     // The prompt will be appended in the chat method
                 }
 
                 // Initialize plugins (skip if in test/lightweight mode)
                 if (!this.options.skipPlugins) {
-                    const { Plugin } = await import("@any-code/opencode/plugin")
+                    const { Plugin } = await import("@any-code/opencode/util/plugin")
                     await Plugin.init()
                 }
             },

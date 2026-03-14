@@ -18,7 +18,7 @@ import { PermissionNext } from "@/permission/next"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@/util/global"
 import path from "path"
-import { Plugin } from "@/plugin"
+import { Plugin } from "@/util/plugin"
 import { Skill } from "../skill"
 
 export namespace Agent {
