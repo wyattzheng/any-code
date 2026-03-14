@@ -103,7 +103,10 @@ export function ConversationOverlay() {
                 onMouseDown={handleMouseDown}
                 onTouchStart={handleTouchStart}
             >
-                对话
+                <div className="drag-grip" />
+                <div className="conversation-header-content">
+                    <ChatIcon /> 对话
+                </div>
             </div>
 
             <div className="conversation-messages">
