@@ -118,3 +118,11 @@ export function DeletedIcon({ size = 12, color = "currentColor" }: IconProps) {
         </svg>
     );
 }
+
+export function ChatIcon({ size = 14, color = "currentColor" }: IconProps) {
+    return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22z" />
+        </svg>
+    );
+}

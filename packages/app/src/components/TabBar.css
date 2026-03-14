@@ -33,7 +33,9 @@
 }
 
 .tab-icon {
-    font-size: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     line-height: 1;
 }
 
