@@ -53,7 +53,7 @@ export namespace SessionProcessor {
           try {
             let currentText: MessageV2.TextPart | undefined
             let reasoningMap: Record<string, MessageV2.ReasoningPart> = {}
-            const stream = await LLM.stream(undefined as any, streamInput)
+            const stream = await LLM.stream(input.context, streamInput)
 
             for await (const value of stream.fullStream) {
               input.abort.throwIfAborted()
@@ -164,8 +164,8 @@ export namespace SessionProcessor {
                           JSON.stringify(p.state.input) === JSON.stringify(value.input),
                       )
                     ) {
-                      const agent = await Agent.get(undefined as any, input.assistantMessage.agent)
-                      await PermissionNext.ask({
+                      const agent = await Agent.get(input.context, input.assistantMessage.agent)
+                      await PermissionNext.ask(input.context, {
                         permission: "doom_loop",
                         patterns: [value.toolName],
                         sessionID: input.assistantMessage.sessionID,
@@ -278,13 +278,13 @@ export namespace SessionProcessor {
                     }
                     snapshot = undefined
                   }
-                  SessionSummary.summarize({
+                  SessionSummary.summarize(input.context, {
                     sessionID: input.sessionID,
                     messageID: input.assistantMessage.parentID,
                   })
                   if (
                     !input.assistantMessage.summary &&
-                    (await SessionCompaction.isOverflow({ tokens: usage.tokens, model: input.model }))
+                    (await SessionCompaction.isOverflow({ tokens: usage.tokens, model: input.model, context: input.context }))
                   ) {
                     needsCompaction = true
                   }

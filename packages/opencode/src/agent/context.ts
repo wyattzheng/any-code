@@ -36,5 +36,5 @@ export function createScopedState<S>(
     init: (context: AgentContext) => S,
     dispose?: (state: Awaited<S>) => Promise<void>
 ): (context: AgentContext) => S {
-    return State.create((context: AgentContext) => `${context.directory}::${context.scopeId}`, init, dispose)
+    return State.create((context: AgentContext) => `${context?.directory ?? 'global'}::${context?.scopeId ?? 'default'}`, init, dispose)
 }

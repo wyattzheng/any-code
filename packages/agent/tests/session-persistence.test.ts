@@ -69,12 +69,17 @@ describe("CodeAgent: session persistence", () => {
         const { Instance } = await import("@any-code/opencode/project/instance")
         const sessionData = await Instance.provide({
             directory: tmpDir,
-            vfs: new NodeFS(),
+            worktree: tmpDir,
+            scopeId: 'test',
+            fs: new NodeFS(),
             paths,
-            fn: async () => {
+            project: { id: 'global', worktree: tmpDir } as any,
+            config: {} as any,
+            instructions: [],
+            containsPath: () => true,
+        } as any, async () => {
                 const { Session } = await import("@any-code/opencode/session/index")
                 return Session.get(session.id)
-            },
         })
 
         expect(sessionData).toBeDefined()
@@ -86,14 +91,20 @@ describe("CodeAgent: session persistence", () => {
         await agent.createSession("Listed Session")
 
         const { Instance } = await import("@any-code/opencode/project/instance")
-        const sessions = await Instance.provide({
+        const ctx = {
             directory: tmpDir,
-            vfs: new NodeFS(),
+            worktree: tmpDir,
+            scopeId: 'test',
+            fs: new NodeFS(),
             paths,
-            fn: async () => {
+            project: { id: 'global', worktree: tmpDir } as any,
+            config: {} as any,
+            instructions: [],
+            containsPath: () => true,
+        } as any
+        const sessions = await Instance.provide(ctx, async () => {
                 const { Session } = await import("@any-code/opencode/session/index")
-                return [...Session.list()]
-            },
+                return [...Session.list(ctx)]
         })
 
         // Should have at least the sessions created in this describe block

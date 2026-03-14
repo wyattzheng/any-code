@@ -60,7 +60,7 @@ export namespace SessionRevert {
       await Snapshot.revert(context, patches)
       if (revert.snapshot) revert.diff = await Snapshot.diff(context, revert.snapshot)
       const rangeMessages = all.filter((msg) => msg.info.id >= revert!.messageID)
-      const diffs = await SessionSummary.computeDiff({ messages: rangeMessages })
+      const diffs = await SessionSummary.computeDiff(context, { messages: rangeMessages })
       await Storage.write(context, ["session_diff", input.sessionID], diffs)
       Bus.publish(context, Session.Event.Diff, {
         sessionID: input.sessionID,

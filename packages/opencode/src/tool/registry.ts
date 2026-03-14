@@ -86,8 +86,8 @@ export namespace ToolRegistry {
     }
   }
 
-  export async function register(tool: Tool.Info) {
-    const { custom } = await state(undefined as any)
+  export async function register(context: AgentContext, tool: Tool.Info) {
+    const { custom } = await state(context)
     const idx = custom.findIndex((t) => t.id === tool.id)
     if (idx >= 0) {
       custom.splice(idx, 1, tool)
@@ -124,18 +124,19 @@ export namespace ToolRegistry {
     ]
   }
 
-  export async function ids() {
-    return all(undefined as any).then((x) => x.map((t) => t.id))
+  export async function ids(context: AgentContext) {
+    return all(context).then((x) => x.map((t) => t.id))
   }
 
   export async function tools(
+    context: AgentContext,
     model: {
       providerID: ProviderID
       modelID: ModelID
     },
     agent?: Agent.Info,
   ) {
-    const tools = await all(undefined as any)
+    const tools = await all(context)
     const result = await Promise.all(
       tools
         .filter((t) => {
@@ -154,7 +155,7 @@ export namespace ToolRegistry {
         })
         .map(async (t) => {
           using _ = log.time(t.id)
-          const tool = await t.init({ agent } as any)
+          const tool = await t.init({ agent, agentContext: context })
           const output = {
             description: tool.description,
             parameters: tool.parameters,

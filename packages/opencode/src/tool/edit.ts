@@ -84,7 +84,7 @@ export const EditTool = Tool.define("edit", {
       const stats = await ctx.fs.stat(filePath)
       if (!stats) throw new Error(`File ${filePath} not found`)
       if (stats.isDirectory) throw new Error(`Path is a directory, not a file: ${filePath}`)
-      await FileTime.assert(undefined as any, ctx.sessionID, filePath)
+      await FileTime.assert(ctx, ctx.sessionID, filePath)
       contentOld = await ctx.fs.readText(filePath)
 
       const ending = detectLineEnding(contentOld)
