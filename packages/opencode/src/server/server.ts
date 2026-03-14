@@ -36,7 +36,7 @@ import { ProviderRoutes } from "./routes/provider"
 import { InstanceBootstrap } from "../project/bootstrap"
 import { NotFoundError } from "../storage/db"
 import type { ContentfulStatusCode } from "hono/utils/http-status"
-import { websocket } from "hono/bun"
+import { serve } from "@hono/node-server"
 import { HTTPException } from "hono/http-exception"
 import { errors } from "./error"
 import { Filesystem } from "@/util/filesystem"
@@ -599,40 +599,32 @@ export namespace Server {
   }) {
     url = new URL(`http://${opts.hostname}:${opts.port}`)
     const app = createApp(opts)
-    const args = {
-      hostname: opts.hostname,
-      idleTimeout: 0,
+    const server = serve({
       fetch: app.fetch,
-      websocket: websocket,
-    } as const
-    const tryServe = (port: number) => {
-      try {
-        return Bun.serve({ ...args, port })
-      } catch {
-        return undefined
-      }
-    }
-    const server = opts.port === 0 ? (tryServe(4096) ?? tryServe(0)) : tryServe(opts.port)
-    if (!server) throw new Error(`Failed to start server on port ${opts.port}`)
+      hostname: opts.hostname,
+      port: opts.port === 0 ? 4096 : opts.port,
+    })
+    const addr = server.address()
+    const actualPort = typeof addr === "object" && addr ? addr.port : opts.port
 
     const shouldPublishMDNS =
       opts.mdns &&
-      server.port &&
+      actualPort &&
       opts.hostname !== "127.0.0.1" &&
       opts.hostname !== "localhost" &&
       opts.hostname !== "::1"
     if (shouldPublishMDNS) {
-      MDNS.publish(server.port!, opts.mdnsDomain)
+      MDNS.publish(actualPort, opts.mdnsDomain)
     } else if (opts.mdns) {
       log.warn("mDNS enabled but hostname is loopback; skipping mDNS publish")
     }
 
-    const originalStop = server.stop.bind(server)
-    server.stop = async (closeActiveConnections?: boolean) => {
-      if (shouldPublishMDNS) MDNS.unpublish()
-      return originalStop(closeActiveConnections)
+    return {
+      port: actualPort,
+      stop: async (closeActiveConnections?: boolean) => {
+        if (shouldPublishMDNS) MDNS.unpublish()
+        server.close()
+      },
     }
-
-    return server
   }
 }

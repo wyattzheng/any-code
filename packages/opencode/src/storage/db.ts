@@ -1,6 +1,6 @@
-import { Database as BunDatabase } from "bun:sqlite"
-import { drizzle, type SQLiteBunDatabase } from "drizzle-orm/bun-sqlite"
-import { migrate } from "drizzle-orm/bun-sqlite/migrator"
+import BetterSqlite3 from "better-sqlite3"
+import { drizzle, type BetterSQLite3Database } from "drizzle-orm/better-sqlite3"
+import { migrate } from "drizzle-orm/better-sqlite3/migrator"
 import { type SQLiteTransaction } from "drizzle-orm/sqlite-core"
 export * from "drizzle-orm"
 import { Context } from "../util/context"
@@ -39,12 +39,12 @@ export namespace Database {
   type Schema = typeof schema
   export type Transaction = SQLiteTransaction<"sync", void, Schema>
 
-  type Client = SQLiteBunDatabase
+  type Client = BetterSQLite3Database
 
   type Journal = { sql: string; timestamp: number; name: string }[]
 
   const state = {
-    sqlite: undefined as BunDatabase | undefined,
+    sqlite: undefined as BetterSqlite3.Database | undefined,
   }
 
   function time(tag: string) {
@@ -83,17 +83,17 @@ export namespace Database {
   export const Client = lazy(() => {
     log.info("opening database", { path: Path })
 
-    const sqlite = new BunDatabase(Path, { create: true })
+    const sqlite = new BetterSqlite3(Path)
     state.sqlite = sqlite
 
-    sqlite.run("PRAGMA journal_mode = WAL")
-    sqlite.run("PRAGMA synchronous = NORMAL")
-    sqlite.run("PRAGMA busy_timeout = 5000")
-    sqlite.run("PRAGMA cache_size = -64000")
-    sqlite.run("PRAGMA foreign_keys = ON")
-    sqlite.run("PRAGMA wal_checkpoint(PASSIVE)")
+    sqlite.pragma("journal_mode = WAL")
+    sqlite.pragma("synchronous = NORMAL")
+    sqlite.pragma("busy_timeout = 5000")
+    sqlite.pragma("cache_size = -64000")
+    sqlite.pragma("foreign_keys = ON")
+    sqlite.pragma("wal_checkpoint(PASSIVE)")
 
-    const db = drizzle({ client: sqlite })
+    const db = drizzle(sqlite)
 
     // Apply schema migrations
     const entries =

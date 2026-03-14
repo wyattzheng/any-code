@@ -1,6 +1,6 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
-import { type IPty } from "bun-pty"
+import type { IPty } from "node-pty"
 import z from "zod"
 import { Log } from "../util/log"
 import { Instance } from "../project/instance"
@@ -34,7 +34,7 @@ export namespace Pty {
   }
 
   const pty = lazy(async () => {
-    const { spawn } = await import("bun-pty")
+    const { spawn } = await import("node-pty")
     return spawn
   })
 
@@ -96,7 +96,7 @@ export namespace Pty {
       for (const session of sessions.values()) {
         try {
           session.process.kill()
-        } catch {}
+        } catch { }
         for (const [key, ws] of session.subscribers.entries()) {
           try {
             if (ws.data === key) ws.close()
@@ -225,7 +225,7 @@ export namespace Pty {
     log.info("removing session", { id })
     try {
       session.process.kill()
-    } catch {}
+    } catch { }
     for (const [key, ws] of session.subscribers.entries()) {
       try {
         if (ws.data === key) ws.close()

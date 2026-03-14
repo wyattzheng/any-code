@@ -27,8 +27,8 @@ export namespace Plugin {
       directory: Instance.directory,
       headers: Flag.OPENCODE_SERVER_PASSWORD
         ? {
-            Authorization: `Basic ${Buffer.from(`${Flag.OPENCODE_SERVER_USERNAME ?? "opencode"}:${Flag.OPENCODE_SERVER_PASSWORD}`).toString("base64")}`,
-          }
+          Authorization: `Basic ${Buffer.from(`${Flag.OPENCODE_SERVER_USERNAME ?? "opencode"}:${Flag.OPENCODE_SERVER_PASSWORD}`).toString("base64")}`,
+        }
         : undefined,
       fetch: async (...args) => Server.Default().fetch(...args),
     })
@@ -42,7 +42,14 @@ export namespace Plugin {
       get serverUrl(): URL {
         return Server.url ?? new URL("http://localhost:4096")
       },
-      $: Bun.$,
+      $: (strings: TemplateStringsArray, ...values: any[]) => {
+        const { execSync } = require("child_process")
+        const cmd = String.raw(strings, ...values)
+        return {
+          quiet: () => ({ nothrow: () => ({ text: async () => execSync(cmd, { encoding: "utf-8" }) }) }),
+          text: async () => execSync(cmd, { encoding: "utf-8" }),
+        }
+      },
     }
 
     for (const plugin of INTERNAL_PLUGINS) {

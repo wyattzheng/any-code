@@ -1,4 +1,5 @@
 import { Hono } from "hono"
+import { serve } from "@hono/node-server"
 import { Instance } from "../../project/instance"
 import { InstanceBootstrap } from "../../project/bootstrap"
 import { SessionRoutes } from "../../server/routes/session"
@@ -56,10 +57,10 @@ export namespace WorkspaceServer {
   }
 
   export function Listen(opts: { hostname: string; port: number }) {
-    return Bun.serve({
+    return serve({
+      fetch: App().fetch,
       hostname: opts.hostname,
       port: opts.port,
-      fetch: App().fetch,
     })
   }
 }
