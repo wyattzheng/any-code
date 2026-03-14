@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback } from "react";
+import { FolderOpenIcon, FileDocIcon } from "./Icons";
 import "./FileBrowser.css";
 
 export function FileBrowser() {
@@ -54,19 +55,19 @@ export function FileBrowser() {
             <div className="file-browser-sidebar" style={{ height: sidebarHeight }}>
                 <div className="file-tree">
                     <div className="file-tree-item folder">
-                        <span className="file-icon">📂</span>
+                        <span className="file-icon"><FolderOpenIcon /></span>
                         <span className="file-name">src/</span>
                     </div>
                     <div className="file-tree-item file indent">
-                        <span className="file-icon">📄</span>
+                        <span className="file-icon"><FileDocIcon /></span>
                         <span className="file-name">main.tsx</span>
                     </div>
                     <div className="file-tree-item file indent">
-                        <span className="file-icon">📄</span>
+                        <span className="file-icon"><FileDocIcon /></span>
                         <span className="file-name">App.tsx</span>
                     </div>
                     <div className="file-tree-item file">
-                        <span className="file-icon">📄</span>
+                        <span className="file-icon"><FileDocIcon /></span>
                         <span className="file-name">package.json</span>
                     </div>
                 </div>
