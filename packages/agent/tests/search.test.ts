@@ -149,5 +149,27 @@ describe("Search Providers", () => {
             expect(matchedFiles.some(f => f.endsWith("helper.ts"))).toBe(true)
             expect(matchedFiles.some(f => f.endsWith("test.md"))).toBe(false)
         })
+
+        it("should generate a proper tree text representation", async () => {
+            const { provider, workspace } = setup()
+            const treeOutput = await provider.tree({ cwd: workspace })
+            
+            // The tree function mimics the old ripgrep.tree behavior:
+            // It only lists directories to save token space, so files like index.ts shouldn't be here.
+            expect(treeOutput).toContain("src")
+            expect(treeOutput).toMatch(/src[\/\\]core/)
+            expect(treeOutput).toMatch(/src[\/\\]utils/)
+            
+            // Should omit root files (length < 2)
+            expect(treeOutput).not.toContain("test.md")
+            
+            // Ensure .git is filtered out
+            expect(treeOutput).not.toContain(".git")
+
+            // Test depth truncation via limit
+            const truncatedOutput = await provider.tree({ cwd: workspace, limit: 1 })
+            expect(truncatedOutput).toContain("[")
+            expect(truncatedOutput).toContain("truncated]")
+        })
     }
 })
