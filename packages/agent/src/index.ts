@@ -45,6 +45,25 @@ export interface CodeAgentProvider {
     baseUrl?: string
 }
 
+/**
+ * A permission request from the agent.
+ * When a tool needs permission (e.g., writing files, running commands),
+ * the agent emits this to let the App layer decide.
+ */
+export interface PermissionRequest {
+    /** Unique ID for this permission request */
+    id: string
+    /** Permission type (e.g., "write", "bash", "edit", "external_directory") */
+    permission: string
+    /** Patterns being requested (e.g., file paths, command patterns) */
+    patterns: string[]
+    /** Additional metadata about the request */
+    metadata: Record<string, unknown>
+}
+
+/** Result of a permission request callback */
+export type PermissionReply = "allow" | "always" | "deny"
+
 export interface CodeAgentOptions {
     /** Working directory for the agent */
     directory: string
@@ -63,6 +82,19 @@ export interface CodeAgentOptions {
 
     /** Skip plugin initialization (useful for testing when MCP/server deps are not available) */
     skipPlugins?: boolean
+
+    /**
+     * Callback for handling permission requests.
+     * Called when a tool needs permission that isn't auto-allowed by the ruleset.
+     *
+     * If not provided, all permissions are auto-allowed.
+     *
+     * Return:
+     * - "allow" — allow this one time
+     * - "always" — always allow this permission pattern
+     * - "deny" — reject this request
+     */
+    onPermissionRequest?: (request: PermissionRequest) => Promise<PermissionReply>
 }
 
 export interface CodeAgentSession {
@@ -75,6 +107,8 @@ export type CodeAgentEventType =
     | "text_delta"
     | "tool_call_start"
     | "tool_call_done"
+    | "permission_request"
+    | "permission_resolved"
     | "error"
     | "done"
 
@@ -288,6 +322,59 @@ export class CodeAgent {
                         push({
                             type: "error",
                             error: props.error?.message ?? "Unknown error",
+                        })
+                    }),
+                )
+
+                // ── Permission handling ────────────────────────────
+                // Subscribe to permission.asked events and auto-reply
+                // using the onPermissionRequest callback (or auto-allow).
+                const permMod = await import("@any-code/opencode/permission/next")
+                const PermissionNext = permMod.PermissionNext
+
+                unsubs.push(
+                    Bus.subscribe(PermissionNext.Event.Asked, async (payload: any) => {
+                        const request = payload.properties
+                        if (request.sessionID !== sessionId) return
+
+                        const permRequest: PermissionRequest = {
+                            id: request.id,
+                            permission: request.permission,
+                            patterns: request.patterns ?? [],
+                            metadata: request.metadata ?? {},
+                        }
+
+                        push({
+                            type: "permission_request" as CodeAgentEventType,
+                            toolName: request.permission,
+                            toolArgs: request.metadata,
+                        })
+
+                        let reply: PermissionReply = "allow"
+                        if (this.options.onPermissionRequest) {
+                            try {
+                                reply = await this.options.onPermissionRequest(permRequest)
+                            } catch {
+                                reply = "deny"
+                            }
+                        }
+
+                        // Map our reply to opencode's reply format
+                        const replyMap: Record<PermissionReply, "once" | "always" | "reject"> = {
+                            allow: "once",
+                            always: "always",
+                            deny: "reject",
+                        }
+
+                        await PermissionNext.reply({
+                            requestID: request.id,
+                            reply: replyMap[reply],
+                        })
+
+                        push({
+                            type: "permission_resolved" as CodeAgentEventType,
+                            toolName: request.permission,
+                            content: reply,
                         })
                     }),
                 )
