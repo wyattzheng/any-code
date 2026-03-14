@@ -66,7 +66,9 @@ export class NodeSearchProvider implements SearchProvider {
                 resolve(results)
             })
 
-            proc.on("error", () => resolve([]))
+            proc.on("error", (error) => {
+                resolve([])
+            })
         })
     }
 

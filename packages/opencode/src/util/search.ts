@@ -60,4 +60,10 @@ export interface SearchProvider {
     /** Abort signal for cancellation */
     signal?: AbortSignal
   }): Promise<string[]>
+
+  /**
+   * Replaces Ripgrep.tree().
+   * Generates a directory tree structure as a string.
+   */
+  tree(options: { cwd: string; limit?: number; signal?: AbortSignal }): Promise<string>
 }
