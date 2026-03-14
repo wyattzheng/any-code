@@ -1,4 +1,4 @@
-import { Plugin } from "../plugin"
+import { Plugin } from "../util/plugin"
 import { FileWatcher } from "../file/watcher"
 import { File } from "../file"
 import { Project } from "./project"
