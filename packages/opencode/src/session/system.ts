@@ -45,69 +45,12 @@ export namespace SystemPrompt {
         `<directories>`,
         `  ${
           project.vcs === "git" && false
-            ? await generateTree(Instance.directory, 50)
+            ? await Instance.search.tree({ cwd: Instance.directory, limit: 50 })
             : ""
         }`,
         `</directories>`,
       ].join("\n"),
     ]
-  }
-
-  async function generateTree(cwd: string, limit: number): Promise<string> {
-    const files = await Instance.search.listFiles({ cwd, limit: limit + 50 }) // fetch a bit more for truncation logic
-    interface Node {
-      name: string
-      children: Map<string, Node>
-    }
-
-    function dir(node: Node, name: string) {
-      const existing = node.children.get(name)
-      if (existing) return existing
-      const next = { name, children: new Map() }
-      node.children.set(name, next)
-      return next
-    }
-
-    const root: Node = { name: "", children: new Map() }
-    for (const file of files) {
-      if (file.includes(".opencode")) continue
-      const parts = file.split("/")
-      if (parts.length < 2) continue
-      let node = root
-      for (const part of parts.slice(0, -1)) {
-        node = dir(node, part)
-      }
-    }
-
-    function count(node: Node): number {
-      let total = 0
-      for (const child of node.children.values()) {
-        total += 1 + count(child)
-      }
-      return total
-    }
-
-    const total = count(root)
-    const lines: string[] = []
-    const queue: { node: Node; path: string }[] = []
-    
-    for (const child of Array.from(root.children.values()).sort((a, b) => a.name.localeCompare(b.name))) {
-      queue.push({ node: child, path: child.name })
-    }
-
-    let used = 0
-    for (let i = 0; i < queue.length && used < limit; i++) {
-      const { node, path } = queue[i]
-      lines.push(path)
-      used++
-      for (const child of Array.from(node.children.values()).sort((a, b) => a.name.localeCompare(b.name))) {
-        queue.push({ node: child, path: `${path}/${child.name}` })
-      }
-    }
-
-    if (total > used) lines.push(`[${total - used} truncated]`)
-
-    return lines.join("\n")
   }
 
   export async function skills(agent: Agent.Info) {
