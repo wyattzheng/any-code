@@ -1,9 +1,11 @@
 import { useState, useRef, useCallback } from "react";
+import { MicIcon, KeyboardIcon, SendIcon, CloseIcon } from "./Icons";
 import "./ConversationOverlay.css";
 
 export function ConversationOverlay() {
     const [input, setInput] = useState("");
     const [recording, setRecording] = useState(false);
+    const [showTextInput, setShowTextInput] = useState(false);
     const [position, setPosition] = useState({ x: 0, y: 0 });
     const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
     const recordStartTime = useRef<number>(0);
@@ -104,21 +106,31 @@ export function ConversationOverlay() {
             </div>
 
             <div className="conversation-input">
-                <input
-                    type="text"
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder="输入消息..."
-                />
-                <button
-                    className={`mic-btn ${recording ? "recording" : ""}`}
-                    onMouseDown={handleMicMouseDown}
-                    onTouchStart={handleMicTouchStart}
-                    title="按住说话，松手发送"
-                >
-                    🎤
-                </button>
+                {showTextInput ? (
+                    <>
+                        <input
+                            type="text"
+                            value={input}
+                            onChange={(e) => setInput(e.target.value)}
+                            onKeyDown={handleKeyDown}
+                            placeholder="输入消息..."
+                            autoFocus
+                        />
+                        <button className="text-send-btn" onClick={handleSend}><SendIcon /></button>
+                        <button className="text-close-btn" onClick={() => setShowTextInput(false)}><CloseIcon /></button>
+                    </>
+                ) : (
+                    <>
+                        <button
+                            className={`mic-btn ${recording ? "recording" : ""}`}
+                            onMouseDown={handleMicMouseDown}
+                            onTouchStart={handleMicTouchStart}
+                        >
+                            <MicIcon size={20} />
+                        </button>
+                        <button className="text-toggle-btn" onClick={() => setShowTextInput(true)}><KeyboardIcon /></button>
+                    </>
+                )}
             </div>
         </div>
     );

@@ -56,7 +56,7 @@
 .conversation-input {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 6px;
     padding: 6px;
     border-top: 1px solid var(--color-border);
 }
@@ -68,30 +68,66 @@
     border-radius: var(--radius-sm);
     padding: 6px 8px;
     font-size: 11px;
-    height: 28px;
+    height: 36px;
 }
 
 .mic-btn {
-    width: 56px;
-    height: 28px;
+    flex: 1;
+    height: 36px;
     background: var(--color-accent);
-    border-radius: 14px;
+    border-radius: 18px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 14px;
+    font-size: 16px;
     color: white;
-    flex-shrink: 0;
     transition: background 0.15s;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 .mic-btn:active {
-    transform: scale(0.92);
+    transform: scale(0.96);
 }
 
 .mic-btn.recording {
     background: var(--color-danger);
     animation: pulse 1.5s ease-in-out infinite;
+}
+
+.text-toggle-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--color-surface-hover);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    color: var(--color-text-dim);
+    flex-shrink: 0;
+}
+
+.text-send-btn,
+.text-close-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    flex-shrink: 0;
+}
+
+.text-send-btn {
+    background: var(--color-accent);
+    color: white;
+}
+
+.text-close-btn {
+    background: var(--color-surface-hover);
+    color: var(--color-text-dim);
 }
 
 @keyframes pulse {
@@ -102,6 +138,6 @@
     }
 
     50% {
-        box-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
+        box-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
     }
 }
