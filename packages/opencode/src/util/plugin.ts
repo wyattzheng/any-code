@@ -5,7 +5,6 @@
  */
 import { Config } from "../config/config"
 import { Log } from "../util/log"
-import { Instance } from "../project/instance"
 import z from "zod"
 
 // Inline ToolDefinition type (was in @opencode-ai/plugin)

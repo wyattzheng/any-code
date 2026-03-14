@@ -2,7 +2,6 @@ import type { AgentContext } from "@/agent/context"
 import path from "path"
 
 import { Log } from "../util/log"
-import { Instance } from "../project/instance"
 import { Filesystem } from "../util/filesystem"
 
 export namespace Discovery {

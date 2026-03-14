@@ -18,6 +18,7 @@ import path from "path"
 import fs from "fs"
 import { execSync } from "child_process"
 import { Snapshot } from "@any-code/opencode/snapshot/index"
+import { SqlJsStorage } from "../src/storage-sqljs"
 
 describe("Snapshot: git-based tracking", () => {
     let tmpDir: string
@@ -41,6 +42,7 @@ describe("Snapshot: git-based tracking", () => {
         execSync("git commit -m 'init' --quiet", { cwd: tmpDir })
 
         agent = new CodeAgent({
+            storage: new SqlJsStorage(),
             directory: tmpDir,
             worktree: tmpDir,
             skipPlugins: true,

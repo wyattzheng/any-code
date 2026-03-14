@@ -23,6 +23,7 @@ import {
     CONTINUATION_RESPONSE,
 } from "./fixtures/compaction-stream"
 import { RESPONSES_API_BODY } from "./fixtures/text-stream"
+import { SqlJsStorage } from "../src/storage-sqljs"
 
 describe("CodeAgent: context compaction", () => {
     let agent: CodeAgent
@@ -32,6 +33,7 @@ describe("CodeAgent: context compaction", () => {
         tmpDir = createTempDir()
 
         agent = new CodeAgent({
+            storage: new SqlJsStorage(),
             directory: tmpDir,
             skipPlugins: true,
             fs: new NodeFS(),

@@ -10,6 +10,7 @@ import { testPaths } from "./_test-paths"
 import { describe, it, expect, beforeAll, afterAll } from "vitest"
 import { CodeAgent, NodeFS } from "../src/index"
 import { createTempDir, cleanupTempDir } from "./setup"
+import { SqlJsStorage } from "../src/storage-sqljs"
 
 describe("CodeAgent: session persistence", () => {
     let agent: CodeAgent
@@ -20,6 +21,7 @@ describe("CodeAgent: session persistence", () => {
         tmpDir = createTempDir()
         paths = testPaths()
         agent = new CodeAgent({
+            storage: new SqlJsStorage(),
             directory: tmpDir,
             skipPlugins: true,
             fs: new NodeFS(),
@@ -66,23 +68,27 @@ describe("CodeAgent: session persistence", () => {
         const session = await agent.createSession("Persistent Session")
 
         // Verify we can access the session through the underlying Session module
-        const { Session } = await import("@any-code/opencode/session/index")
-        const sessions = [...Session.list(agent.agentContext)]
-        const found = sessions.find(s => s.id === session.id)
+        await agent.withDb(async () => {
+            const { Session } = await import("@any-code/opencode/session/index")
+            const sessions = [...Session.list(agent.agentContext)]
+            const found = sessions.find(s => s.id === session.id)
 
-        expect(found).toBeDefined()
-        expect(found!.id).toBe(session.id)
+            expect(found).toBeDefined()
+            expect(found!.id).toBe(session.id)
+        })
     })
 
     it("should list all created sessions", async () => {
         // Create a fresh session to ensure at least one exists
         await agent.createSession("Listed Session")
 
-        const { Session } = await import("@any-code/opencode/session/index")
-        const sessions = [...Session.list(agent.agentContext)]
+        await agent.withDb(async () => {
+            const { Session } = await import("@any-code/opencode/session/index")
+            const sessions = [...Session.list(agent.agentContext)]
 
-        // Should have at least the sessions created in this describe block
-        expect(sessions.length).toBeGreaterThanOrEqual(1)
+            // Should have at least the sessions created in this describe block
+            expect(sessions.length).toBeGreaterThanOrEqual(1)
+        })
     })
 })
 

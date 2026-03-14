@@ -19,6 +19,7 @@ import { CodeAgent, NodeFS, type PermissionRequest } from "../src/index"
 import { createTempDir, cleanupTempDir, server } from "./setup"
 import { buildHelloworldFixtures } from "./fixtures/helloworld-html-stream"
 import { RESPONSES_API_BODY } from "./fixtures/text-stream"
+import { SqlJsStorage } from "../src/storage-sqljs"
 
 describe("CodeAgent: permission handling", () => {
     const tmpDirs: string[] = []
@@ -40,6 +41,7 @@ describe("CodeAgent: permission handling", () => {
 
         try {
             const agent = new CodeAgent({
+            storage: new SqlJsStorage(),
                 directory: tmpDir,
                 skipPlugins: true,
                 fs: new NodeFS(),

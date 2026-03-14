@@ -3,7 +3,6 @@ import path from "path"
 import { Tool } from "./tool"
 
 import DESCRIPTION from "./glob.txt"
-import { Instance } from "../project/instance"
 import { assertExternalDirectory } from "./external-directory"
 
 export const GlobTool = Tool.define("glob", {

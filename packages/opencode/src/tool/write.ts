@@ -8,7 +8,6 @@ import { Bus } from "../bus"
 import { File } from "../file"
 import { FileWatcher } from "../file/watcher"
 import { FileTime } from "../file/time"
-import { Instance } from "../project/instance"
 import { trimDiff } from "./edit"
 import { assertExternalDirectory } from "./external-directory"
 

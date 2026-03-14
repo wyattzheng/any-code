@@ -16,6 +16,7 @@ import { CodeAgent, NodeFS } from "../src/index"
 import { createTempDir, cleanupTempDir, server } from "./setup"
 import { buildBashFixtures } from "./fixtures/bash-stream"
 import { RESPONSES_API_BODY } from "./fixtures/text-stream"
+import { SqlJsStorage } from "../src/storage-sqljs"
 
 describe("CodeAgent: bash tool", () => {
     let agent: CodeAgent
@@ -24,6 +25,7 @@ describe("CodeAgent: bash tool", () => {
     beforeAll(async () => {
         tmpDir = createTempDir()
         agent = new CodeAgent({
+            storage: new SqlJsStorage(),
             directory: tmpDir,
             skipPlugins: true,
             fs: new NodeFS(),

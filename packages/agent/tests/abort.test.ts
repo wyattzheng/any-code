@@ -8,6 +8,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest"
 import { http, HttpResponse } from "msw"
 import { CodeAgent, NodeFS } from "../src/index"
 import { createTempDir, cleanupTempDir, server } from "./setup"
+import { SqlJsStorage } from "../src/storage-sqljs"
 
 describe("CodeAgent abort", () => {
     let agent: CodeAgent
@@ -37,6 +38,7 @@ describe("CodeAgent abort", () => {
         )
 
         agent = new CodeAgent({
+            storage: new SqlJsStorage(),
             directory: tmpDir,
             skipPlugins: true,
             fs: new NodeFS(),

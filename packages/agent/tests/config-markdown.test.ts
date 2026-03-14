@@ -15,6 +15,7 @@ import { CodeAgent } from "../src/index"
 import { InMemoryFS } from "./fixtures/in-memory-fs"
 import { InMemorySearchProvider } from "./fixtures/search-memory"
 import { ConfigMarkdown } from "@any-code/opencode/config/markdown"
+import { SqlJsStorage } from "../src/storage-sqljs"
 
 describe("ConfigMarkdown", () => {
     let memfs: InMemoryFS
@@ -27,6 +28,7 @@ describe("ConfigMarkdown", () => {
         memfs = new InMemoryFS()
 
         agent = new CodeAgent({
+            storage: new SqlJsStorage(),
             directory: workDir,
             skipPlugins: true,
             fs: memfs,

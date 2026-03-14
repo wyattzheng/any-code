@@ -14,6 +14,7 @@ import { http, HttpResponse } from "msw"
 import { CodeAgent, NodeFS } from "../src/index"
 import { createTempDir, cleanupTempDir, server } from "./setup"
 import { RESPONSES_API_BODY } from "./fixtures/text-stream"
+import { SqlJsStorage } from "../src/storage-sqljs"
 
 describe("CodeAgent: error retry", () => {
     let agent: CodeAgent
@@ -22,6 +23,7 @@ describe("CodeAgent: error retry", () => {
     beforeAll(async () => {
         tmpDir = createTempDir()
         agent = new CodeAgent({
+            storage: new SqlJsStorage(),
             directory: tmpDir,
             skipPlugins: true,
             fs: new NodeFS(),

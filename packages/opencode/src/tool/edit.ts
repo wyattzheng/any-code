@@ -13,7 +13,6 @@ import { File } from "../file"
 import { FileWatcher } from "../file/watcher"
 import { Bus } from "../bus"
 import { FileTime } from "../file/time"
-import { Instance } from "../project/instance"
 import { Snapshot } from "@/snapshot"
 import { assertExternalDirectory } from "./external-directory"
 

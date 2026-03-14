@@ -8,6 +8,7 @@ import { testPaths } from "./_test-paths"
 import { describe, it, expect, beforeAll, afterAll } from "vitest"
 import { CodeAgent, NodeFS } from "../src/index"
 import { createTempDir, cleanupTempDir } from "./setup"
+import { SqlJsStorage } from "../src/storage-sqljs"
 
 describe("CodeAgent text streaming", () => {
     let agent: CodeAgent
@@ -17,6 +18,7 @@ describe("CodeAgent text streaming", () => {
         tmpDir = createTempDir()
 
         agent = new CodeAgent({
+            storage: new SqlJsStorage(),
             directory: tmpDir,
             skipPlugins: true,
             fs: new NodeFS(),

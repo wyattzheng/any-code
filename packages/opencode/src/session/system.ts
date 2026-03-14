@@ -1,6 +1,5 @@
 
 
-import { Instance } from "../project/instance"
 
 import PROMPT_ANTHROPIC from "./prompt/anthropic.txt"
 import PROMPT_ANTHROPIC_WITHOUT_TODO from "./prompt/qwen.txt"

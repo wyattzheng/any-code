@@ -1,7 +1,6 @@
 import type { AgentContext } from "@/agent/context"
 import { Effect, ScopedCache, Scope } from "effect"
 
-import { Instance } from "@/project/instance"
 
 const TypeId = Symbol.for("@opencode/InstanceState")
 

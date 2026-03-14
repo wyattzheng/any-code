@@ -14,6 +14,7 @@ import { createTempDir, cleanupTempDir, server } from "./setup"
 import { InMemoryFS } from "./fixtures/in-memory-fs"
 import { buildHelloworldFixtures } from "./fixtures/helloworld-html-stream"
 import { RESPONSES_API_BODY } from "./fixtures/text-stream"
+import { SqlJsStorage } from "../src/storage-sqljs"
 
 describe("CodeAgent: multi-agent isolation", () => {
     let tmpDir: string
@@ -26,6 +27,7 @@ describe("CodeAgent: multi-agent isolation", () => {
 
     it("should give each agent a unique scopeId", () => {
         const agent1 = new CodeAgent({
+            storage: new SqlJsStorage(),
             directory: tmpDir,
             skipPlugins: true,
             fs: new NodeFS(),
@@ -33,6 +35,7 @@ describe("CodeAgent: multi-agent isolation", () => {
             provider: { id: "openai", apiKey: "key1", model: "gpt-4o" },
         })
         const agent2 = new CodeAgent({
+            storage: new SqlJsStorage(),
             directory: tmpDir,
             skipPlugins: true,
             fs: new NodeFS(),
@@ -72,6 +75,7 @@ describe("CodeAgent: multi-agent isolation", () => {
         )
 
         const agent1 = new CodeAgent({
+            storage: new SqlJsStorage(),
             directory: tmpDir,
             skipPlugins: true,
             fs: memFS1,
@@ -85,6 +89,7 @@ describe("CodeAgent: multi-agent isolation", () => {
         })
 
         const agent2 = new CodeAgent({
+            storage: new SqlJsStorage(),
             directory: tmpDir,
             skipPlugins: true,
             fs: memFS2,

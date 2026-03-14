@@ -128,6 +128,13 @@ export interface CodeAgentOptions {
     instructions?: string[]
 
     /**
+     * Storage provider for the database backend.
+     * Defaults to BetterSqliteStorage (file-based) if not provided.
+     * Use SqlJsStorage for in-memory testing.
+     */
+    storage?: import("./storage").StorageProvider
+
+    /**
      * System directory paths for this agent instance.
      * Each CodeAgent instance can have its own data/cache/config directories.
      */
@@ -190,6 +197,8 @@ export class CodeAgent {
     private initialized = false
     private _fs: import("./vfs").VirtualFileSystem | undefined
     private _search: import("@any-code/opencode/util/search").SearchProvider
+    private _storageProvider: import("./storage").StorageProvider | undefined
+    private _dbClient: any
     /** Unique scope identifier for context isolation */
     readonly scopeId: string
 
@@ -258,60 +267,63 @@ export class CodeAgent {
         }
 
         const dbMod = await import("@any-code/opencode/storage/db")
-        dbMod.Database.init(this.options.paths.data)
-        // Eagerly connect and run migrations during initialization
-        dbMod.Database.Client()
+        const migrations = dbMod.Database.getMigrations()
 
-        if (this.options.tools) {
-            const { ToolRegistry } = await import("@any-code/opencode/tool/registry")
-            const { Tool } = await import("@any-code/opencode/tool/tool")
-            const z = (await import("zod")).default
+        if (this.options.storage) {
+            this._storageProvider = this.options.storage
+            this._dbClient = await this._storageProvider.connect(migrations)
+        } else {
+            const { BetterSqliteStorage } = await import("./storage-better-sqlite3")
+            this._storageProvider = new BetterSqliteStorage(this.options.paths.data)
+            this._dbClient = this._storageProvider.connect(migrations)
+        }
 
-            for (const [name, def] of Object.entries(this.options.tools)) {
-                ToolRegistry.register(this.agentContext, {
-                    id: name,
-                    init: async () => ({
-                        parameters: z.object(def.args),
-                        description: def.description,
-                        execute: async (args, ctx) => {
-                            const result = await def.execute(args as any, ctx as any)
-                            return {
-                                title: "",
-                                output: typeof result === "string" ? result : JSON.stringify(result),
-                                metadata: {},
-                            }
-                        },
-                    }),
-                })
+        // All subsequent init code runs within the DB context scope
+        await dbMod.Database.provide(this._dbClient, async () => {
+            if (this.options.tools) {
+                const { ToolRegistry } = await import("@any-code/opencode/tool/registry")
+                const { Tool } = await import("@any-code/opencode/tool/tool")
+                const z = (await import("zod")).default
+
+                for (const [name, def] of Object.entries(this.options.tools)) {
+                    ToolRegistry.register(this.agentContext, {
+                        id: name,
+                        init: async () => ({
+                            parameters: z.object(def.args),
+                            description: def.description,
+                            execute: async (args, ctx) => {
+                                const result = await def.execute(args as any, ctx as any)
+                                return {
+                                    title: "",
+                                    output: typeof result === "string" ? result : JSON.stringify(result),
+                                    metadata: {},
+                                }
+                            },
+                        }),
+                    })
+                }
             }
-        }
 
-        // Register custom system prompt via plugin hooks
-        if (this.options.systemPrompt) {
-            const { Plugin } = await import("@any-code/opencode/util/plugin")
-            // We'll inject the system prompt via the hook system
-            // The prompt will be appended in the chat method
-        }
+            // Ensure the global project exists in DB
+            const { Database } = await import("@any-code/opencode/storage/db")
+            const { ProjectTable } = await import("@any-code/opencode/project/project.sql")
+            Database.use((db) => {
+                db.insert(ProjectTable).values({
+                    id: "global" as any,
+                    worktree: "/",
+                    vcs: null,
+                    sandboxes: [],
+                    time_created: Date.now(),
+                    time_updated: Date.now()
+                }).onConflictDoNothing().run()
+            })
 
-        // Ensure the global project exists in DB to satisfy foreign keys when creating sessions
-        const { Database } = await import("@any-code/opencode/storage/db")
-        const { ProjectTable } = await import("@any-code/opencode/project/project.sql")
-        Database.use((db) => {
-            db.insert(ProjectTable).values({
-                id: "global" as any,
-                worktree: "/",
-                vcs: null,
-                sandboxes: [],
-                time_created: Date.now(),
-                time_updated: Date.now()
-            }).onConflictDoNothing().run()
+            // Initialize plugins (skip if in test/lightweight mode)
+            if (!this.options.skipPlugins) {
+                const { Plugin } = await import("@any-code/opencode/util/plugin")
+                await Plugin.init()
+            }
         })
-
-        // Initialize plugins (skip if in test/lightweight mode)
-        if (!this.options.skipPlugins) {
-            const { Plugin } = await import("@any-code/opencode/util/plugin")
-            await Plugin.init()
-        }
 
         this.initialized = true
     }
@@ -322,15 +334,18 @@ export class CodeAgent {
     async createSession(title?: string): Promise<CodeAgentSession> {
         this.assertInitialized()
 
-        const sessionMod = await import("@any-code/opencode/session/index")
-        const session = await sessionMod.Session.create(this.agentContext, {
-            title,
+        const dbMod = await import("@any-code/opencode/storage/db")
+        return dbMod.Database.provide(this._dbClient, async () => {
+            const sessionMod = await import("@any-code/opencode/session/index")
+            const session = await sessionMod.Session.create(this.agentContext, {
+                title,
+            })
+            return {
+                id: session.id,
+                title: session.title,
+                createdAt: session.time.created,
+            }
         })
-        return {
-            id: session.id,
-            title: session.title,
-            createdAt: session.time.created,
-        }
     }
 
     /**
@@ -358,6 +373,8 @@ export class CodeAgent {
 
         // Start the agent loop in the background
         const promptPromise = (async () => {
+            const dbMod = await import("@any-code/opencode/storage/db")
+            return dbMod.Database.provide(this._dbClient, async () => {
                 // Subscribe to message part events
                 const unsubs: (() => void)[] = []
 
@@ -511,6 +528,7 @@ export class CodeAgent {
                         unsub()
                     }
                 }
+            }) // end Database.provide
         })()
 
         // Yield events as they come in
@@ -538,8 +556,21 @@ export class CodeAgent {
     async abort(sessionId: string): Promise<void> {
         this.assertInitialized()
 
-        const { SessionPrompt } = await import("@any-code/opencode/session/prompt")
-        await SessionPrompt.cancel(this.agentContext, sessionId as any)
+        const dbMod = await import("@any-code/opencode/storage/db")
+        return dbMod.Database.provide(this._dbClient, async () => {
+            const { SessionPrompt } = await import("@any-code/opencode/session/prompt")
+            await SessionPrompt.cancel(this.agentContext, sessionId as any)
+        })
+    }
+
+    /**
+     * Run a callback within the database context scope.
+     * Needed when test code calls Session/Project functions directly.
+     */
+    async withDb<T>(fn: () => T | Promise<T>): Promise<T> {
+        this.assertInitialized()
+        const dbMod = await import("@any-code/opencode/storage/db")
+        return dbMod.Database.provide(this._dbClient, fn)
     }
 
     /**

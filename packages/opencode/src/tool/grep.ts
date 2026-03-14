@@ -2,7 +2,6 @@ import z from "zod"
 import { text } from "node:stream/consumers"
 import { Tool } from "./tool"
 
-import { Instance } from "../project/instance"
 import path from "path"
 import { assertExternalDirectory } from "./external-directory"
 

@@ -10,6 +10,7 @@ import { http, HttpResponse } from "msw"
 import { CodeAgent } from "../src/index"
 import { createTempDir, cleanupTempDir, server } from "./setup"
 import { TOOL_CALL_BODY, TOOL_RESULT_TEXT_BODY } from "./fixtures/tool-call-stream"
+import { SqlJsStorage } from "../src/storage-sqljs"
 
 describe("CodeAgent tool calling", () => {
     let agent: CodeAgent
@@ -36,6 +37,7 @@ describe("CodeAgent tool calling", () => {
         )
 
         agent = new CodeAgent({
+            storage: new SqlJsStorage(),
             directory: tmpDir,
             skipPlugins: true,
             provider: {

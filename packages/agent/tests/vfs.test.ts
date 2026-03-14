@@ -13,6 +13,7 @@ import path from "path"
 import { NodeFS } from "../src/vfs-node"
 import { CodeAgent } from "../src/index"
 import { createTempDir, cleanupTempDir } from "./setup"
+import { SqlJsStorage } from "../src/storage-sqljs"
 
 describe("VFS: NodeFS implementation", () => {
     let tmpDir: string
@@ -127,6 +128,7 @@ describe("CodeAgent: VFS integration", () => {
         const { NodeFS: NodeFSClass } = await import("../src/vfs-node")
         const nodeFs = new NodeFSClass()
         const agent = new CodeAgent({
+            storage: new SqlJsStorage(),
             directory: "/tmp/test",
             provider: { id: "openai", apiKey: "test", model: "gpt-4o" },
             fs: nodeFs,
@@ -153,6 +155,7 @@ describe("CodeAgent: VFS integration", () => {
         }
 
         const agent = new CodeAgent({
+            storage: new SqlJsStorage(),
             directory: "/tmp/test",
             provider: { id: "openai", apiKey: "test", model: "gpt-4o" },
             fs: customFS,

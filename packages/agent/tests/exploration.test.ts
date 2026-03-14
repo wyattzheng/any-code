@@ -18,6 +18,7 @@ import { NodeSearchProvider } from "../src/search-node"
 import { createTempDir, cleanupTempDir, server } from "./setup"
 import { buildExplorationFixtures } from "./fixtures/exploration-stream"
 import { RESPONSES_API_BODY } from "./fixtures/text-stream"
+import { SqlJsStorage } from "../src/storage-sqljs"
 
 /**
  * The secret key phrase hidden in the project files.
@@ -72,6 +73,7 @@ describe("CodeAgent: multi-tool exploration", () => {
 
         // ── Init agent ────────────────────────────────────────────────────
         agent = new CodeAgent({
+            storage: new SqlJsStorage(),
             directory: tmpDir,
             skipPlugins: true,
             fs: new NodeFS(),
@@ -245,6 +247,7 @@ describe("CodeAgent: virtual-FS exploration", () => {
 
         // ── Init agent with InMemoryFS ────────────────────────────────────
         agent = new CodeAgent({
+            storage: new SqlJsStorage(),
             directory: tmpDir,
             skipPlugins: true,
             fs: memfs,

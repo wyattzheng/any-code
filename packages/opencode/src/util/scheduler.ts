@@ -1,6 +1,5 @@
 import { createScopedState } from "@/agent/context"
 import type { AgentContext } from "@/agent/context"
-import { Instance } from "../project/instance"
 import { Log } from "../util/log"
 
 export namespace Scheduler {

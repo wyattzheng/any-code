@@ -17,6 +17,7 @@ import { CodeAgent } from "../src/index"
 import { InMemoryFS } from "./fixtures/in-memory-fs"
 import { InMemorySearchProvider } from "./fixtures/search-memory"
 import { Skill } from "@any-code/opencode/skill/skill"
+import { SqlJsStorage } from "../src/storage-sqljs"
 
 describe("Skill: auto-loading from designated directories", () => {
     let agent: CodeAgent
@@ -80,6 +81,7 @@ describe("Skill: auto-loading from designated directories", () => {
         ].join("\n"))
 
         agent = new CodeAgent({
+            storage: new SqlJsStorage(),
             directory: workDir,
             worktree: workDir,
             skipPlugins: true,

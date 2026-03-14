@@ -16,6 +16,7 @@ import path from "path"
 import fs from "fs"
 import { execSync } from "child_process"
 import { Project } from "@any-code/opencode/project/project"
+import { SqlJsStorage } from "../src/storage-sqljs"
 
 describe("Project: discovery from directories", () => {
     let tmpDir: string
@@ -43,6 +44,7 @@ describe("Project: discovery from directories", () => {
         fs.writeFileSync(path.join(nonGitDir, "readme.md"), "# Plain")
 
         agent = new CodeAgent({
+            storage: new SqlJsStorage(),
             directory: tmpDir,
             skipPlugins: true,
             fs: new NodeFS(),
@@ -60,18 +62,22 @@ describe("Project: discovery from directories", () => {
     afterAll(() => cleanupTempDir(tmpDir))
 
     it("should detect a git project via fromDirectory()", async () => {
-        const result = await Project.fromDirectory(agent.agentContext, gitDir)
+        await agent.withDb(async () => {
+            const result = await Project.fromDirectory(agent.agentContext, gitDir)
 
-        expect(result).toBeDefined()
-        expect(result.project.vcs).toBe("git")
-        expect(result.project.worktree).toBe(gitDir)
-        expect(result.project.id).toBeDefined()
+            expect(result).toBeDefined()
+            expect(result.project.vcs).toBe("git")
+            expect(result.project.worktree).toBe(gitDir)
+            expect(result.project.id).toBeDefined()
+        })
     })
 
     it("should handle a non-git directory (no vcs)", async () => {
-        const result = await Project.fromDirectory(agent.agentContext, nonGitDir)
-        // Non-git directories won't have vcs: "git"
-        expect(result.project.vcs).toBeUndefined()
+        await agent.withDb(async () => {
+            const result = await Project.fromDirectory(agent.agentContext, nonGitDir)
+            // Non-git directories won't have vcs: "git"
+            expect(result.project.vcs).toBeUndefined()
+        })
     })
 
     it("should map DB rows to Project.Info via fromRow()", () => {

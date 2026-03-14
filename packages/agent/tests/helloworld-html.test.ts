@@ -19,6 +19,7 @@ import {
 } from "./fixtures/helloworld-html-stream"
 import { RESPONSES_API_BODY } from "./fixtures/text-stream"
 import { InMemoryFS } from "./fixtures/in-memory-fs"
+import { SqlJsStorage } from "../src/storage-sqljs"
 
 describe("CodeAgent: create hello world HTML page", () => {
     let agent: CodeAgent
@@ -30,6 +31,7 @@ describe("CodeAgent: create hello world HTML page", () => {
         memFS = new InMemoryFS()
 
         agent = new CodeAgent({
+            storage: new SqlJsStorage(),
             directory: tmpDir,
             skipPlugins: true,
             fs: memFS,

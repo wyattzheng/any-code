@@ -5,7 +5,6 @@ import { Tool } from "./tool"
 import { LSP } from "../util/lsp"
 import { FileTime } from "../file/time"
 import DESCRIPTION from "./read.txt"
-import { Instance } from "../project/instance"
 import { assertExternalDirectory } from "./external-directory"
 import { InstructionPrompt } from "../session/instruction"
 
