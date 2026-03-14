@@ -54,10 +54,10 @@ export namespace SystemPrompt {
     ]
   }
 
-  export async function skills(agent: Agent.Info) {
+  export async function skills(context: AgentContext, agent: Agent.Info) {
     if (PermissionNext.disabled(["skill"], agent.permission).has("skill")) return
 
-    const list = await Skill.available(undefined as any, agent)
+    const list = await Skill.available(context, agent)
 
     return [
       "Skills provide specialized instructions and workflows for specific tasks.",

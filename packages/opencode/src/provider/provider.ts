@@ -973,7 +973,7 @@ export namespace Provider {
         log.error("Provider does not exist in model list " + providerID)
         continue
       }
-      const result = await fn(undefined as any, data)
+      const result = await fn(context, data)
       if (result && (result.autoload || providers[providerID])) {
         if (result.getModel) modelLoaders[providerID] = result.getModel
         if (result.vars) varsLoaders[providerID] = result.vars

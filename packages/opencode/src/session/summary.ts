@@ -68,22 +68,16 @@ export namespace SessionSummary {
     return Buffer.from(bytes).toString()
   }
 
-  export const summarize = fn(
-    z.object({
-      sessionID: SessionID.zod,
-      messageID: MessageID.zod,
-    }),
-    async (input) => {
-      const all = await Session.messages({ sessionID: input.sessionID })
-      await Promise.all([
-        summarizeSession({ sessionID: input.sessionID, messages: all }),
-        summarizeMessage({ messageID: input.messageID, messages: all }),
-      ])
-    },
-  )
+  export async function summarize(context: AgentContext, input: { sessionID: SessionID; messageID: MessageID }) {
+    const all = await Session.messages({ sessionID: input.sessionID })
+    await Promise.all([
+      summarizeSession(context, { sessionID: input.sessionID, messages: all }),
+      summarizeMessage(context, { messageID: input.messageID, messages: all }),
+    ])
+  }
 
-  async function summarizeSession(input: { sessionID: SessionID; messages: MessageV2.WithParts[] }) {
-    const diffs = await computeDiff({ messages: input.messages })
+  async function summarizeSession(context: AgentContext, input: { sessionID: SessionID; messages: MessageV2.WithParts[] }) {
+    const diffs = await computeDiff(context, { messages: input.messages })
     await Session.setSummary({
       sessionID: input.sessionID,
       summary: {
@@ -92,20 +86,20 @@ export namespace SessionSummary {
         files: diffs.length,
       },
     })
-    await Storage.write(undefined as any, ["session_diff", input.sessionID], diffs)
-    Bus.publish(undefined, Session.Event.Diff, {
+    await Storage.write(context, ["session_diff", input.sessionID], diffs)
+    Bus.publish(context, Session.Event.Diff, {
       sessionID: input.sessionID,
       diff: diffs,
     })
   }
 
-  async function summarizeMessage(input: { messageID: string; messages: MessageV2.WithParts[] }) {
+  async function summarizeMessage(context: AgentContext, input: { messageID: string; messages: MessageV2.WithParts[] }) {
     const messages = input.messages.filter(
       (m) => m.info.id === input.messageID || (m.info.role === "assistant" && m.info.parentID === input.messageID),
     )
     const msgWithParts = messages.find((m) => m.info.id === input.messageID)!
     const userMsg = msgWithParts.info as MessageV2.User
-    const diffs = await computeDiff({ messages })
+    const diffs = await computeDiff(context, { messages })
     userMsg.summary = {
       ...userMsg.summary,
       diffs,
@@ -113,28 +107,22 @@ export namespace SessionSummary {
     await Session.updateMessage(userMsg)
   }
 
-  export const diff = fn(
-    z.object({
-      sessionID: SessionID.zod,
-      messageID: MessageID.zod.optional(),
-    }),
-    async (input: { sessionID: SessionID; messageID?: MessageID }) => {
-      const diffs = await Storage.read<Snapshot.FileDiff[]>(undefined as any, ["session_diff", input.sessionID]).catch(() => [])
-      const next = diffs.map((item) => {
-        const file = unquoteGitPath(item.file)
-        if (file === item.file) return item
-        return {
-          ...item,
-          file,
-        }
-      })
-      const changed = next.some((item, i) => item.file !== diffs[i]?.file)
-      if (changed) Storage.write(undefined as any, ["session_diff", input.sessionID], next).catch(() => {})
-      return next
-    },
-  )
+  export async function diff(context: AgentContext, input: { sessionID: SessionID; messageID?: MessageID }) {
+    const diffs = await Storage.read<Snapshot.FileDiff[]>(context, ["session_diff", input.sessionID]).catch(() => [])
+    const next = diffs.map((item) => {
+      const file = unquoteGitPath(item.file)
+      if (file === item.file) return item
+      return {
+        ...item,
+        file,
+      }
+    })
+    const changed = next.some((item, i) => item.file !== diffs[i]?.file)
+    if (changed) Storage.write(context, ["session_diff", input.sessionID], next).catch(() => {})
+    return next
+  }
 
-  export async function computeDiff(input: { messages: MessageV2.WithParts[] }) {
+  export async function computeDiff(context: AgentContext, input: { messages: MessageV2.WithParts[] }) {
     let from: string | undefined
     let to: string | undefined
 
@@ -157,7 +145,7 @@ export namespace SessionSummary {
       }
     }
 
-    if (from && to) return Snapshot.diffFull(undefined as any, from, to)
+    if (from && to) return Snapshot.diffFull(context, from, to)
     return []
   }
 }

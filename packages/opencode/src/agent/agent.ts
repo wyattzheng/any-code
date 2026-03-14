@@ -256,18 +256,18 @@ export namespace Agent {
     return state(context).then((x) => x[agent])
   }
 
-  export async function list() {
-    const cfg = await Config.get(undefined as any)
+  export async function list(context: AgentContext) {
+    const cfg = await Config.get(context)
     return pipe(
-      await state(undefined as any),
+      await state(context),
       values(),
       sortBy([(x) => (cfg.default_agent ? x.name === cfg.default_agent : x.name === "build"), "desc"]),
     )
   }
 
-  export async function defaultAgent() {
-    const cfg = await Config.get(undefined as any)
-    const agents = await state(undefined as any)
+  export async function defaultAgent(context: AgentContext) {
+    const cfg = await Config.get(context)
+    const agents = await state(context)
 
     if (cfg.default_agent) {
       const agent = agents[cfg.default_agent]
@@ -282,15 +282,15 @@ export namespace Agent {
     return primaryVisible.name
   }
 
-  export async function generate(input: { description: string; model?: { providerID: ProviderID; modelID: ModelID } }) {
-    const cfg = await Config.get(undefined as any)
-    const defaultModel = input.model ?? (await Provider.defaultModel(undefined as any))
-    const model = await Provider.getModel(undefined as any, defaultModel.providerID, defaultModel.modelID)
-    const language = await Provider.getLanguage(undefined as any, model)
+  export async function generate(context: AgentContext, input: { description: string; model?: { providerID: ProviderID; modelID: ModelID } }) {
+    const cfg = await Config.get(context)
+    const defaultModel = input.model ?? (await Provider.defaultModel(context))
+    const model = await Provider.getModel(context, defaultModel.providerID, defaultModel.modelID)
+    const language = await Provider.getLanguage(context, model)
 
     const system = [PROMPT_GENERATE]
     await Plugin.trigger("experimental.chat.system.transform", { model }, { system })
-    const existing = await list()
+    const existing = await list(context)
 
     const params = {
       experimental_telemetry: {

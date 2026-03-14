@@ -268,7 +268,7 @@ export class CodeAgent {
             const z = (await import("zod")).default
 
             for (const [name, def] of Object.entries(this.options.tools)) {
-                ToolRegistry.register({
+                ToolRegistry.register(this.agentContext, {
                     id: name,
                     init: async () => ({
                         parameters: z.object(def.args),
@@ -367,29 +367,34 @@ export class CodeAgent {
                 const unsubs: (() => void)[] = []
 
                 try {
-                    const busMod = await import("@any-code/opencode/bus/index")
+                const busMod = await import("@any-code/opencode/bus/index")
                     const Bus = busMod.Bus
+                    const globalBusMod = await import("@any-code/opencode/bus/global")
+                    const GlobalBus = globalBusMod.GlobalBus
                     const msgMod = await import("@any-code/opencode/session/message-v2")
                     const MessageV2 = msgMod.MessageV2
                     const sessionMod = await import("@any-code/opencode/session/index")
                     const Session = sessionMod.Session
                     
-                    unsubs.push(
-                        Bus.subscribe(MessageV2.Event.PartDelta, (payload: any) => {
-                            const props = payload.properties
-                            if (props.sessionID !== sessionId) return
+                    // Use GlobalBus to receive ALL events (scoped Bus.subscribe
+                    // misses events published with undefined context)
+                    const globalHandler = (evt: { directory?: string; payload: any }) => {
+                        const payload = evt.payload
+                        if (!payload) return
+                        const type = payload.type
+                        const props = payload.properties
+
+                        if (type === MessageV2.Event.PartDelta.type) {
+                            if (props?.sessionID !== sessionId) return
                             push({
                                 type: "text_delta",
                                 content: props.delta,
                             })
-                        }),
-                    )
+                        }
 
-                    unsubs.push(
-                        Bus.subscribe(MessageV2.Event.PartUpdated, (payload: any) => {
-                            const part = payload.properties?.part
+                        if (type === MessageV2.Event.PartUpdated.type) {
+                            const part = props?.part
                             if (!part || part.sessionID !== sessionId) return
-
                             if (part.type === "tool" && part.state.status === "running") {
                                 push({
                                     type: "tool_call_start",
@@ -410,26 +415,25 @@ export class CodeAgent {
                                     error: part.state.error,
                                 })
                             }
-                        }),
-                    )
+                        }
 
-                    unsubs.push(
-                        Bus.subscribe(Session.Event.Error, (payload: any) => {
-                            const props = payload.properties
-                            if (props.sessionID !== sessionId) return
+                        if (type === Session.Event.Error.type) {
+                            if (props?.sessionID !== sessionId) return
                             push({
                                 type: "error",
                                 error: props.error?.message ?? "Unknown error",
                             })
-                        }),
-                    )
+                        }
+                    }
+                    GlobalBus.on("event", globalHandler)
+                    unsubs.push(() => GlobalBus.off("event", globalHandler))
 
                     // ── Permission handling ────────────────────────────
                     const permMod = await import("@any-code/opencode/permission/next")
                     const PermissionNext = permMod.PermissionNext
 
                     unsubs.push(
-                        Bus.subscribe(PermissionNext.Event.Asked, async (payload: any) => {
+                        Bus.subscribe(this.agentContext, PermissionNext.Event.Asked, async (payload: any) => {
                             const request = payload.properties
                             if (request.sessionID !== sessionId) return
 
@@ -461,7 +465,7 @@ export class CodeAgent {
                                 deny: "reject",
                             }
 
-                            await PermissionNext.reply({
+                            await PermissionNext.reply(this.agentContext, {
                                 requestID: request.id,
                                 reply: replyMap[reply],
                             })
@@ -561,7 +565,7 @@ export class CodeAgent {
             const { ToolRegistry } = await import("@any-code/opencode/tool/registry")
             const z = (await import("zod")).default
 
-            ToolRegistry.register({
+            ToolRegistry.register(this.agentContext, {
                 id: name,
                 init: async () => ({
                     parameters: z.object(tool.args),

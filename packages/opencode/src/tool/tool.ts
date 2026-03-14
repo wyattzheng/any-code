@@ -12,7 +12,8 @@ export namespace Tool {
 
   export interface InitContext {
     agent?: Agent.Info
-    directory: string
+    directory?: string
+    agentContext?: import("../agent/context").AgentContext
   }
 
   export type Context<M extends Metadata = Metadata> = import("../agent/context").AgentContext & {

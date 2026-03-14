@@ -1234,7 +1234,7 @@ export namespace Config {
           await Filesystem.writeJson(context, path.join(context.paths.config, "config.json"), result)
           await fs.unlink(legacy)
         })
-        .catch(() => {})
+        .catch(() => { })
     }
 
     return result
@@ -1253,7 +1253,7 @@ export namespace Config {
     const original = text
     const source = "path" in options ? options.path : options.source
     const isFile = "path" in options
-    const data = await ConfigPaths.parseText(context, 
+    const data = await ConfigPaths.parseText(context,
       text,
       "path" in options ? options.path : { source: options.source, dir: options.dir },
     )
@@ -1275,7 +1275,7 @@ export namespace Config {
       if (!parsed.data.$schema && isFile) {
         parsed.data.$schema = "https://opencode.ai/config.json"
         const updated = original.replace(/^\s*\{/, '{\n  "$schema": "https://opencode.ai/config.json",')
-        await Filesystem.write(context, options.path, updated).catch(() => {})
+        await Filesystem.write(context, options.path, updated).catch(() => { })
       }
       const data = parsed.data
       if (data.plugin && isFile) {

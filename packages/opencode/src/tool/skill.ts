@@ -7,7 +7,7 @@ import { iife } from "@/util/iife"
 import { Instance } from "@/project/instance"
 
 export const SkillTool = Tool.define("skill", async (ctx) => {
-  const list = await Skill.available(undefined as any, ctx?.agent)
+  const list = await Skill.available(ctx?.agentContext!, ctx?.agent)
 
   const description =
     list.length === 0
