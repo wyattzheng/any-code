@@ -162,21 +162,22 @@ export namespace MCP {
 
   async function descendants(pid: number): Promise<number[]> {
     if (process.platform === "win32") return []
+    const { execSync } = await import("child_process")
     const pids: number[] = []
     const queue = [pid]
     while (queue.length > 0) {
       const current = queue.shift()!
-      const proc = Bun.spawn(["pgrep", "-P", String(current)], { stdout: "pipe", stderr: "pipe" })
-      const [code, out] = await Promise.all([proc.exited, new Response(proc.stdout).text()]).catch(
-        () => [-1, ""] as const,
-      )
-      if (code !== 0) continue
-      for (const tok of out.trim().split(/\s+/)) {
-        const cpid = parseInt(tok, 10)
-        if (!isNaN(cpid) && pids.indexOf(cpid) === -1) {
-          pids.push(cpid)
-          queue.push(cpid)
+      try {
+        const out = execSync(`pgrep -P ${current}`, { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] })
+        for (const tok of out.trim().split(/\s+/)) {
+          const cpid = parseInt(tok, 10)
+          if (!isNaN(cpid) && pids.indexOf(cpid) === -1) {
+            pids.push(cpid)
+            queue.push(cpid)
+          }
         }
+      } catch {
+        // pgrep returns non-zero when no children found
       }
     }
     return pids
@@ -229,7 +230,7 @@ export namespace MCP {
         for (const dpid of await descendants(pid)) {
           try {
             process.kill(dpid, "SIGTERM")
-          } catch {}
+          } catch { }
         }
       }
 

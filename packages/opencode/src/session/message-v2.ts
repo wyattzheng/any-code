@@ -13,7 +13,7 @@ import { STATUS_CODES } from "http"
 import { Storage } from "@/storage/storage"
 import { ProviderError } from "@/provider/error"
 import { iife } from "@/util/iife"
-import { type SystemError } from "bun"
+interface SystemError extends Error { code?: string; errno?: number; syscall?: string; path?: string }
 import type { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "@/provider/schema"
 
@@ -712,9 +712,9 @@ export namespace MessageV2 {
               const output =
                 finalAttachments.length > 0
                   ? {
-                      text: outputText,
-                      attachments: finalAttachments,
-                    }
+                    text: outputText,
+                    attachments: finalAttachments,
+                  }
                   : outputText
 
               assistantMessage.parts.push({
@@ -981,7 +981,7 @@ export namespace MessageV2 {
               },
             ).toObject()
           }
-        } catch {}
+        } catch { }
         return new NamedError.Unknown({ message: JSON.stringify(e) }, { cause: e }).toObject()
     }
   }

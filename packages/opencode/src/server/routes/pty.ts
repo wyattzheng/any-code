@@ -1,6 +1,7 @@
 import { Hono } from "hono"
 import { describeRoute, validator, resolver } from "hono-openapi"
-import { upgradeWebSocket } from "hono/bun"
+import { createNodeWebSocket } from "@hono/node-ws"
+const { upgradeWebSocket } = createNodeWebSocket({ app: new Hono() })
 import z from "zod"
 import { Pty } from "@/pty"
 import { PtyID } from "@/pty/schema"

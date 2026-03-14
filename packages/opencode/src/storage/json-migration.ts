@@ -1,5 +1,6 @@
-import { Database } from "bun:sqlite"
-import { drizzle } from "drizzle-orm/bun-sqlite"
+import BetterSqlite3 from "better-sqlite3"
+type Database = BetterSqlite3.Database
+import { drizzle } from "drizzle-orm/better-sqlite3"
 import { Global } from "../global"
 import { Log } from "../util/log"
 import { ProjectTable } from "../project/project.sql"
@@ -130,12 +131,12 @@ export namespace JsonMigration {
     const total = Math.max(
       1,
       projectFiles.length +
-        sessionFiles.length +
-        messageFiles.length +
-        partFiles.length +
-        todoFiles.length +
-        permFiles.length +
-        shareFiles.length,
+      sessionFiles.length +
+      messageFiles.length +
+      partFiles.length +
+      todoFiles.length +
+      permFiles.length +
+      shareFiles.length,
     )
     const progress = options?.progress
     let current = 0
