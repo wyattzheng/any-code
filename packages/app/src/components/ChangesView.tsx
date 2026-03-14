@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from "react";
-import { FileDocIcon } from "./Icons";
+import { FileDocIcon, DiffIcon } from "./Icons";
 import "./ChangesView.css";
 
 export function ChangesView() {
@@ -40,10 +40,10 @@ export function ChangesView() {
     return (
         <div className="changes-view" ref={containerRef}>
             <div className="changes-diff">
-                <div className="panel-header">Diff</div>
-                <pre className="diff-content">
-                    <code>{`// 选择下方文件查看 diff`}</code>
-                </pre>
+                <div className="diff-empty">
+                    <DiffIcon size={28} />
+                    <p>选择文件查看变更</p>
+                </div>
             </div>
             <div
                 className="resize-handle"

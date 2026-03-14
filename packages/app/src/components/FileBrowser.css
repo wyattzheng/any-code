@@ -88,3 +88,19 @@
     white-space: pre-wrap;
     word-break: break-all;
 }
+
+.file-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    gap: 10px;
+    color: var(--color-text-dim);
+    opacity: 0.5;
+}
+
+.file-empty p {
+    font-size: 12px;
+    margin: 0;
+}

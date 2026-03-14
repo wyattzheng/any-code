@@ -38,13 +38,14 @@ export function FileBrowser() {
         window.addEventListener("touchend", onUp);
     };
 
+
     return (
         <div className="file-browser" ref={containerRef}>
             <div className="file-browser-content">
-                <div className="panel-header">main.tsx</div>
-                <pre className="file-content">
-                    <code>{`// 选择下方文件查看内容`}</code>
-                </pre>
+                <div className="file-empty">
+                    <FileDocIcon size={28} />
+                    <p>选择文件查看内容</p>
+                </div>
             </div>
             <div
                 className="resize-handle"
