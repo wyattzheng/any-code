@@ -17,6 +17,7 @@ import { createTempDir, cleanupTempDir } from "./setup"
 import path from "path"
 import fs from "fs"
 import { execSync } from "child_process"
+import { Snapshot } from "@any-code/opencode/snapshot/index"
 
 describe("Snapshot: git-based tracking", () => {
     let tmpDir: string
@@ -65,11 +66,7 @@ describe("Snapshot: git-based tracking", () => {
     afterAll(() => cleanupTempDir(tmpDir))
 
     it("should track the current worktree and return a hash", async () => {
-        const { Instance } = await import("@any-code/opencode/project/instance")
-        const hash = await Instance.provide(agent.agentContext, async () => {
-            const { Snapshot } = await import("@any-code/opencode/snapshot/index")
-            return Snapshot.track(agent.agentContext)
-        })
+        const hash = await Snapshot.track(agent.agentContext)
 
         expect(hash).toBeDefined()
         expect(typeof hash).toBe("string")
@@ -77,22 +74,14 @@ describe("Snapshot: git-based tracking", () => {
     })
 
     it("should detect changed files via patch()", async () => {
-        const { Instance } = await import("@any-code/opencode/project/instance")
-
         // Take initial snapshot
-        const hash = await Instance.provide(agent.agentContext, async () => {
-            const { Snapshot } = await import("@any-code/opencode/snapshot/index")
-            return Snapshot.track(agent.agentContext)
-        })
+        const hash = await Snapshot.track(agent.agentContext)
 
         // Modify a file
         fs.writeFileSync(path.join(tmpDir, "index.ts"), "export const VERSION = 2\n")
 
         // Get patch — should detect the change
-        const patch = await Instance.provide(agent.agentContext, async () => {
-            const { Snapshot } = await import("@any-code/opencode/snapshot/index")
-            return Snapshot.patch(agent.agentContext, hash!)
-        })
+        const patch = await Snapshot.patch(agent.agentContext, hash!)
 
         expect(patch).toBeDefined()
         expect(patch.hash).toBe(hash)
@@ -103,22 +92,14 @@ describe("Snapshot: git-based tracking", () => {
     })
 
     it("should return diff text via diff()", async () => {
-        const { Instance } = await import("@any-code/opencode/project/instance")
-
         // Take snapshot before change
-        const hash = await Instance.provide(agent.agentContext, async () => {
-            const { Snapshot } = await import("@any-code/opencode/snapshot/index")
-            return Snapshot.track(agent.agentContext)
-        })
+        const hash = await Snapshot.track(agent.agentContext)
 
         // Modify file
         fs.writeFileSync(path.join(tmpDir, "readme.md"), "# Hello World\n\nUpdated content.\n")
 
         // Get diff text
-        const diffText = await Instance.provide(agent.agentContext, async () => {
-            const { Snapshot } = await import("@any-code/opencode/snapshot/index")
-            return Snapshot.diff(agent.agentContext, hash!)
-        })
+        const diffText = await Snapshot.diff(agent.agentContext, hash!)
 
         expect(diffText).toBeDefined()
         expect(diffText).toContain("readme.md")
@@ -126,28 +107,17 @@ describe("Snapshot: git-based tracking", () => {
     })
 
     it("should return structured FileDiff via diffFull()", async () => {
-        const { Instance } = await import("@any-code/opencode/project/instance")
-
         // Take initial snapshot
-        const hash1 = await Instance.provide(agent.agentContext, async () => {
-            const { Snapshot } = await import("@any-code/opencode/snapshot/index")
-            return Snapshot.track(agent.agentContext)
-        })
+        const hash1 = await Snapshot.track(agent.agentContext)
 
         // Add a new file
         fs.writeFileSync(path.join(tmpDir, "new-file.ts"), "export const NEW = true\n")
 
         // Take second snapshot
-        const hash2 = await Instance.provide(agent.agentContext, async () => {
-            const { Snapshot } = await import("@any-code/opencode/snapshot/index")
-            return Snapshot.track(agent.agentContext)
-        })
+        const hash2 = await Snapshot.track(agent.agentContext)
 
         // Get full diff between two snapshots
-        const diffs = await Instance.provide(agent.agentContext, async () => {
-            const { Snapshot } = await import("@any-code/opencode/snapshot/index")
-            return Snapshot.diffFull(agent.agentContext, hash1!, hash2!)
-        })
+        const diffs = await Snapshot.diffFull(agent.agentContext, hash1!, hash2!)
 
         expect(diffs).toBeDefined()
         expect(diffs.length).toBeGreaterThanOrEqual(1)
@@ -160,13 +130,8 @@ describe("Snapshot: git-based tracking", () => {
     })
 
     it("should revert files to snapshot state", async () => {
-        const { Instance } = await import("@any-code/opencode/project/instance")
-
         // Take snapshot of current state
-        const hash = await Instance.provide(agent.agentContext, async () => {
-            const { Snapshot } = await import("@any-code/opencode/snapshot/index")
-            return Snapshot.track(agent.agentContext)
-        })
+        const hash = await Snapshot.track(agent.agentContext)
 
         // Get current content before modification
         const originalContent = fs.readFileSync(path.join(tmpDir, "index.ts"), "utf-8")
@@ -175,16 +140,10 @@ describe("Snapshot: git-based tracking", () => {
         fs.writeFileSync(path.join(tmpDir, "index.ts"), "export const VERSION = 999\n")
 
         // Get the patch (which files changed)
-        const patchResult = await Instance.provide(agent.agentContext, async () => {
-            const { Snapshot } = await import("@any-code/opencode/snapshot/index")
-            return Snapshot.patch(agent.agentContext, hash!)
-        })
+        const patchResult = await Snapshot.patch(agent.agentContext, hash!)
 
         // Revert using the snapshot
-        await Instance.provide(agent.agentContext, async () => {
-            const { Snapshot } = await import("@any-code/opencode/snapshot/index")
-            await Snapshot.revert(agent.agentContext, [patchResult])
-        })
+        await Snapshot.revert(agent.agentContext, [patchResult])
 
         // File should be restored to original content
         const restoredContent = fs.readFileSync(path.join(tmpDir, "index.ts"), "utf-8")
@@ -192,19 +151,11 @@ describe("Snapshot: git-based tracking", () => {
     })
 
     it("should handle empty patch when no changes detected", async () => {
-        const { Instance } = await import("@any-code/opencode/project/instance")
-
         // Take snapshot
-        const hash = await Instance.provide(agent.agentContext, async () => {
-            const { Snapshot } = await import("@any-code/opencode/snapshot/index")
-            return Snapshot.track(agent.agentContext)
-        })
+        const hash = await Snapshot.track(agent.agentContext)
 
         // Don't change anything — patch should have no files
-        const patch = await Instance.provide(agent.agentContext, async () => {
-            const { Snapshot } = await import("@any-code/opencode/snapshot/index")
-            return Snapshot.patch(agent.agentContext, hash!)
-        })
+        const patch = await Snapshot.patch(agent.agentContext, hash!)
 
         expect(patch.files).toHaveLength(0)
     })

@@ -10,10 +10,11 @@ import { testPaths } from "./_test-paths"
  *
  * Uses InMemoryFS for all file operations — no real disk I/O.
  */
-import { describe, it, expect, beforeAll, afterAll } from "vitest"
+import { describe, it, expect, beforeAll } from "vitest"
 import { CodeAgent } from "../src/index"
 import { InMemoryFS } from "./fixtures/in-memory-fs"
 import { InMemorySearchProvider } from "./fixtures/search-memory"
+import { ConfigMarkdown } from "@any-code/opencode/config/markdown"
 
 describe("ConfigMarkdown", () => {
     let memfs: InMemoryFS
@@ -53,11 +54,7 @@ describe("ConfigMarkdown", () => {
                 "Do something useful.",
             ].join("\n"))
 
-            const { Instance } = await import("@any-code/opencode/project/instance")
-            const result = await Instance.provide(agent.agentContext, async () => {
-                const { ConfigMarkdown } = await import("@any-code/opencode/config/markdown")
-                return ConfigMarkdown.parse(agent.agentContext, `${workDir}/valid-skill.md`)
-            })
+            const result = await ConfigMarkdown.parse(agent.agentContext, `${workDir}/valid-skill.md`)
 
             expect(result).toBeDefined()
             expect(result.data.name).toBe("my-skill")
@@ -72,11 +69,7 @@ describe("ConfigMarkdown", () => {
                 "Just content, no metadata.",
             ].join("\n"))
 
-            const { Instance } = await import("@any-code/opencode/project/instance")
-            const result = await Instance.provide(agent.agentContext, async () => {
-                const { ConfigMarkdown } = await import("@any-code/opencode/config/markdown")
-                return ConfigMarkdown.parse(agent.agentContext, `${workDir}/empty-fm.md`)
-            })
+            const result = await ConfigMarkdown.parse(agent.agentContext, `${workDir}/empty-fm.md`)
 
             expect(result).toBeDefined()
             expect(Object.keys(result.data)).toHaveLength(0)
@@ -92,23 +85,16 @@ describe("ConfigMarkdown", () => {
                 "Content here.",
             ].join("\n"))
 
-            const { Instance } = await import("@any-code/opencode/project/instance")
-            const result = await Instance.provide(agent.agentContext, async () => {
-                const { ConfigMarkdown } = await import("@any-code/opencode/config/markdown")
-                return ConfigMarkdown.parse(agent.agentContext, `${workDir}/colon-fm.md`)
-            })
+            const result = await ConfigMarkdown.parse(agent.agentContext, `${workDir}/colon-fm.md`)
 
             expect(result).toBeDefined()
             expect(result.data.name).toBe("my-skill")
-            // The description should survive the fallback sanitization
             expect(result.data.description).toContain("A skill")
         })
     })
 
     describe("fallbackSanitization()", () => {
-        it("should convert colon-containing values to block scalars", async () => {
-            const { ConfigMarkdown } = await import("@any-code/opencode/config/markdown")
-
+        it("should convert colon-containing values to block scalars", () => {
             const input = [
                 "---",
                 "name: test",
@@ -122,9 +108,7 @@ describe("ConfigMarkdown", () => {
             expect(sanitized).toContain("  value: with: colons")
         })
 
-        it("should leave already-quoted values alone", async () => {
-            const { ConfigMarkdown } = await import("@any-code/opencode/config/markdown")
-
+        it("should leave already-quoted values alone", () => {
             const input = [
                 "---",
                 'name: "already quoted"',
@@ -136,9 +120,7 @@ describe("ConfigMarkdown", () => {
             expect(sanitized).toContain('"already quoted"')
         })
 
-        it("should not modify content without frontmatter", async () => {
-            const { ConfigMarkdown } = await import("@any-code/opencode/config/markdown")
-
+        it("should not modify content without frontmatter", () => {
             const input = "Just plain markdown content."
             const sanitized = ConfigMarkdown.fallbackSanitization(input)
             expect(sanitized).toBe(input)
@@ -146,8 +128,7 @@ describe("ConfigMarkdown", () => {
     })
 
     describe("files() regex", () => {
-        it("should extract @file references", async () => {
-            const { ConfigMarkdown } = await import("@any-code/opencode/config/markdown")
+        it("should extract @file references", () => {
             const template = "Read @src/index.ts and @package.json for context."
             const matches = ConfigMarkdown.files(template)
 
@@ -156,8 +137,7 @@ describe("ConfigMarkdown", () => {
             expect(matches[1][1]).toBe("package.json")
         })
 
-        it("should extract dotfile references", async () => {
-            const { ConfigMarkdown } = await import("@any-code/opencode/config/markdown")
+        it("should extract dotfile references", () => {
             const template = "Check @.eslintrc.json for config."
             const matches = ConfigMarkdown.files(template)
 
@@ -165,8 +145,7 @@ describe("ConfigMarkdown", () => {
             expect(matches[0][1]).toBe(".eslintrc.json")
         })
 
-        it("should not match @ inside backticks", async () => {
-            const { ConfigMarkdown } = await import("@any-code/opencode/config/markdown")
+        it("should not match @ inside backticks", () => {
             const template = "Use `@scope/package` but also @real-file.ts"
             const matches = ConfigMarkdown.files(template)
 
@@ -176,8 +155,7 @@ describe("ConfigMarkdown", () => {
     })
 
     describe("shell() regex", () => {
-        it("should extract shell command references", async () => {
-            const { ConfigMarkdown } = await import("@any-code/opencode/config/markdown")
+        it("should extract shell command references", () => {
             const template = "Run !`npm test` and !`git status` for info."
             const matches = ConfigMarkdown.shell(template)
 
@@ -186,8 +164,7 @@ describe("ConfigMarkdown", () => {
             expect(matches[1][1]).toBe("git status")
         })
 
-        it("should return empty for no shell commands", async () => {
-            const { ConfigMarkdown } = await import("@any-code/opencode/config/markdown")
+        it("should return empty for no shell commands", () => {
             const template = "No commands here."
             const matches = ConfigMarkdown.shell(template)
             expect(matches.length).toBe(0)
