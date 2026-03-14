@@ -126,7 +126,7 @@ export function ConversationOverlay() {
                             onMouseDown={handleMicMouseDown}
                             onTouchStart={handleMicTouchStart}
                         >
-                            <MicIcon size={20} />
+                            <MicIcon />
                         </button>
                         <button className="text-toggle-btn" onClick={() => setShowTextInput(true)}><KeyboardIcon /></button>
                     </>
