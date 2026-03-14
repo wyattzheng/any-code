@@ -1,7 +1,6 @@
 import z from "zod"
 import * as path from "path"
-import * as fs from "fs/promises"
-import { readFileSync } from "fs"
+import { Filesystem } from "../util/filesystem"
 import { Log } from "../util/log"
 
 export namespace Patch {
@@ -308,11 +307,11 @@ export namespace Patch {
     content: string
   }
 
-  export function deriveNewContentsFromChunks(filePath: string, chunks: UpdateFileChunk[]): ApplyPatchFileUpdate {
+  export async function deriveNewContentsFromChunks(filePath: string, chunks: UpdateFileChunk[]): Promise<ApplyPatchFileUpdate> {
     // Read original file content
     let originalContent: string
     try {
-      originalContent = readFileSync(filePath, "utf-8")
+      originalContent = await Filesystem.readText(filePath)
     } catch (error) {
       throw new Error(`Failed to read file ${filePath}: ${error}`)
     }
@@ -530,37 +529,37 @@ export namespace Patch {
           // Create parent directories
           const addDir = path.dirname(hunk.path)
           if (addDir !== "." && addDir !== "/") {
-            await fs.mkdir(addDir, { recursive: true })
+            await Filesystem.mkdir(addDir)
           }
 
-          await fs.writeFile(hunk.path, hunk.contents, "utf-8")
+          await Filesystem.write(hunk.path, hunk.contents)
           added.push(hunk.path)
           log.info(`Added file: ${hunk.path}`)
           break
 
         case "delete":
-          await fs.unlink(hunk.path)
+          await Filesystem.remove(hunk.path)
           deleted.push(hunk.path)
           log.info(`Deleted file: ${hunk.path}`)
           break
 
         case "update":
-          const fileUpdate = deriveNewContentsFromChunks(hunk.path, hunk.chunks)
+          const fileUpdate = await deriveNewContentsFromChunks(hunk.path, hunk.chunks)
 
           if (hunk.move_path) {
             // Handle file move
             const moveDir = path.dirname(hunk.move_path)
             if (moveDir !== "." && moveDir !== "/") {
-              await fs.mkdir(moveDir, { recursive: true })
+              await Filesystem.mkdir(moveDir)
             }
 
-            await fs.writeFile(hunk.move_path, fileUpdate.content, "utf-8")
-            await fs.unlink(hunk.path)
+            await Filesystem.write(hunk.move_path, fileUpdate.content)
+            await Filesystem.remove(hunk.path)
             modified.push(hunk.move_path)
             log.info(`Moved file: ${hunk.path} -> ${hunk.move_path}`)
           } else {
             // Regular update
-            await fs.writeFile(hunk.path, fileUpdate.content, "utf-8")
+            await Filesystem.write(hunk.path, fileUpdate.content)
             modified.push(hunk.path)
             log.info(`Updated file: ${hunk.path}`)
           }
@@ -625,7 +624,7 @@ export namespace Patch {
               // For delete, we need to read the current content
               const deletePath = path.resolve(effectiveCwd, hunk.path)
               try {
-                const content = await fs.readFile(deletePath, "utf-8")
+                const content = await Filesystem.readText(deletePath)
                 changes.set(resolvedPath, {
                   type: "delete",
                   content,
@@ -641,7 +640,7 @@ export namespace Patch {
             case "update":
               const updatePath = path.resolve(effectiveCwd, hunk.path)
               try {
-                const fileUpdate = deriveNewContentsFromChunks(updatePath, hunk.chunks)
+                const fileUpdate = await deriveNewContentsFromChunks(updatePath, hunk.chunks)
                 changes.set(resolvedPath, {
                   type: "update",
                   unified_diff: fileUpdate.unified_diff,

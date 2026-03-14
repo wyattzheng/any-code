@@ -1,3 +1,4 @@
+import { testPaths } from "./_test-paths"
 /**
  * Test: Tool calling flow
  *
@@ -43,6 +44,8 @@ describe("CodeAgent tool calling", () => {
                 model: "gpt-4o",
                 baseUrl: "http://localhost:19283/v1",
             },
+            fs: new (await import("../src/vfs-node")).NodeFS(),
+            paths: testPaths(),
         })
 
         await agent.init()

@@ -4,7 +4,7 @@ import { type SQLiteTransaction } from "drizzle-orm/sqlite-core"
 export * from "drizzle-orm"
 import { Context } from "../util/context"
 import { lazy } from "../util/lazy"
-import { Global } from "../util/global"
+import { Instance } from "../project/instance"
 import { Log } from "../util/log"
 import { NamedError } from "@/util/error"
 import z from "zod"
@@ -27,12 +27,12 @@ export const NotFoundError = NamedError.create(
 const log = Log.create({ service: "db" })
 
 export namespace Database {
-  export const Path = iife(() => {
+  export const Path = lazy(() => {
     const channel = Installation.CHANNEL
     if (["latest", "beta"].includes(channel) || Flag.OPENCODE_DISABLE_CHANNEL_DB)
-      return path.join(Global.Path.data, "opencode.db")
+      return path.join(Instance.paths.data, "opencode.db")
     const safe = channel.replace(/[^a-zA-Z0-9._-]/g, "-")
-    return path.join(Global.Path.data, `opencode-${safe}.db`)
+    return path.join(Instance.paths.data, `opencode-${safe}.db`)
   })
 
   type Schema = typeof schema
@@ -124,9 +124,9 @@ export namespace Database {
   }
 
   export const Client = lazy(() => {
-    log.info("opening database", { path: Path })
+    log.info("opening database", { path: Path() })
 
-    const sqlite = new BetterSqlite3(Path)
+    const sqlite = new BetterSqlite3(Path())
     state.sqlite = sqlite
 
     sqlite.pragma("journal_mode = WAL")

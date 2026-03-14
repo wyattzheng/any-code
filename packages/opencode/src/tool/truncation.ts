@@ -1,6 +1,5 @@
-import fs from "fs/promises"
 import path from "path"
-import { Global } from "../util/global"
+import { Instance } from "../project/instance"
 import { Identifier } from "../util/id"
 import { PermissionNext } from "../permission/next"
 import type { Agent } from "../agent/agent"
@@ -12,7 +11,7 @@ import { ToolID } from "./schema"
 export namespace Truncate {
   export const MAX_LINES = 2000
   export const MAX_BYTES = 50 * 1024
-  export const DIR = path.join(Global.Path.data, "tool-output")
+  export const DIR = path.join(Instance.paths.data, "tool-output")
   export const GLOB = path.join(DIR, "*")
   const RETENTION_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
   const HOUR_MS = 60 * 60 * 1000
@@ -39,7 +38,7 @@ export namespace Truncate {
     const entries = await Glob.scan("tool_*", { cwd: DIR, include: "file" }).catch(() => [] as string[])
     for (const entry of entries) {
       if (Identifier.timestamp(entry) >= cutoff) continue
-      await fs.unlink(path.join(DIR, entry)).catch(() => {})
+      await Filesystem.remove(path.join(DIR, entry)).catch(() => {})
     }
   }
 

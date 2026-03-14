@@ -27,7 +27,6 @@ import { SessionID, MessageID, PartID } from "./schema"
 import type { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { PermissionNext } from "@/permission/next"
-import { Global } from "@/util/global"
 import type { LanguageModelV2Usage } from "@ai-sdk/provider"
 import { iife } from "@/util/iife"
 
@@ -346,7 +345,7 @@ export namespace Session {
   export function plan(input: { slug: string; time: { created: number } }) {
     const base = Instance.project.vcs
       ? path.join(Instance.worktree, ".opencode", "plans")
-      : path.join(Global.Path.data, "plans")
+      : path.join(Instance.paths.data, "plans")
     return path.join(base, [input.time.created, input.slug].join("-") + ".md")
   }
 

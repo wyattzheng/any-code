@@ -118,6 +118,20 @@ export interface CodeAgentOptions {
      * Each string is a complete instruction block.
      */
     instructions?: string[]
+
+    /**
+     * System directory paths for this agent instance.
+     * Each CodeAgent instance can have its own data/cache/config directories.
+     */
+    paths: {
+        data: string
+        bin: string
+        log: string
+        cache: string
+        config: string
+        state: string
+        home: string
+    }
 }
 
 export interface CodeAgentSession {
@@ -209,6 +223,7 @@ export class CodeAgent {
             directory: this.options.directory,
             scopeId: this.scopeId,
             vfs: this.options.fs as any,
+            paths: this.options.paths,
             config: this.options.config,
             instructions: this.options.instructions,
             init: async () => {

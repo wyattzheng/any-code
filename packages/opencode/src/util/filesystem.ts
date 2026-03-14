@@ -1,144 +1,84 @@
-import { chmod, mkdir, readFile, writeFile } from "fs/promises"
-import { createWriteStream, existsSync, statSync } from "fs"
 import { lookup } from "mime-types"
-import { realpathSync } from "fs"
 import { dirname, join, relative, resolve as pathResolve } from "path"
-import { Readable } from "stream"
-import { pipeline } from "stream/promises"
-import { Glob } from "./glob"
+import { Instance } from "../project/instance"
 
 export namespace Filesystem {
-  // Fast sync version for metadata checks
+  // ── Read operations (all via Instance.vfs) ──────────────────────────
+
   export async function exists(p: string): Promise<boolean> {
-    return existsSync(p)
+    return Instance.vfs.exists(p)
   }
 
   export async function isDir(p: string): Promise<boolean> {
-    try {
-      return statSync(p).isDirectory()
-    } catch {
-      return false
-    }
+    const s = await Instance.vfs.stat(p)
+    return s?.isDirectory ?? false
   }
 
-  export function stat(p: string): ReturnType<typeof statSync> | undefined {
-    return statSync(p, { throwIfNoEntry: false }) ?? undefined
+  export async function stat(p: string) {
+    return Instance.vfs.stat(p)
   }
 
   export async function size(p: string): Promise<number> {
-    const s = stat(p)?.size ?? 0
-    return typeof s === "bigint" ? Number(s) : s
+    const s = await Instance.vfs.stat(p)
+    return s?.size ?? 0
   }
 
   export async function readText(p: string): Promise<string> {
-    return readFile(p, "utf-8")
+    return Instance.vfs.readText(p)
   }
 
   export async function readJson<T = any>(p: string): Promise<T> {
-    return JSON.parse(await readFile(p, "utf-8"))
+    return JSON.parse(await readText(p))
   }
 
-  export async function readBytes(p: string): Promise<Buffer> {
-    return readFile(p)
+  export async function readBytes(p: string): Promise<Uint8Array> {
+    return Instance.vfs.readBytes(p)
   }
 
   export async function readArrayBuffer(p: string): Promise<ArrayBuffer> {
-    const buf = await readFile(p)
-    return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer
+    const bytes = await readBytes(p)
+    return bytes.buffer as ArrayBuffer
   }
 
-  function isEnoent(e: unknown): e is { code: "ENOENT" } {
-    return typeof e === "object" && e !== null && "code" in e && (e as { code: string }).code === "ENOENT"
+  // ── Write operations (all via Instance.vfs) ─────────────────────────
+
+  export async function write(p: string, content: string | Uint8Array): Promise<void> {
+    return Instance.vfs.write(p, content)
   }
 
-  export async function write(p: string, content: string | Buffer | Uint8Array, mode?: number): Promise<void> {
-    try {
-      if (mode) {
-        await writeFile(p, content, { mode })
-      } else {
-        await writeFile(p, content)
-      }
-    } catch (e) {
-      if (isEnoent(e)) {
-        await mkdir(dirname(p), { recursive: true })
-        if (mode) {
-          await writeFile(p, content, { mode })
-        } else {
-          await writeFile(p, content)
-        }
-        return
-      }
-      throw e
-    }
+  export async function writeJson(p: string, data: unknown): Promise<void> {
+    return write(p, JSON.stringify(data, null, 2))
   }
 
-  export async function writeJson(p: string, data: unknown, mode?: number): Promise<void> {
-    return write(p, JSON.stringify(data, null, 2), mode)
+  export async function mkdir(p: string): Promise<void> {
+    return Instance.vfs.mkdir(p)
   }
 
-  export async function writeStream(
-    p: string,
-    stream: ReadableStream<Uint8Array> | Readable,
-    mode?: number,
-  ): Promise<void> {
-    const dir = dirname(p)
-    if (!existsSync(dir)) {
-      await mkdir(dir, { recursive: true })
-    }
-
-    const nodeStream = stream instanceof ReadableStream ? Readable.fromWeb(stream as any) : stream
-    const writeStream = createWriteStream(p)
-    await pipeline(nodeStream, writeStream)
-
-    if (mode) {
-      await chmod(p, mode)
-    }
+  export async function remove(p: string): Promise<void> {
+    return Instance.vfs.remove(p)
   }
+
+  // ── Path utilities (pure, no fs dependency) ─────────────────────────
 
   export function mimeType(p: string): string {
     return lookup(p) || "application/octet-stream"
   }
 
-  /**
-   * On Windows, normalize a path to its canonical casing using the filesystem.
-   * This is needed because Windows paths are case-insensitive but LSP servers
-   * may return paths with different casing than what we send them.
-   */
-  export function normalizePath(p: string): string {
-    if (process.platform !== "win32") return p
-    try {
-      return realpathSync.native(p)
-    } catch {
-      return p
-    }
-  }
-
-  // We cannot rely on path.resolve() here because git.exe may come from Git Bash, Cygwin, or MSYS2, so we need to translate these paths at the boundary.
-  // Also resolves symlinks so that callers using the result as a cache key
-  // always get the same canonical path for a given physical directory.
   export function resolve(p: string): string {
-    const resolved = pathResolve(windowsPath(p))
-    try {
-      return normalizePath(realpathSync(resolved))
-    } catch (e) {
-      if (isEnoent(e)) return normalizePath(resolved)
-      throw e
-    }
+    return pathResolve(windowsPath(p))
   }
 
   export function windowsPath(p: string): string {
     if (process.platform !== "win32") return p
     return (
       p
-        .replace(/^\/([a-zA-Z]):(?:[\\/]|$)/, (_, drive) => `${drive.toUpperCase()}:/`)
-        // Git Bash for Windows paths are typically /<drive>/...
+        .replace(/^\/([a-zA-Z]):(?:[\\\/]|$)/, (_, drive) => `${drive.toUpperCase()}:/`)
         .replace(/^\/([a-zA-Z])(?:\/|$)/, (_, drive) => `${drive.toUpperCase()}:/`)
-        // Cygwin git paths are typically /cygdrive/<drive>/...
         .replace(/^\/cygdrive\/([a-zA-Z])(?:\/|$)/, (_, drive) => `${drive.toUpperCase()}:/`)
-        // WSL paths are typically /mnt/<drive>/...
         .replace(/^\/mnt\/([a-zA-Z])(?:\/|$)/, (_, drive) => `${drive.toUpperCase()}:/`)
     )
   }
+
   export function overlaps(a: string, b: string) {
     const relA = relative(a, b)
     const relB = relative(b, a)
@@ -183,6 +123,7 @@ export namespace Filesystem {
     const result = []
     while (true) {
       try {
+        const { Glob } = await import("./glob")
         const matches = await Glob.scan(pattern, {
           cwd: current,
           absolute: true,

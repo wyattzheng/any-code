@@ -1,3 +1,4 @@
+import { testPaths } from "./_test-paths"
 /**
  * Test: Error retry (SessionRetry)
  *
@@ -24,6 +25,7 @@ describe("CodeAgent: error retry", () => {
             directory: tmpDir,
             skipPlugins: true,
             fs: new NodeFS(),
+            paths: testPaths(),
             provider: {
                 id: "openai",
                 apiKey: "test-key-not-real",

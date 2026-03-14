@@ -41,7 +41,7 @@ export namespace Shell {
   }
   const BLACKLIST = new Set(["fish", "nu"])
 
-  function fallback() {
+  async function fallback() {
     if (process.platform === "win32") {
       if (Flag.OPENCODE_GIT_BASH_PATH) return Flag.OPENCODE_GIT_BASH_PATH
       const git = which("git")
@@ -49,7 +49,8 @@ export namespace Shell {
         // git.exe is typically at: C:\Program Files\Git\cmd\git.exe
         // bash.exe is at: C:\Program Files\Git\bin\bash.exe
         const bash = path.join(git, "..", "..", "bin", "bash.exe")
-        if (Filesystem.stat(bash)?.size) return bash
+        const s = await Filesystem.stat(bash)
+        if (s?.size) return bash
       }
       return process.env.COMSPEC || "cmd.exe"
     }

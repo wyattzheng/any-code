@@ -1,3 +1,4 @@
+import { testPaths } from "./_test-paths"
 /**
  * Test: Create a Hello World HTML page
  *
@@ -32,6 +33,7 @@ describe("CodeAgent: create hello world HTML page", () => {
             directory: tmpDir,
             skipPlugins: true,
             fs: memFS,
+            paths: testPaths(),
             provider: {
                 id: "openai",
                 apiKey: "test-key-not-real",

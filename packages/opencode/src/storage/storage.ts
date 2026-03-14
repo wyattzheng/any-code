@@ -1,7 +1,7 @@
 import { Log } from "../util/log"
 import path from "path"
 import fs from "fs/promises"
-import { Global } from "../util/global"
+import { Instance } from "../project/instance"
 import { Filesystem } from "../util/filesystem"
 import { lazy } from "../util/lazy"
 import { Lock } from "../util/lock"
@@ -136,7 +136,7 @@ export namespace Storage {
   ]
 
   const state = lazy(async () => {
-    const dir = path.join(Global.Path.data, "storage")
+    const dir = path.join(Instance.paths.data, "storage")
     const migration = await Filesystem.readJson<string>(path.join(dir, "migration"))
       .then((x) => parseInt(x))
       .catch(() => 0)

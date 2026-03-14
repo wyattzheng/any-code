@@ -7,7 +7,7 @@ import { Log } from "../util/log"
 import { Instance } from "../project/instance"
 import { lazy } from "@/util/lazy"
 import { Language } from "web-tree-sitter"
-import fs from "fs/promises"
+
 
 import { Filesystem } from "@/util/filesystem"
 import { fileURLToPath } from "url"
@@ -116,7 +116,7 @@ export const BashTool = Tool.define("bash", async () => {
         if (["cd", "rm", "cp", "mv", "mkdir", "touch", "chmod", "chown", "cat"].includes(command[0])) {
           for (const arg of command.slice(1)) {
             if (arg.startsWith("-") || (command[0] === "chmod" && arg.startsWith("+"))) continue
-            const resolved = await fs.realpath(path.resolve(cwd, arg)).catch(() => "")
+            const resolved = Filesystem.resolve(path.resolve(cwd, arg))
             log.info("resolved path", { arg, resolved })
             if (resolved) {
               const normalized =

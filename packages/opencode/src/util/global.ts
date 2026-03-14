@@ -1,8 +1,6 @@
-import fs from "fs/promises"
 import { xdgData, xdgCache, xdgConfig, xdgState } from "xdg-basedir"
 import path from "path"
 import os from "os"
-import { Filesystem } from "../util/filesystem"
 
 const app = "opencode"
 
@@ -24,31 +22,39 @@ export namespace Global {
     config,
     state,
   }
-}
 
-await Promise.all([
-  fs.mkdir(Global.Path.data, { recursive: true }),
-  fs.mkdir(Global.Path.config, { recursive: true }),
-  fs.mkdir(Global.Path.state, { recursive: true }),
-  fs.mkdir(Global.Path.log, { recursive: true }),
-  fs.mkdir(Global.Path.bin, { recursive: true }),
-])
+  /**
+   * Initialize global directories and cache.
+   * Must be called during bootstrap, not at import time.
+   */
+  export async function init() {
+    const fs = await import("fs/promises")
+    await Promise.all([
+      fs.mkdir(Path.data, { recursive: true }),
+      fs.mkdir(Path.config, { recursive: true }),
+      fs.mkdir(Path.state, { recursive: true }),
+      fs.mkdir(Path.log, { recursive: true }),
+      fs.mkdir(Path.bin, { recursive: true }),
+    ])
 
-const CACHE_VERSION = "21"
+    const CACHE_VERSION = "21"
+    const versionFile = path.join(Path.cache, "version")
+    const version = await fs.readFile(versionFile, "utf-8").catch(() => "0")
 
-const version = await Filesystem.readText(path.join(Global.Path.cache, "version")).catch(() => "0")
-
-if (version !== CACHE_VERSION) {
-  try {
-    const contents = await fs.readdir(Global.Path.cache)
-    await Promise.all(
-      contents.map((item) =>
-        fs.rm(path.join(Global.Path.cache, item), {
-          recursive: true,
-          force: true,
-        }),
-      ),
-    )
-  } catch (e) {}
-  await Filesystem.write(path.join(Global.Path.cache, "version"), CACHE_VERSION)
+    if (version !== CACHE_VERSION) {
+      try {
+        const contents = await fs.readdir(Path.cache)
+        await Promise.all(
+          contents.map((item) =>
+            fs.rm(path.join(Path.cache, item), {
+              recursive: true,
+              force: true,
+            }),
+          ),
+        )
+      } catch (e) {}
+      await fs.mkdir(path.dirname(versionFile), { recursive: true })
+      await fs.writeFile(versionFile, CACHE_VERSION)
+    }
+  }
 }
