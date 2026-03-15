@@ -566,7 +566,7 @@ export class CodeAgent {
                     const providerID = this.options.provider.id
                     const modelID = this.options.provider.model
 
-                    await this.runPrompt({
+                    await this.prepare({
                         sessionID: sessionId as any,
                         model: {
                             providerID: providerID as any,
@@ -668,7 +668,7 @@ export class CodeAgent {
     /**
      * Entry point — create user message and enter the agent loop.
      */
-    async runPrompt(input: SessionPrompt.PromptInput): Promise<MessageV2.WithParts | void> {
+    async prepare(input: SessionPrompt.PromptInput): Promise<MessageV2.WithParts | void> {
         const context = this.agentContext
         const session = await Session.get(context, input.sessionID)
         await SessionRevert.cleanup(context, session)
