@@ -73,16 +73,4 @@ export namespace SessionStatus {
     }
   }
 
-
-  /** @deprecated */ export function get(context: AgentContext, sessionID: SessionID) {
-    return context.sessionStatus.get(sessionID)
-  }
-
-  /** @deprecated */ export function list(context: AgentContext) {
-    return context.sessionStatus.list()
-  }
-
-  /** @deprecated */ export function set(context: AgentContext, sessionID: SessionID, status: Info) {
-    context.sessionStatus.set(sessionID, status)
-  }
 }

@@ -132,12 +132,4 @@ export namespace Command {
 
     return result
   }
-
-  /** @deprecated */ export async function get(context: AgentContext, name: string) {
-    return context.command.get(name)
-  }
-
-  /** @deprecated */ export async function list(context: AgentContext) {
-    return context.command.list()
-  }
 }

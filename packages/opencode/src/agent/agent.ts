@@ -357,24 +357,4 @@ export namespace Agent {
       return result
     }
   }
-
-  /** @deprecated Use context.agents.get(name) */
-  export async function get(context: AgentContext, agent: string) {
-    return context.agents.get(agent)
-  }
-
-  /** @deprecated Use context.agents.listSorted() */
-  export async function list(context: AgentContext) {
-    return context.agents.listSorted()
-  }
-
-  /** @deprecated Use context.agents.defaultAgent() */
-  export async function defaultAgent(context: AgentContext) {
-    return context.agents.defaultAgent()
-  }
-
-  /** @deprecated Use context.agents.generate(input) */
-  export async function generate(context: AgentContext, input: { description: string; model?: { providerID: ProviderID; modelID: ModelID } }) {
-    return context.agents.generate(input)
-  }
 }

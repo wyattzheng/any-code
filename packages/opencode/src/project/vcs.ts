@@ -1,7 +1,6 @@
 import type { AgentContext } from "@/agent/context"
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
-import path from "path"
 import z from "zod"
 import { Log } from "@/util/log"
 import { FileWatcher } from "@/file/watcher"
@@ -44,40 +43,24 @@ export namespace Vcs {
   export class VcsService {
     branch: string | undefined = undefined
     unsub: (() => void) | undefined = undefined
-  }
 
-  function initVcs(context: AgentContext) {
-      const result = {
-        current: undefined as string | undefined,
-        unsub: undefined as (() => void) | undefined,
-      }
-
+    constructor(context: AgentContext) {
       // async init - fire and forget
       ;(async () => {
         if (context.project.vcs !== "git") return
-        result.current = await currentBranch(context)
-        log.info("initialized", { branch: result.current })
+        this.branch = await currentBranch(context)
+        log.info("initialized", { branch: this.branch })
 
-        result.unsub = Bus.subscribe(context, FileWatcher.Event.Updated, async (evt) => {
+        this.unsub = Bus.subscribe(context, FileWatcher.Event.Updated, async (evt) => {
           if (evt.properties.file.endsWith("HEAD")) return
           const next = await currentBranch(context)
-          if (next !== result.current) {
-            log.info("branch changed", { from: result.current, to: next })
-            result.current = next
+          if (next !== this.branch) {
+            log.info("branch changed", { from: this.branch, to: next })
+            this.branch = next
             Bus.publish(context, Event.BranchUpdated, { branch: next })
           }
         })
       })()
-
-      return result
-    })
-  }
-
-  export async function init(context: AgentContext) {
-    return state(context)
-  }
-
-  export async function branch(context: AgentContext) {
-    return state(context).current
+    }
   }
 }

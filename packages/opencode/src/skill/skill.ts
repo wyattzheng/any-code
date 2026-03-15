@@ -206,21 +206,9 @@ export namespace Skill {
     }
   }
 
-  /** @deprecated */ export async function get(context: AgentContext, name: string) {
-    return context.skill.get(name)
-  }
 
-  /** @deprecated */ export async function all(context: AgentContext) {
-    return context.skill.all()
-  }
 
-  /** @deprecated */ export async function dirs(context: AgentContext) {
-    return context.skill.dirs()
-  }
 
-  /** @deprecated */ export async function available(context: AgentContext, agent?: Agent.Info) {
-    return context.skill.available(agent)
-  }
 
   export function fmt(list: Info[], opts: { verbose: boolean }) {
     if (list.length === 0) {

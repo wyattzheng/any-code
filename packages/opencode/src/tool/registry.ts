@@ -114,10 +114,6 @@ export namespace ToolRegistry {
     }
   }
 
-  /** @deprecated */ export async function register(context: AgentContext, tool: Tool.Info) {
-    return context.toolRegistry.register(tool)
-  }
-
   async function all(context: AgentContext): Promise<Tool.Info[]> {
     const custom = await context.toolRegistry._promise.then((x) => x.custom)
     const config = await context.config.get()

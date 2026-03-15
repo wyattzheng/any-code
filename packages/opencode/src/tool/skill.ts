@@ -6,7 +6,7 @@ import { Skill } from "../skill"
 import { iife } from "@/util/iife"
 
 export const SkillTool = Tool.define("skill", async (ctx) => {
-  const list = await Skill.available(ctx?.agentContext!, ctx?.agent)
+  const list = await ctx?.agentContext?.skill.available(ctx?.agent) ?? []
 
   const description =
     list.length === 0
@@ -43,7 +43,7 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
       const skill = await (ctx as any).skill.get(params.name)
 
       if (!skill) {
-        const available = await Skill.all(ctx as any).then((x) => x.map((skill) => skill.name).join(", "))
+        const available = await (ctx as any).skill.all().then((x) => x.map((skill) => skill.name).join(", "))
         throw new Error(`Skill "${params.name}" not found. Available skills: ${available || "none"}`)
       }
 

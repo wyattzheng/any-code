@@ -5,7 +5,6 @@ import { File } from "../file"
 import { Project } from "./project"
 import { Bus } from "../bus"
 import { Command } from "../command"
-import { Vcs } from "./vcs"
 import { Log } from "@/util/log"
 import { Snapshot } from "../snapshot"
 import { Truncate } from "../tool/truncation"
@@ -15,7 +14,7 @@ export async function InstanceBootstrap(context: AgentContext) {
   await Plugin.init()
   FileWatcher.init(context)
   // File service initialized via CodeAgent
-  Vcs.init(context)
+  // VcsService initializes itself in constructor (created in CodeAgent.init())
   Snapshot.init(context)
   Truncate.init(context)
 
