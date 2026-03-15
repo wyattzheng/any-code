@@ -12,7 +12,7 @@ import { Log } from "@/util/log"
 import { MessageV2 } from "@/session/message-v2"
 import { Session } from "@/session"
 import { PartID, SessionID } from "@/session/schema"
-import { SessionCompaction } from "@/session/session"
+import { ContextCompaction } from "@/agent/compaction"
 import { NamedError } from "@/util/error"
 import { iife } from "@/util/iife"
 
@@ -585,7 +585,7 @@ export namespace LLMRunner {
                   })
                   if (
                     !input.assistantMessage.summary &&
-                    (await SessionCompaction.isOverflow({ tokens: usage.tokens, model: input.model, context: input.context }))
+                    (await ContextCompaction.isOverflow({ tokens: usage.tokens, model: input.model, context: input.context }))
                   ) {
                     needsCompaction = true
                   }

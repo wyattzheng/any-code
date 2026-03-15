@@ -64,7 +64,7 @@ import { ulid } from "ulid"
 import { PartID, MessageID as MsgID, SessionID } from "../session/schema"
 import { SystemPrompt } from "../session"
 import { SessionSummary } from "../session/summary"
-import { SessionCompaction } from "../session/session"
+import { ContextCompaction } from "./compaction"
 import { LLMRunner } from "./llm-runner"
 import MAX_STEPS from "../session/prompt/max-steps.txt"
 
@@ -668,7 +668,7 @@ export class CodeAgent {
 
             // ── Compaction ──
             if (task?.type === "compaction") {
-                const result = await SessionCompaction.process(context, {
+                const result = await ContextCompaction.process(context, {
                     messages: msgs, parentID: lastUser.id, abort, sessionID,
                     auto: task.auto, overflow: task.overflow, context,
                 })
@@ -677,8 +677,8 @@ export class CodeAgent {
             }
 
             // ── Overflow → auto compact ──
-            if (lastFinished && lastFinished.summary !== true && (await SessionCompaction.isOverflow({ tokens: lastFinished.tokens, model, context }))) {
-                await SessionCompaction.create(context, { sessionID, agent: lastUser.agent, model: lastUser.model, auto: true })
+            if (lastFinished && lastFinished.summary !== true && (await ContextCompaction.isOverflow({ tokens: lastFinished.tokens, model, context }))) {
+                await ContextCompaction.create(context, { sessionID, agent: lastUser.agent, model: lastUser.model, auto: true })
                 continue
             }
 
@@ -691,12 +691,12 @@ export class CodeAgent {
             if (structuredOutput !== undefined) break
             if (result === "stop") break
             if (result === "compact") {
-                await SessionCompaction.create(context, { sessionID, agent: lastUser.agent, model: lastUser.model, auto: true, overflow: true })
+                await ContextCompaction.create(context, { sessionID, agent: lastUser.agent, model: lastUser.model, auto: true, overflow: true })
             }
         }
 
         // Finalize
-        SessionCompaction.prune(context, { sessionID })
+        ContextCompaction.prune(context, { sessionID })
         for await (const item of MessageV2.stream(context, sessionID)) {
             if (item.info.role === "user") continue
             const queued = context.sessionPrompt.sessions[sessionID]?.callbacks ?? []
