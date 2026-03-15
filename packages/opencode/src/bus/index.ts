@@ -1,30 +1,21 @@
 import { getState } from "@/agent/context"
 import type { AgentContext } from "@/agent/context"
+import { EventEmitter } from "events"
 import z from "zod"
 import { Log } from "../util/log"
 import { BusEvent } from "./bus-event"
 import { GlobalBus } from "./global"
 
-export namespace Bus {
-  const log = Log.create({ service: "bus" })
-  type Subscription = (event: any) => void
+/**
+ * BusService — per-instance event bus built on EventEmitter.
+ *
+ * Each CodeAgent instance gets its own BusService.
+ * Events are also forwarded to the process-level GlobalBus.
+ */
+export class BusService extends EventEmitter {
+  private log = Log.create({ service: "bus" })
 
-  export const InstanceDisposed = BusEvent.define(
-    "server.instance.disposed",
-    z.object({
-      directory: z.string(),
-    }),
-  )
-
-  const STATE_KEY = Symbol("bus")
-  function state(context: AgentContext) {
-    return getState(context, STATE_KEY, () => {
-      const subscriptions = new Map<any, Subscription[]>()
-      return { subscriptions }
-    })
-  }
-
-  export async function publish<Definition extends BusEvent.Definition>(context: AgentContext | undefined, 
+  async publish<Definition extends BusEvent.Definition>(
     def: Definition,
     properties: z.output<Definition["properties"]>,
   ) {
@@ -32,23 +23,97 @@ export namespace Bus {
       type: def.type,
       properties,
     }
-    log.info("publishing", {
-      type: def.type,
-    })
-    const pending = []
-    if (context) {
-      for (const key of [def.type, "*"]) {
-        const match = state(context).subscriptions.get(key)
-        for (const sub of match ?? []) {
-          pending.push(sub(payload))
-        }
-      }
+    this.log.info("publishing", { type: def.type })
+    const pending: any[] = []
+    // Emit typed event to local listeners
+    const listeners = this.listeners(def.type) as ((event: any) => void)[]
+    for (const listener of listeners) {
+      pending.push(listener(payload))
     }
+    // Emit wildcard event
+    const wildcardListeners = this.listeners("*") as ((event: any) => void)[]
+    for (const listener of wildcardListeners) {
+      pending.push(listener(payload))
+    }
+    // Forward to global bus
     GlobalBus.emit("event", {
-      directory: context?.directory,
+      directory: undefined as string | undefined,
       payload,
     })
     return Promise.all(pending)
+  }
+
+  subscribe<Definition extends BusEvent.Definition>(
+    def: Definition,
+    callback: (event: { type: Definition["type"]; properties: z.infer<Definition["properties"]> }) => void,
+  ) {
+    this.log.info("subscribing", { type: def.type })
+    this.on(def.type, callback)
+    return () => {
+      this.log.info("unsubscribing", { type: def.type })
+      this.off(def.type, callback)
+    }
+  }
+
+  once_<Definition extends BusEvent.Definition>(
+    def: Definition,
+    callback: (event: {
+      type: Definition["type"]
+      properties: z.infer<Definition["properties"]>
+    }) => "done" | undefined,
+  ) {
+    const unsub = this.subscribe(def, (event) => {
+      if (callback(event)) unsub()
+    })
+  }
+
+  subscribeAll(callback: (event: any) => void) {
+    this.log.info("subscribing", { type: "*" })
+    this.on("*", callback)
+    return () => {
+      this.log.info("unsubscribing", { type: "*" })
+      this.off("*", callback)
+    }
+  }
+}
+
+// ── Backward-compatible namespace wrapper ──────────────────────────
+
+export const InstanceDisposed = BusEvent.define(
+  "server.instance.disposed",
+  z.object({
+    directory: z.string(),
+  }),
+)
+
+const STATE_KEY = Symbol("bus")
+
+function getBus(context: AgentContext): BusService {
+  return getState(context, STATE_KEY, () => new BusService())
+}
+
+export namespace Bus {
+  export const InstanceDisposed = BusEvent.define(
+    "server.instance.disposed",
+    z.object({
+      directory: z.string(),
+    }),
+  )
+
+  export async function publish<Definition extends BusEvent.Definition>(
+    context: AgentContext | undefined,
+    def: Definition,
+    properties: z.output<Definition["properties"]>,
+  ) {
+    if (context) {
+      return getBus(context).publish(def, properties)
+    }
+    // No context — just emit to GlobalBus directly
+    const payload = { type: def.type, properties }
+    GlobalBus.emit("event", {
+      directory: undefined,
+      payload,
+    })
   }
 
   export function subscribe<Definition extends BusEvent.Definition>(
@@ -56,8 +121,7 @@ export namespace Bus {
     def: Definition,
     callback: (event: { type: Definition["type"]; properties: z.infer<Definition["properties"]> }) => void,
   ) {
-    const res = raw(context, def.type, callback)
-    return res
+    return getBus(context).subscribe(def, callback)
   }
 
   export function once<Definition extends BusEvent.Definition>(
@@ -68,29 +132,10 @@ export namespace Bus {
       properties: z.infer<Definition["properties"]>
     }) => "done" | undefined,
   ) {
-    const unsub = subscribe(context, def, (event) => {
-      if (callback(event)) unsub()
-    })
+    getBus(context).once_(def, callback)
   }
 
   export function subscribeAll(context: AgentContext, callback: (event: any) => void) {
-    return raw(context, "*", callback)
-  }
-
-  function raw(context: AgentContext, type: string, callback: (event: any) => void) {
-    log.info("subscribing", { type })
-    const subscriptions = state(context).subscriptions
-    let match = subscriptions.get(type) ?? []
-    match.push(callback)
-    subscriptions.set(type, match)
-
-    return () => {
-      log.info("unsubscribing", { type })
-      const match = subscriptions.get(type)
-      if (!match) return
-      const index = match.indexOf(callback)
-      if (index === -1) return
-      match.splice(index, 1)
-    }
+    return getBus(context).subscribeAll(callback)
   }
 }

@@ -4,54 +4,76 @@ import { Log } from "../util/log"
 import { Flag } from "../util/flag"
 import { Filesystem } from "../util/filesystem"
 
-export namespace FileTime {
-  const log = Log.create({ service: "file.time" })
-  // Per-session read times plus per-file write locks.
-  // All tools that overwrite existing files should run their
-  // assert/read/write/update sequence inside withLock(filepath, ...)
-  // so concurrent writes to the same file are serialized.
-  const STATE_KEY = Symbol("file.time")
-  export function state(context: AgentContext) {
-    return getState(context, STATE_KEY, () => {
-      const read: {
-        [sessionID: string]: {
-          [path: string]: Date | undefined
-        }
-      } = {}
-      const locks = new Map<string, Promise<void>>()
-      return { read, locks }
-    })
+/**
+ * FileTimeService — tracks file read times and serializes concurrent writes.
+ *
+ * Provides per-session read timestamps and per-file write locks so
+ * concurrent edits to the same file are serialized.
+ */
+export class FileTimeService {
+  private log = Log.create({ service: "file.time" })
+  private readTimes: {
+    [sessionID: string]: {
+      [path: string]: Date | undefined
+    }
+  } = {}
+  private locks = new Map<string, Promise<void>>()
+
+  read(sessionID: string, file: string) {
+    this.log.info("read", { sessionID, file })
+    this.readTimes[sessionID] = this.readTimes[sessionID] || {}
+    this.readTimes[sessionID][file] = new Date()
   }
 
-  export function read(context: AgentContext, sessionID: string, file: string) {
-    log.info("read", { sessionID, file })
-    const { read } = state(context)
-    read[sessionID] = read[sessionID] || {}
-    read[sessionID][file] = new Date()
+  get(sessionID: string, file: string) {
+    return this.readTimes[sessionID]?.[file]
   }
 
-  export function get(context: AgentContext, sessionID: string, file: string) {
-    return state(context).read[sessionID]?.[file]
-  }
-
-  export async function withLock<T>(context: AgentContext, filepath: string, fn: () => Promise<T>): Promise<T> {
-    const current = state(context)
-    const currentLock = current.locks.get(filepath) ?? Promise.resolve()
+  async withLock<T>(filepath: string, fn: () => Promise<T>): Promise<T> {
+    const currentLock = this.locks.get(filepath) ?? Promise.resolve()
     let release: () => void = () => {}
     const nextLock = new Promise<void>((resolve) => {
       release = resolve
     })
     const chained = currentLock.then(() => nextLock)
-    current.locks.set(filepath, chained)
+    this.locks.set(filepath, chained)
     await currentLock
     try {
       return await fn()
     } finally {
       release()
-      if (current.locks.get(filepath) === chained) {
-        current.locks.delete(filepath)
+      if (this.locks.get(filepath) === chained) {
+        this.locks.delete(filepath)
       }
     }
+  }
+}
+
+// ── Backward-compatible namespace wrapper ──────────────────────────
+
+const STATE_KEY = Symbol("file.time")
+
+export namespace FileTime {
+  function svc(context: AgentContext) {
+    return getState(context, STATE_KEY, () => new FileTimeService())
+  }
+
+  export function state(context: AgentContext) {
+    // legacy API: returns the internal shape
+    const s = svc(context)
+    return { read: (s as any).readTimes, locks: (s as any).locks }
+  }
+
+  export function read(context: AgentContext, sessionID: string, file: string) {
+    svc(context).read(sessionID, file)
+  }
+
+  export function get(context: AgentContext, sessionID: string, file: string) {
+    return svc(context).get(sessionID, file)
+  }
+
+  export async function withLock<T>(context: AgentContext, filepath: string, fn: () => Promise<T>): Promise<T> {
+    return svc(context).withLock(filepath, fn)
   }
 
   export async function assert(context: AgentContext, sessionID: string, filepath: string) {
