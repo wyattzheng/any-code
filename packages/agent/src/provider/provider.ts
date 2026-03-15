@@ -242,6 +242,8 @@ export namespace Provider {
       },
       capabilities: {
         temperature: model.temperature,
+        // Always true: non-thinking models simply won't produce thinking blocks,
+        // but thinking models require this to properly handle signatures in history replay.
         reasoning: true,
         attachment: model.attachment,
         toolcall: model.tool_call,
@@ -609,6 +611,7 @@ export namespace Provider {
           providerID: ProviderID.make(providerID),
           capabilities: {
             temperature: model.temperature ?? existingModel?.capabilities.temperature ?? false,
+            // Always true: safe for non-thinking models, required for thinking models.
             reasoning: true,
             attachment: model.attachment ?? existingModel?.capabilities.attachment ?? false,
             toolcall: model.tool_call ?? existingModel?.capabilities.toolcall ?? true,
