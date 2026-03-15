@@ -5,6 +5,7 @@ import "./ChangesView.css";
 
 interface ChangesViewProps {
     changes: GitChange[];
+    requestFile: (path: string) => Promise<string | null>;
 }
 
 function statusClass(status: string): string {
@@ -24,10 +25,14 @@ function statusLabel(status: string): string {
     }
 }
 
-export function ChangesView({ changes }: ChangesViewProps) {
+export function ChangesView({ changes, requestFile }: ChangesViewProps) {
     const [listHeight, setListHeight] = useState(200);
     const containerRef = useRef<HTMLDivElement>(null);
     const dragRef = useRef<{ startY: number; startHeight: number } | null>(null);
+
+    const [selectedFile, setSelectedFile] = useState<string | null>(null);
+    const [fileContent, setFileContent] = useState<string | null>(null);
+    const [fileLoading, setFileLoading] = useState(false);
 
     const onDragMove = useCallback((clientY: number) => {
         if (!dragRef.current || !containerRef.current) return;
@@ -59,15 +64,42 @@ export function ChangesView({ changes }: ChangesViewProps) {
         window.addEventListener("touchend", onUp);
     };
 
+    const handleFileClick = async (filePath: string) => {
+        setSelectedFile(filePath);
+        setFileContent(null);
+        setFileLoading(true);
+        const content = await requestFile(filePath);
+        setFileContent(content);
+        setFileLoading(false);
+    };
+
     const isEmpty = changes.length === 0;
 
     return (
         <div className="changes-view" ref={containerRef}>
             <div className="changes-diff">
-                <div className="diff-empty">
-                    <DiffIcon size={28} />
-                    <p>{isEmpty ? "没有未提交的变更" : "选择文件查看变更"}</p>
-                </div>
+                {selectedFile ? (
+                    <>
+                        <div className="file-content-header">
+                            <FileDocIcon />
+                            <span className="file-content-path">{selectedFile}</span>
+                        </div>
+                        <div className="file-content-body">
+                            {fileLoading ? (
+                                <div className="file-content-loading">加载中…</div>
+                            ) : fileContent !== null ? (
+                                <pre className="file-content-code">{fileContent}</pre>
+                            ) : (
+                                <div className="file-content-error">无法读取文件</div>
+                            )}
+                        </div>
+                    </>
+                ) : (
+                    <div className="diff-empty">
+                        <DiffIcon size={28} />
+                        <p>{isEmpty ? "没有未提交的变更" : "选择文件查看内容"}</p>
+                    </div>
+                )}
             </div>
             <div
                 className="resize-handle"
@@ -85,7 +117,11 @@ export function ChangesView({ changes }: ChangesViewProps) {
                         </div>
                     ) : (
                         changes.map((change) => (
-                            <div key={change.file} className={`change-item ${statusClass(change.status)}`}>
+                            <div
+                                key={change.file}
+                                className={`change-item ${statusClass(change.status)}${selectedFile === change.file ? " selected" : ""}`}
+                                onClick={() => handleFileClick(change.file)}
+                            >
                                 <FileDocIcon />
                                 <span>{change.file}</span>
                                 <span className="change-badge">{statusLabel(change.status)}</span>

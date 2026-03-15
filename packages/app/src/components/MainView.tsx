@@ -16,7 +16,7 @@ export function MainView({ activeTab, topLevel, changes, requestLs, requestFile 
     return (
         <div className="main-view">
             {activeTab === "files" && <FileBrowser topLevel={topLevel} requestLs={requestLs} requestFile={requestFile} />}
-            {activeTab === "changes" && <ChangesView changes={changes} />}
+            {activeTab === "changes" && <ChangesView changes={changes} requestFile={requestFile} />}
             {activeTab === "preview" && <PreviewTab />}
 
             {/* 动态 Tab：渲染 iframe 访问 agent web 项目路由 */}
