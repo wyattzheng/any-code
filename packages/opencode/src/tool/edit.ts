@@ -13,7 +13,7 @@ import { File } from "../file"
 import { FileWatcher } from "../file"
 import { Bus } from "../bus"
 
-import { Snapshot } from "@/snapshot"
+
 import { assertExternalDirectory } from "./external-directory"
 
 const MAX_DIAGNOSTICS_PER_FILE = 20
@@ -120,7 +120,7 @@ export const EditTool = Tool.define("edit", {
       ctx.fileTime.read(ctx.sessionID, filePath)
     })
 
-    const filediff: Snapshot.FileDiff = {
+    const filediff: { file: string; before: string; after: string; additions: number; deletions: number; status?: "added" | "deleted" | "modified" } = {
       file: filePath,
       before: contentOld,
       after: contentNew,

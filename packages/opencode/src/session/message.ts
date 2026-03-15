@@ -150,7 +150,7 @@ export namespace Message {
             z
               .object({
                 title: z.string(),
-                snapshot: z.string().optional(),
+
                 time: z.object({
                   start: z.number(),
                   end: z.number(),
@@ -180,7 +180,7 @@ export namespace Message {
               }),
             })
             .optional(),
-          snapshot: z.string().optional(),
+
         })
         .meta({ ref: "MessageMetadata" }),
     })

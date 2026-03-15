@@ -15,7 +15,7 @@ import { PartID, SessionID } from "@/session/schema"
 import { SessionCompaction } from "@/session/session"
 import { NamedError } from "@/util/error"
 import { iife } from "@/util/iife"
-import { Snapshot } from "@/snapshot"
+
 
 import { Bus } from "@/bus"
 import { SessionSummary } from "@/session/summary"
@@ -364,7 +364,6 @@ export namespace LLMRunner {
     context: AgentContext
   }) {
     const toolcalls: Record<string, MessageV2.ToolPart> = {}
-    let snapshot: string | undefined
     let blocked = false
     let attempt = 0
     let needsCompaction = false
@@ -384,10 +383,6 @@ export namespace LLMRunner {
           try {
             let currentText: MessageV2.TextPart | undefined
             let reasoningMap: Record<string, MessageV2.ReasoningPart> = {}
-            // Take snapshot BEFORE LLM.stream() because the AI SDK buffers
-            // fullStream events: tool execution completes before start-step
-            // is yielded, so snapshotting at start-step would miss pre-tool state.
-            snapshot = await Snapshot.track(input.context)
             const stream = await LLM.stream(input.context, streamInput)
 
             for await (const value of stream.fullStream) {
@@ -561,7 +556,6 @@ export namespace LLMRunner {
                     id: PartID.ascending(),
                     messageID: input.assistantMessage.id,
                     sessionID: input.sessionID,
-                    snapshot,
                     type: "step-start",
                   })
                   break
@@ -578,7 +572,6 @@ export namespace LLMRunner {
                   await Session.updatePart(input.context, {
                     id: PartID.ascending(),
                     reason: value.finishReason,
-                    snapshot: await Snapshot.track(input.context),
                     messageID: input.assistantMessage.id,
                     sessionID: input.assistantMessage.sessionID,
                     type: "step-finish",
@@ -586,20 +579,6 @@ export namespace LLMRunner {
                     cost: usage.cost,
                   })
                   await Session.updateMessage(input.context, input.assistantMessage)
-                  if (snapshot) {
-                    const patch = await Snapshot.patch(input.context, snapshot)
-                    if (patch.files.length) {
-                      await Session.updatePart(input.context, {
-                        id: PartID.ascending(),
-                        messageID: input.assistantMessage.id,
-                        sessionID: input.sessionID,
-                        type: "patch",
-                        hash: patch.hash,
-                        files: patch.files,
-                      })
-                    }
-                    snapshot = undefined
-                  }
                   SessionSummary.summarize(input.context, {
                     sessionID: input.sessionID,
                     messageID: input.assistantMessage.parentID,
@@ -701,20 +680,7 @@ export namespace LLMRunner {
               input.context.sessionStatus.set(input.sessionID, { type: "idle" })
             }
           }
-          if (snapshot) {
-            const patch = await Snapshot.patch(input.context, snapshot)
-            if (patch.files.length) {
-              await Session.updatePart(input.context, {
-                id: PartID.ascending(),
-                messageID: input.assistantMessage.id,
-                sessionID: input.sessionID,
-                type: "patch",
-                hash: patch.hash,
-                files: patch.files,
-              })
-            }
-            snapshot = undefined
-          }
+
           const p = await MessageV2.parts(input.context, input.assistantMessage.id)
           for (const part of p) {
             if (part.type === "tool" && part.state.status !== "completed" && part.state.status !== "error") {

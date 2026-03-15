@@ -5,7 +5,6 @@ import { Session } from "."
 import { MessageV2 } from "./message-v2"
 import { Identifier } from "@/util/id"
 import { SessionID, MessageID } from "./schema"
-import { Snapshot } from "@/snapshot"
 
 import { Storage } from "@/storage"
 import { Bus } from "@/bus"
@@ -108,7 +107,7 @@ export namespace SessionSummary {
   }
 
   export async function diff(context: AgentContext, input: { sessionID: SessionID; messageID?: MessageID }) {
-    const diffs = await Storage.read<Snapshot.FileDiff[]>(context, ["session_diff", input.sessionID]).catch(() => [])
+    const diffs = await Storage.read<MessageV2.FileDiff[]>(context, ["session_diff", input.sessionID]).catch(() => [])
     const next = diffs.map((item) => {
       const file = unquoteGitPath(item.file)
       if (file === item.file) return item
@@ -122,30 +121,8 @@ export namespace SessionSummary {
     return next
   }
 
-  export async function computeDiff(context: AgentContext, input: { messages: MessageV2.WithParts[] }) {
-    let from: string | undefined
-    let to: string | undefined
-
-    // scan assistant messages to find earliest from and latest to
-    // snapshot
-    for (const item of input.messages) {
-      if (!from) {
-        for (const part of item.parts) {
-          if (part.type === "step-start" && part.snapshot) {
-            from = part.snapshot
-            break
-          }
-        }
-      }
-
-      for (const part of item.parts) {
-        if (part.type === "step-finish" && part.snapshot) {
-          to = part.snapshot
-        }
-      }
-    }
-
-    if (from && to) return Snapshot.diffFull(context, from, to)
+  export async function computeDiff(_context: AgentContext, _input: { messages: MessageV2.WithParts[] }): Promise<MessageV2.FileDiff[]> {
+    // Snapshot mechanism removed — diff computation is no longer available
     return []
   }
 }

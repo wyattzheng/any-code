@@ -4,7 +4,7 @@ import z from "zod"
 import { NamedError } from "@/util/error"
 import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessage, type UIMessage } from "ai"
 import { LSP } from "../util/lsp"
-import { Snapshot } from "@/snapshot"
+
 import { fn } from "@/util/fn"
 import { NotFoundError } from "@/storage"
 import type { Filter } from "@/storage"
@@ -84,13 +84,20 @@ export namespace MessageV2 {
     messageID: MessageID.zod,
   })
 
-  export const SnapshotPart = PartBase.extend({
-    type: z.literal("snapshot"),
-    snapshot: z.string(),
-  }).meta({
-    ref: "SnapshotPart",
-  })
-  export type SnapshotPart = z.infer<typeof SnapshotPart>
+  export const FileDiff = z
+    .object({
+      file: z.string(),
+      before: z.string(),
+      after: z.string(),
+      additions: z.number(),
+      deletions: z.number(),
+      status: z.enum(["added", "deleted", "modified"]).optional(),
+    })
+    .meta({
+      ref: "FileDiff",
+    })
+  export type FileDiff = z.infer<typeof FileDiff>
+
 
   export const PatchPart = PartBase.extend({
     type: z.literal("patch"),
@@ -238,7 +245,6 @@ export namespace MessageV2 {
 
   export const StepStartPart = PartBase.extend({
     type: z.literal("step-start"),
-    snapshot: z.string().optional(),
   }).meta({
     ref: "StepStartPart",
   })
@@ -247,7 +253,6 @@ export namespace MessageV2 {
   export const StepFinishPart = PartBase.extend({
     type: z.literal("step-finish"),
     reason: z.string(),
-    snapshot: z.string().optional(),
     cost: z.number(),
     tokens: z.object({
       total: z.number().optional(),
@@ -358,7 +363,7 @@ export namespace MessageV2 {
       .object({
         title: z.string().optional(),
         body: z.string().optional(),
-        diffs: Snapshot.FileDiff.array(),
+        diffs: MessageV2.FileDiff.array(),
       })
       .optional(),
     agent: z.string(),
@@ -383,7 +388,6 @@ export namespace MessageV2 {
       ToolPart,
       StepStartPart,
       StepFinishPart,
-      SnapshotPart,
       PatchPart,
       AgentPart,
       RetryPart,

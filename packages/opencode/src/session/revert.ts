@@ -1,6 +1,6 @@
 import z from "zod"
 import { SessionID, MessageID, PartID } from "./schema"
-import { Snapshot } from "../snapshot"
+
 import { MessageV2 } from "./message-v2"
 import { Session } from "."
 import { Log } from "../util/log"
@@ -27,7 +27,7 @@ export namespace SessionRevert {
     const session = await Session.get(context, input.sessionID)
 
     let revert: Session.Info["revert"]
-    const patches: Snapshot.Patch[] = []
+    const patches: { hash: string; files: string[] }[] = []
     for (const msg of all) {
       if (msg.info.role === "user") lastUser = msg.info
       const remaining = []
@@ -55,9 +55,6 @@ export namespace SessionRevert {
 
     if (revert) {
       const session = await Session.get(context, input.sessionID)
-      revert.snapshot = session.revert?.snapshot ?? (await Snapshot.track(context))
-      await Snapshot.revert(context, patches)
-      if (revert.snapshot) revert.diff = await Snapshot.diff(context, revert.snapshot)
       const rangeMessages = all.filter((msg) => msg.info.id >= revert!.messageID)
       const diffs = await SessionSummary.computeDiff(context, { messages: rangeMessages })
       await Storage.write(context, ["session_diff", input.sessionID], diffs)
@@ -83,7 +80,7 @@ export namespace SessionRevert {
     SessionPrompt.assertNotBusy(context, input.sessionID)
     const session = await Session.get(context, input.sessionID)
     if (!session.revert) return session
-    if (session.revert.snapshot) await Snapshot.restore(context, session.revert.snapshot)
+
     return Session.clearRevert(context, input.sessionID)
   }
 

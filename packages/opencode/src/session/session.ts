@@ -43,7 +43,7 @@ import { iife } from "@/util/iife"
 import { Truncate } from "@/tool/truncation"
 import { decodeDataUrl } from "@/util/data-url"
 
-import { Snapshot } from "@/snapshot"
+
 
 import { Question } from "@/session/question"
 import { Installation } from "@/util/installation"

@@ -1,7 +1,6 @@
 import { sqliteTable, text, integer, index, primaryKey } from "drizzle-orm/sqlite-core"
 import { ProjectTable } from "../project"
 import type { MessageV2 } from "./message-v2"
-import type { Snapshot } from "../snapshot"
 
 import type { ProjectID } from "../project"
 import type { SessionID, MessageID, PartID } from "./schema"
@@ -29,8 +28,8 @@ export const SessionTable = sqliteTable(
     summary_additions: integer(),
     summary_deletions: integer(),
     summary_files: integer(),
-    summary_diffs: text({ mode: "json" }).$type<Snapshot.FileDiff[]>(),
-    revert: text({ mode: "json" }).$type<{ messageID: MessageID; partID?: PartID; snapshot?: string; diff?: string }>(),
+    summary_diffs: text({ mode: "json" }).$type<MessageV2.FileDiff[]>(),
+    revert: text({ mode: "json" }).$type<{ messageID: MessageID; partID?: PartID; diff?: string }>(),
 
     ...Timestamps,
     time_compacting: integer(),

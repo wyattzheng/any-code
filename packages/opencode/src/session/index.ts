@@ -19,7 +19,7 @@ import { MessageV2 } from "./message-v2"
 
 import { fn } from "@/util/fn"
 
-import { Snapshot } from "@/snapshot"
+
 import { ProjectID } from "../project"
 import { SessionID, MessageID, PartID } from "./schema"
 
@@ -141,7 +141,7 @@ export namespace Session {
           additions: z.number(),
           deletions: z.number(),
           files: z.number(),
-          diffs: Snapshot.FileDiff.array().optional(),
+          diffs: MessageV2.FileDiff.array().optional(),
         })
         .optional(),
       title: z.string(),
@@ -156,7 +156,6 @@ export namespace Session {
         .object({
           messageID: MessageID.zod,
           partID: PartID.zod.optional(),
-          snapshot: z.string().optional(),
           diff: z.string().optional(),
         })
         .optional(),
@@ -207,7 +206,7 @@ export namespace Session {
       "session.diff",
       z.object({
         sessionID: SessionID.zod,
-        diff: Snapshot.FileDiff.array(),
+        diff: MessageV2.FileDiff.array(),
       }),
     ),
     Error: BusEvent.define(
@@ -418,7 +417,7 @@ export namespace Session {
 
   export async function diff(context: AgentContext, sessionID: SessionID) {
     try {
-      return await Storage.read<Snapshot.FileDiff[]>(context, ["session_diff", sessionID])
+      return await Storage.read<MessageV2.FileDiff[]>(context, ["session_diff", sessionID])
     } catch {
       return []
     }

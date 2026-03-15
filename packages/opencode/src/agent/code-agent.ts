@@ -43,7 +43,7 @@ import { GlobalBus } from "../bus/global"
 import { MessageV2 } from "../session/message-v2"
 
 import { Truncate } from "../tool/truncation"
-import { Snapshot } from "../snapshot"
+
 import { FileWatcher } from "../file"
 import { File } from "../file"
 
