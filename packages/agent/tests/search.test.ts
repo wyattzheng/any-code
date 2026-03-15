@@ -3,7 +3,7 @@ import { NodeSearchProvider } from "../src/search-node"
 import { InMemorySearchProvider } from "./fixtures/search-memory"
 import { InMemoryFS } from "./fixtures/in-memory-fs"
 import { createTempDir, cleanupTempDir } from "./setup"
-import type { SearchProvider } from "@any-code/opencode/util/search"
+import type { SearchProvider } from "@any-code/opencode"
 import fs from "fs/promises"
 import path from "path"
 

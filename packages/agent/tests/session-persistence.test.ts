@@ -70,7 +70,7 @@ describe("CodeAgent: session persistence", () => {
         const session = await agent.createSession("Persistent Session")
 
         // Verify we can access the session through the underlying Session module
-        const { Session } = await import("@any-code/opencode/session/index")
+        const { Session } = await import("@any-code/opencode")
         const sessions = [...Session.list(agent.agentContext)]
         const found = sessions.find(s => s.id === session.id)
 
@@ -82,7 +82,7 @@ describe("CodeAgent: session persistence", () => {
         // Create a fresh session to ensure at least one exists
         await agent.createSession("Listed Session")
 
-        const { Session } = await import("@any-code/opencode/session/index")
+        const { Session } = await import("@any-code/opencode")
         const sessions = [...Session.list(agent.agentContext)]
 
         // Should have at least the sessions created in this describe block

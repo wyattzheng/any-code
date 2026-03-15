@@ -6,7 +6,7 @@
 import { spawn } from "child_process"
 import fs from "fs/promises"
 import path from "path"
-import type { SearchProvider, GrepMatch } from "@any-code/opencode/util/search"
+import type { SearchProvider, GrepMatch } from "@any-code/opencode"
 
 export class NodeSearchProvider implements SearchProvider {
     async grep(options: {

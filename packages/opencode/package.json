@@ -6,16 +6,7 @@
   "license": "MIT",
   "private": true,
   "exports": {
-    ".": "./dist/index.js",
-    "./code-agent": "./dist/code-agent.js",
-    "./storage/index": "./dist/storage/index.js",
-    "./util/search": "./dist/util/search.js",
-    "./util/git": "./dist/util/git.js",
-    "./util/markdown": "./dist/util/markdown.js",
-    "./project/index": "./dist/project/index.js",
-    "./session/index": "./dist/session/index.js",
-    "./memory/message-v2": "./dist/memory/message-v2.js",
-    "./skill/index": "./dist/skill/index.js"
+    ".": "./dist/index.js"
   },
   "scripts": {
     "build": "tsup"

@@ -5,7 +5,7 @@
  * No external binaries needed.
  */
 import path from "path"
-import type { SearchProvider, GrepMatch } from "@any-code/opencode/util/search"
+import type { SearchProvider, GrepMatch } from "@any-code/opencode"
 import type { InMemoryFS } from "./in-memory-fs"
 
 export class InMemorySearchProvider implements SearchProvider {
