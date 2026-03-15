@@ -13,7 +13,6 @@ import { Plugin } from "../util/plugin"
 import { NamedError } from "@/util/error"
 import { ModelsDev } from "./models"
 import { Auth } from "../util/auth"
-import { Env } from "../util/env"
 
 import { Flag } from "../util/flag"
 import { iife } from "@/util/iife"
@@ -151,7 +150,7 @@ export namespace Provider {
     },
     async opencode(context, input) {
       const hasKey = await (async () => {
-        const env = Env.all(context)
+        const env = context.env.all()
         if (input.env.some((item) => env[item])) return true
         if (await Auth.get(input.id)) return true
         const config = await Config.get(context)
@@ -184,7 +183,7 @@ export namespace Provider {
       const resource = iife(() => {
         const name = provider.options?.resourceName
         if (typeof name === "string" && name.trim() !== "") return name
-        return Env.get(context, "AZURE_RESOURCE_NAME")
+        return context.env.get("AZURE_RESOURCE_NAME")
       })
 
       return {
@@ -206,7 +205,7 @@ export namespace Provider {
       }
     },
     "azure-cognitive-services": async (context) => {
-      const resourceName = Env.get(context, "AZURE_COGNITIVE_SERVICES_RESOURCE_NAME")
+      const resourceName = context.env.get("AZURE_COGNITIVE_SERVICES_RESOURCE_NAME")
       return {
         autoload: false,
         async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
@@ -230,15 +229,15 @@ export namespace Provider {
 
       // Region precedence: 1) config file, 2) env var, 3) default
       const configRegion = providerConfig?.options?.region
-      const envRegion = Env.get(context, "AWS_REGION")
+      const envRegion = context.env.get("AWS_REGION")
       const defaultRegion = configRegion ?? envRegion ?? "us-east-1"
 
       // Profile: config file takes precedence over env var
       const configProfile = providerConfig?.options?.profile
-      const envProfile = Env.get(context, "AWS_PROFILE")
+      const envProfile = context.env.get("AWS_PROFILE")
       const profile = configProfile ?? envProfile
 
-      const awsAccessKeyId = Env.get(context, "AWS_ACCESS_KEY_ID")
+      const awsAccessKeyId = context.env.get("AWS_ACCESS_KEY_ID")
 
       // TODO: Using process.env directly because Env.set only updates a process.env shallow copy,
       // until the scope of the Env API is clarified (test only or runtime?)
@@ -252,7 +251,7 @@ export namespace Provider {
         return undefined
       })
 
-      const awsWebIdentityTokenFile = Env.get(context, "AWS_WEB_IDENTITY_TOKEN_FILE")
+      const awsWebIdentityTokenFile = context.env.get("AWS_WEB_IDENTITY_TOKEN_FILE")
 
       const containerCreds = Boolean(
         process.env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI || process.env.AWS_CONTAINER_CREDENTIALS_FULL_URI,
@@ -395,15 +394,15 @@ export namespace Provider {
     "google-vertex": async (context, provider) => {
       const project =
         provider.options?.project ??
-        Env.get(context, "GOOGLE_CLOUD_PROJECT") ??
-        Env.get(context, "GCP_PROJECT") ??
-        Env.get(context, "GCLOUD_PROJECT")
+        context.env.get("GOOGLE_CLOUD_PROJECT") ??
+        context.env.get("GCP_PROJECT") ??
+        context.env.get("GCLOUD_PROJECT")
 
       const location = String(
         provider.options?.location ??
-          Env.get(context, "GOOGLE_VERTEX_LOCATION") ??
-          Env.get(context, "GOOGLE_CLOUD_LOCATION") ??
-          Env.get(context, "VERTEX_LOCATION") ??
+          context.env.get("GOOGLE_VERTEX_LOCATION") ??
+          context.env.get("GOOGLE_CLOUD_LOCATION") ??
+          context.env.get("VERTEX_LOCATION") ??
           "us-central1",
       )
 
@@ -440,8 +439,8 @@ export namespace Provider {
       }
     },
     "google-vertex-anthropic": async (context) => {
-      const project = Env.get(context, "GOOGLE_CLOUD_PROJECT") ?? Env.get(context, "GCP_PROJECT") ?? Env.get(context, "GCLOUD_PROJECT")
-      const location = Env.get(context, "GOOGLE_CLOUD_LOCATION") ?? Env.get(context, "VERTEX_LOCATION") ?? "global"
+      const project = context.env.get("GOOGLE_CLOUD_PROJECT") ?? context.env.get("GCP_PROJECT") ?? context.env.get("GCLOUD_PROJECT")
+      const location = context.env.get("GOOGLE_CLOUD_LOCATION") ?? context.env.get("VERTEX_LOCATION") ?? "global"
       const autoload = Boolean(project)
       if (!autoload) return { autoload: false }
       return {
@@ -492,13 +491,13 @@ export namespace Provider {
       }
     },
     gitlab: async (context, input) => {
-      const instanceUrl = Env.get(context, "GITLAB_INSTANCE_URL") || "https://gitlab.com"
+      const instanceUrl = context.env.get("GITLAB_INSTANCE_URL") || "https://gitlab.com"
 
       const auth = await Auth.get(input.id)
       const apiKey = await (async () => {
         if (auth?.type === "oauth") return auth.access
         if (auth?.type === "api") return auth.key
-        return Env.get(context, "GITLAB_TOKEN")
+        return context.env.get("GITLAB_TOKEN")
       })()
 
       const config = await Config.get(context)
@@ -535,11 +534,11 @@ export namespace Provider {
       }
     },
     "cloudflare-workers-ai": async (context, input) => {
-      const accountId = Env.get(context, "CLOUDFLARE_ACCOUNT_ID")
+      const accountId = context.env.get("CLOUDFLARE_ACCOUNT_ID")
       if (!accountId) return { autoload: false }
 
       const apiKey = await iife(async () => {
-        const envToken = Env.get(context, "CLOUDFLARE_API_KEY")
+        const envToken = context.env.get("CLOUDFLARE_API_KEY")
         if (envToken) return envToken
         const auth = await Auth.get(input.id)
         if (auth?.type === "api") return auth.key
@@ -562,14 +561,14 @@ export namespace Provider {
       }
     },
     "cloudflare-ai-gateway": async (context, input) => {
-      const accountId = Env.get(context, "CLOUDFLARE_ACCOUNT_ID")
-      const gateway = Env.get(context, "CLOUDFLARE_GATEWAY_ID")
+      const accountId = context.env.get("CLOUDFLARE_ACCOUNT_ID")
+      const gateway = context.env.get("CLOUDFLARE_GATEWAY_ID")
 
       if (!accountId || !gateway) return { autoload: false }
 
       // Get API token from env or auth - required for authenticated gateways
       const apiToken = await (async () => {
-        const envToken = Env.get(context, "CLOUDFLARE_API_TOKEN") || Env.get(context, "CF_AIG_TOKEN")
+        const envToken = context.env.get("CLOUDFLARE_API_TOKEN") || context.env.get("CF_AIG_TOKEN")
         if (envToken) return envToken
         const auth = await Auth.get(input.id)
         if (auth?.type === "api") return auth.key
@@ -949,7 +948,7 @@ export namespace Provider {
     }
 
     // load env
-    const env = Env.all(context)
+    const env = context.env.all()
     for (const [id, provider] of Object.entries(database)) {
       const providerID = ProviderID.make(id)
       if (disabled.has(providerID)) continue
@@ -1101,7 +1100,7 @@ export namespace Provider {
         }
 
         url = url.replace(/\$\{([^}]+)\}/g, (item, key) => {
-          const val = Env.get(context, String(key))
+          const val = context.env.get(String(key))
           return val ?? item
         })
         return url

@@ -1103,7 +1103,7 @@ export namespace SessionPrompt {
                 ]
               }
 
-              FileTime.read(context, input.sessionID, filepath)
+              context.fileTime.read(input.sessionID, filepath)
               return [
                 {
                   messageID: info.id,

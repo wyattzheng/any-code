@@ -291,6 +291,7 @@ export class CodeAgent {
         const envKey = this.getProviderEnvKey(this.options.provider.id)
         if (envKey) {
             process.env[envKey] = this.options.provider.apiKey
+            this.env.set(envKey, this.options.provider.apiKey)
         }
 
         // Set base URL if provided
@@ -298,6 +299,7 @@ export class CodeAgent {
             const baseUrlEnv = this.getProviderBaseUrlEnv(this.options.provider.id)
             if (baseUrlEnv) {
                 process.env[baseUrlEnv] = this.options.provider.baseUrl
+                this.env.set(baseUrlEnv, this.options.provider.baseUrl)
             }
         }
 
