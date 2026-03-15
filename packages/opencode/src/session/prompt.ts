@@ -207,7 +207,7 @@ export namespace SessionPrompt {
 
         const stats = await Filesystem.stat(context, filepath).catch(() => undefined)
         if (!stats) {
-          const agent = await Agent.get(context, name)
+          const agent = await context.agents.get(name)
           if (agent) {
             parts.push({
               type: "agent",
@@ -261,12 +261,12 @@ export namespace SessionPrompt {
     const s = getState_(context)
     const match = s[sessionID]
     if (!match) {
-      SessionStatus.set(context, sessionID, { type: "idle" })
+      context.sessionStatus.set(sessionID, { type: "idle" })
       return
     }
     match.abort.abort()
     delete s[sessionID]
-    SessionStatus.set(context, sessionID, { type: "idle" })
+    context.sessionStatus.set(sessionID, { type: "idle" })
     return
   }
 
@@ -297,7 +297,7 @@ export namespace SessionPrompt {
     let step = 0
     const session = await Session.get(context, sessionID)
     while (true) {
-      SessionStatus.set(context, sessionID, { type: "busy" })
+      context.sessionStatus.set(sessionID, { type: "busy" })
       log.info("loop", { step, sessionID })
       if (abort.aborted) break
       let msgs = await MessageV2.filterCompacted(MessageV2.stream(context, sessionID))
@@ -419,7 +419,7 @@ export namespace SessionPrompt {
           { args: taskArgs },
         )
         let executionError: Error | undefined
-        const taskAgent = await Agent.get(context, task.agent)
+        const taskAgent = await context.agents.get(task.agent)
         const taskCtx: Tool.Context = {
           ...context,
           agent: task.agent,
@@ -563,7 +563,7 @@ export namespace SessionPrompt {
       }
 
       // normal processing
-      const agent = await Agent.get(context, lastUser.agent)
+      const agent = await context.agents.get(lastUser.agent)
       const maxSteps = agent.steps ?? Infinity
       const isLastStep = step >= maxSteps
       msgs = await insertReminders({
@@ -800,8 +800,7 @@ export namespace SessionPrompt {
       },
     })
 
-    for (const item of await ToolRegistry.tools(
-      input.agentContext,
+    for (const item of await input.agentContext.toolRegistry.tools(
       { modelID: ModelID.make(input.model.api.id), providerID: input.model.providerID },
       input.agent,
     )) {
@@ -884,7 +883,7 @@ export namespace SessionPrompt {
   }
 
   async function createUserMessage(context: AgentContext, input: PromptInput) {
-    const agent = await Agent.get(context, input.agent ?? (await Agent.defaultAgent(context)))
+    const agent = await context.agents.get(input.agent ?? (await context.agents.defaultAgent()))
 
     const model = input.model ?? agent.model ?? (await lastModel(context, input.sessionID))
     const full =
@@ -1363,7 +1362,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     if (session.revert) {
       await SessionRevert.cleanup(context, session)
     }
-    const agent = await Agent.get(context, input.agent)
+    const agent = await context.agents.get(input.agent)
     const model = input.model ?? agent.model ?? (await lastModel(context, input.sessionID))
     const userMsg: MessageV2.User = {
       id: MessageID.ascending(),
@@ -1614,8 +1613,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
   export async function command(input: CommandInput) {
     log.info("command", input)
-    const command = await Command.get(input.context, input.command)
-    const agentName = command.agent ?? input.agent ?? (await Agent.defaultAgent(input.context))
+    const command = await input.context.command.get(input.command)
+    const agentName = command.agent ?? input.agent ?? (await input.context.agents.defaultAgent())
 
     const raw = input.arguments.match(argsRegex) ?? []
     const args = raw.map((arg) => arg.replace(quoteTrimRegex, ""))
@@ -1667,7 +1666,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         return Provider.parseModel(command.model)
       }
       if (command.agent) {
-        const cmdAgent = await Agent.get(input.context, command.agent)
+        const cmdAgent = await input.context.agents.get(command.agent)
         if (cmdAgent?.model) {
           return cmdAgent.model
         }
@@ -1689,9 +1688,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       }
       throw e
     }
-    const agent = await Agent.get(input.context, agentName)
+    const agent = await input.context.agents.get(agentName)
     if (!agent) {
-      const available = await Agent.list(input.context).then((agents) => agents.filter((a) => !a.hidden).map((a) => a.name))
+      const available = await input.context.agents.listSorted().then((agents) => agents.filter((a) => !a.hidden).map((a) => a.name))
       const hint = available.length ? ` Available agents: ${available.join(", ")}` : ""
       const error = new NamedError.Unknown({ message: `Agent not found: "${agentName}".${hint}` })
       Bus.publish(input.context, Session.Event.Error, {
@@ -1720,7 +1719,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       ]
       : [...templateParts, ...(input.parts ?? [])]
 
-    const userAgent = isSubtask ? (input.agent ?? (await Agent.defaultAgent(input.context))) : agentName
+    const userAgent = isSubtask ? (input.agent ?? (await input.context.agents.defaultAgent())) : agentName
     const userModel = isSubtask
       ? input.model
         ? Provider.parseModel(input.model)
@@ -1788,7 +1787,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     const subtaskParts = firstRealUser.parts.filter((p) => p.type === "subtask") as MessageV2.SubtaskPart[]
     const hasOnlySubtaskParts = subtaskParts.length > 0 && firstRealUser.parts.every((p) => p.type === "subtask")
 
-    const agent = await Agent.get(input.context, "title")
+    const agent = await input.context.agents.get("title")
     if (!agent) return
     const model = await iife(async () => {
       if (agent.model) return await Provider.getModel(input.context, agent.model.providerID, agent.model.modelID)

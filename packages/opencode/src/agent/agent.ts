@@ -54,8 +54,10 @@ export namespace Agent {
    */
   export class AgentService {
     readonly _promise: ReturnType<typeof initAgents>
+    private context: AgentContext
 
     constructor(context: AgentContext) {
+      this.context = context
       this._promise = initAgents(context)
     }
 
@@ -66,6 +68,39 @@ export namespace Agent {
     async list(): Promise<Record<string, Info>> {
       return this._promise
     }
+
+    /** Returns a sorted array of agents (default agent first, then alphabetical) */
+    async listSorted(): Promise<Info[]> {
+      const cfg = await this.context.config.get()
+      return pipe(
+        await this._promise,
+        values(),
+        sortBy([(x) => (cfg.default_agent ? x.name === cfg.default_agent : x.name === "build"), "desc"]),
+      )
+    }
+
+    /** Returns the name of the default agent */
+    async defaultAgent(): Promise<string> {
+      const cfg = await this.context.config.get()
+      const agents = await this._promise
+
+      if (cfg.default_agent) {
+        const agent = agents[cfg.default_agent]
+        if (!agent) throw new Error(`default agent "${cfg.default_agent}" not found`)
+        if (agent.mode === "subagent") throw new Error(`default agent "${cfg.default_agent}" is a subagent`)
+        if (agent.hidden === true) throw new Error(`default agent "${cfg.default_agent}" is hidden`)
+        return agent.name
+      }
+
+      const primaryVisible = Object.values(agents).find((a) => a.mode !== "subagent" && a.hidden !== true)
+      if (!primaryVisible) throw new Error("no primary visible agent found")
+      return primaryVisible.name
+    }
+
+    /** Generate a new agent configuration from description */
+    async generate(input: { description: string; model?: { providerID: ProviderID; modelID: ModelID } }) {
+      return generate(this.context, input)
+    }
   }
 
   const STATE_KEY = Symbol("agent")
@@ -75,7 +110,7 @@ export namespace Agent {
   async function initAgents(context: AgentContext) {
     const cfg = await context.config.get()
 
-    const skillDirs = await Skill.dirs(context)
+    const skillDirs = await context.skill.dirs()
     const whitelistedDirs = [Truncate.glob(context), ...skillDirs.map((dir) => path.join(dir, "*"))]
     const defaults = PermissionNext.fromConfig({
       "*": "allow",

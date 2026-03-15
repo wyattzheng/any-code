@@ -63,7 +63,7 @@ export namespace SessionProcessor {
               input.abort.throwIfAborted()
               switch (value.type) {
                 case "start":
-                  SessionStatus.set(input.context, input.sessionID, { type: "busy" })
+                  input.context.sessionStatus.set(input.sessionID, { type: "busy" })
                   break
 
                 case "reasoning-start":
@@ -168,7 +168,7 @@ export namespace SessionProcessor {
                           JSON.stringify(p.state.input) === JSON.stringify(value.input),
                       )
                     ) {
-                      const agent = await Agent.get(input.context, input.assistantMessage.agent)
+                      const agent = await input.context.agents.get(input.assistantMessage.agent)
                       await PermissionNext.ask(input.context, {
                         permission: "doom_loop",
                         patterns: [value.toolName],
@@ -373,7 +373,7 @@ export namespace SessionProcessor {
               if (retry !== undefined) {
                 attempt++
                 const delay = SessionRetry.delay(attempt, error.name === "APIError" ? error : undefined)
-                SessionStatus.set(input.context, input.sessionID, {
+                input.context.sessionStatus.set(input.sessionID, {
                   type: "retry",
                   attempt,
                   message: retry,
@@ -387,7 +387,7 @@ export namespace SessionProcessor {
                 sessionID: input.assistantMessage.sessionID,
                 error: input.assistantMessage.error,
               })
-              SessionStatus.set(input.context, input.sessionID, { type: "idle" })
+              input.context.sessionStatus.set(input.sessionID, { type: "idle" })
             }
           }
           if (snapshot) {

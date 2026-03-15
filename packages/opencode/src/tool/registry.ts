@@ -40,9 +40,28 @@ export namespace ToolRegistry {
    */
   export class ToolRegistryService {
     readonly _promise: ReturnType<typeof initTools>
+    private context: AgentContext
 
     constructor(context: AgentContext) {
+      this.context = context
       this._promise = initTools(context)
+    }
+
+    async register(tool: Tool.Info): Promise<void> {
+      const { custom } = await this._promise
+      const idx = custom.findIndex((t) => t.id === tool.id)
+      if (idx >= 0) {
+        custom.splice(idx, 1, tool)
+        return
+      }
+      custom.push(tool)
+    }
+
+    async tools(
+      model: { providerID: ProviderID; modelID: ModelID },
+      agent?: Agent.Info,
+    ) {
+      return ToolRegistry.tools(this.context, model, agent)
     }
   }
 

@@ -40,7 +40,7 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
     description,
     parameters,
     async execute(params: z.infer<typeof parameters>, ctx) {
-      const skill = await Skill.get(ctx as any, params.name)
+      const skill = await (ctx as any).skill.get(params.name)
 
       if (!skill) {
         const available = await Skill.all(ctx as any).then((x) => x.map((skill) => skill.name).join(", "))

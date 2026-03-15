@@ -14,7 +14,7 @@ export async function InstanceBootstrap(context: AgentContext) {
   Log.Default.info("bootstrapping", { directory: context.directory })
   await Plugin.init()
   FileWatcher.init(context)
-  File.init(context)
+  // File service initialized via CodeAgent
   Vcs.init(context)
   Snapshot.init(context)
   Truncate.init(context)

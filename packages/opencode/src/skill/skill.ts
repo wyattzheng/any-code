@@ -61,6 +61,24 @@ export namespace Skill {
     constructor(context: AgentContext) {
       this._promise = initSkills(context)
     }
+
+    async get(name: string): Promise<Info | undefined> {
+      return (await this._promise).skills[name]
+    }
+
+    async all(): Promise<Info[]> {
+      return Object.values((await this._promise).skills)
+    }
+
+    async dirs(): Promise<string[]> {
+      return (await this._promise).dirs
+    }
+
+    async available(agent?: Agent.Info): Promise<Info[]> {
+      const list = await this.all()
+      if (!agent) return list
+      return list.filter((skill) => PermissionNext.evaluate("skill", skill.name, agent.permission).action !== "deny")
+    }
   }
 
   const STATE_KEY = Symbol("skill")

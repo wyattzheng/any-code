@@ -337,7 +337,7 @@ export class CodeAgent {
         // Phase 1: context-dependent services
         ctx.config = new Config.ConfigService(ctx)
         ctx.question = new Question.QuestionService()
-        ctx.sessionStatus = new SessionStatus.SessionStatusService()
+        ctx.sessionStatus = new SessionStatus.SessionStatusService(ctx)
         ctx.instruction = new InstructionPrompt.InstructionService()
         ctx.sessionPrompt = new SessionPrompt.SessionPromptService()
         ctx.permission = new Permission.PermissionService()
@@ -357,7 +357,7 @@ export class CodeAgent {
         // Register custom tools
         if (this.options.tools) {
             for (const [name, def] of Object.entries(this.options.tools)) {
-                ToolRegistry.register(this._context, {
+                this._context.toolRegistry.register({
                     id: name,
                     init: async () => ({
                         parameters: z.object(def.args),
@@ -626,7 +626,7 @@ export class CodeAgent {
 
         // If already initialized, register dynamically
         if (this.initialized) {
-            ToolRegistry.register(this.agentContext, {
+            this.agentContext.toolRegistry.register({
                 id: name,
                 init: async () => ({
                     parameters: z.object(tool.args),
