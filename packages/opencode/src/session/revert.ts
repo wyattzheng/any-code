@@ -1,14 +1,14 @@
 import z from "zod"
-import { SessionID, MessageID, PartID } from "./schema"
+import { SessionID, MessageID, PartID } from "@/agent/session/schema"
 
 import { MessageV2 } from "@/agent/memory/message-v2"
-import { Session } from "."
+import { Session } from "@/agent/session"
 import { Log } from "../util/log"
 
 import { Storage } from "@/storage"
 import { Bus } from "@/agent/bus"
-import { SessionPrompt } from "./session"
-import { SessionSummary } from "./summary"
+import { SessionPrompt } from "@/agent/session/session"
+import { SessionSummary } from "@/session/summary"
 
 export namespace SessionRevert {
   const log = Log.create({ service: "session.revert" })

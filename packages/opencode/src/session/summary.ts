@@ -1,10 +1,10 @@
 import { fn } from "@/util/fn"
 import z from "zod"
-import { Session } from "."
+import { Session } from "@/agent/session"
 
 import { MessageV2 } from "@/agent/memory/message-v2"
 import { Identifier } from "@/util/id"
-import { SessionID, MessageID } from "./schema"
+import { SessionID, MessageID } from "@/agent/session/schema"
 
 import { Storage } from "@/storage"
 import { Bus } from "@/agent/bus"
