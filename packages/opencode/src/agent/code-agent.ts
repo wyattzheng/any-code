@@ -64,7 +64,7 @@ import { ulid } from "ulid"
 import { PartID, MessageID as MsgID, SessionID } from "../session/schema"
 import { SystemPrompt } from "../session"
 import { SessionSummary } from "../session/summary"
-import { ContextCompaction } from "./compaction"
+import { ContextCompaction } from "./memory/compaction"
 import { LLMRunner } from "./llm-runner"
 import MAX_STEPS from "../session/prompt/max-steps.txt"
 

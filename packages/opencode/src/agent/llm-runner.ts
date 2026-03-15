@@ -12,7 +12,7 @@ import { Log } from "@/util/log"
 import { MessageV2 } from "@/session/message-v2"
 import { Session } from "@/session"
 import { PartID, SessionID } from "@/session/schema"
-import { ContextCompaction } from "@/agent/compaction"
+import { ContextCompaction } from "@/agent/memory/compaction"
 import { NamedError } from "@/util/error"
 import { iife } from "@/util/iife"
 
