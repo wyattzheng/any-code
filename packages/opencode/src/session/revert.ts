@@ -4,8 +4,7 @@ import { Snapshot } from "../snapshot"
 import { MessageV2 } from "./message-v2"
 import { Session } from "."
 import { Log } from "../util/log"
-import { eq } from "../storage/db"
-import { MessageTable, PartTable } from "./session.sql"
+
 import { Storage } from "@/storage/storage"
 import { Bus } from "../bus"
 import { SessionPrompt } from "./prompt"
@@ -113,7 +112,7 @@ export namespace SessionRevert {
       remove.push(msg)
     }
     for (const msg of remove) {
-      context.db.delete(MessageTable).where(eq(MessageTable.id, msg.info.id)).run()
+      context.db.remove("message", { op: "eq", field: "id", value: msg.info.id })
       await Bus.publish(undefined, MessageV2.Event.Removed, { sessionID: sessionID, messageID: msg.info.id })
     }
     if (session.revert.partID && target) {
@@ -124,7 +123,7 @@ export namespace SessionRevert {
         const removeParts = target.parts.slice(removeStart)
         target.parts = preserveParts
         for (const part of removeParts) {
-          context.db.delete(PartTable).where(eq(PartTable.id, part.id)).run()
+          context.db.remove("part", { op: "eq", field: "id", value: part.id })
           await Bus.publish(undefined, MessageV2.Event.PartRemoved, {
             sessionID: sessionID,
             messageID: target.info.id,

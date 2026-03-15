@@ -2,15 +2,17 @@
  * SqlJsStorage — in-memory SQLite backend using sql.js (WASM).
  *
  * Used for tests — no filesystem needed.
- * Provides a drizzle-orm compatible client via drizzle-orm/sql-js.
+ * Returns a NoSqlDb interface backed by sql.js.
  */
 import type { StorageProvider, Migration } from "./storage"
+import type { NoSqlDb } from "@any-code/opencode/storage/nosql"
+import type { RawSqliteDb } from "@any-code/opencode/storage/sqlite-nosql"
 
 export class SqlJsStorage implements StorageProvider {
     private db: any = null
 
-    async connect(migrations: Migration[]) {
-        // Dynamic imports for sql.js (WASM) and drizzle adapter
+    async connect(migrations: Migration[]): Promise<NoSqlDb> {
+        // Dynamic imports for sql.js (WASM) and our adapter
         const initSqlJs = (await import("sql.js")).default
         const SQL = await initSqlJs()
         this.db = new SQL.Database()
@@ -18,11 +20,50 @@ export class SqlJsStorage implements StorageProvider {
         // Apply migrations
         this.applyMigrations(migrations)
 
-        // Create drizzle client using sql-js adapter
-        const schema = await import("@any-code/opencode/storage/schema")
-        // Import drizzle sql-js adapter - resolve from opencode's deps
-        const drizzleSqlJs = await import("drizzle-orm/sql-js")
-        return drizzleSqlJs.drizzle(this.db, { schema })
+        // Wrap sql.js as RawSqliteDb
+        const raw = this.createRawDb()
+        const { SqliteNoSqlDb } = await import("@any-code/opencode/storage/sqlite-nosql")
+        return new SqliteNoSqlDb(raw)
+    }
+
+    private createRawDb(): RawSqliteDb {
+        const db = this.db!
+        return {
+            run(sql: string, params?: any[]) {
+                db.run(sql, params)
+            },
+            get(sql: string, params?: any[]): Record<string, any> | undefined {
+                const stmt = db.prepare(sql)
+                if (params) stmt.bind(params)
+                if (!stmt.step()) {
+                    stmt.free()
+                    return undefined
+                }
+                const result = stmt.getAsObject()
+                stmt.free()
+                return result as Record<string, any>
+            },
+            all(sql: string, params?: any[]): Record<string, any>[] {
+                const stmt = db.prepare(sql)
+                if (params) stmt.bind(params)
+                const results: Record<string, any>[] = []
+                while (stmt.step()) {
+                    results.push(stmt.getAsObject() as Record<string, any>)
+                }
+                stmt.free()
+                return results
+            },
+            transaction(fn: () => void) {
+                db.run("BEGIN TRANSACTION")
+                try {
+                    fn()
+                    db.run("COMMIT")
+                } catch (e) {
+                    db.run("ROLLBACK")
+                    throw e
+                }
+            },
+        }
     }
 
     private applyMigrations(entries: Migration[]) {

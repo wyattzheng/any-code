@@ -2,9 +2,11 @@
  * BetterSqliteStorage — file-based SQLite backend using better-sqlite3.
  *
  * Used in production — wraps the native better-sqlite3 driver.
- * All imports are dynamic to avoid module resolution issues in test environments.
+ * Returns a NoSqlDb interface backed by better-sqlite3.
  */
 import type { StorageProvider, Migration } from "./storage"
+import type { NoSqlDb } from "@any-code/opencode/storage/nosql"
+import type { RawSqliteDb } from "@any-code/opencode/storage/sqlite-nosql"
 
 export class BetterSqliteStorage implements StorageProvider {
     private sqlite: any = null
@@ -26,11 +28,8 @@ export class BetterSqliteStorage implements StorageProvider {
         return path.join(this.dataPath, `opencode-${safe}.db`)
     }
 
-    async connect(migrations: Migration[]) {
-        const path = await import("path")
+    async connect(migrations: Migration[]): Promise<NoSqlDb> {
         const BetterSqlite3 = (await import("better-sqlite3")).default
-        const { drizzle } = await import("drizzle-orm/better-sqlite3")
-        const schema = await import("@any-code/opencode/storage/schema")
 
         const dbPath = await this.getDbPath()
         this.sqlite = new BetterSqlite3(dbPath)
@@ -45,7 +44,28 @@ export class BetterSqliteStorage implements StorageProvider {
         // Apply migrations
         this.applyMigrations(migrations)
 
-        return drizzle({ client: this.sqlite, schema })
+        // Wrap better-sqlite3 as RawSqliteDb
+        const raw = this.createRawDb()
+        const { SqliteNoSqlDb } = await import("@any-code/opencode/storage/sqlite-nosql")
+        return new SqliteNoSqlDb(raw)
+    }
+
+    private createRawDb(): RawSqliteDb {
+        const db = this.sqlite!
+        return {
+            run(sql: string, params?: any[]) {
+                db.prepare(sql).run(...(params ?? []))
+            },
+            get(sql: string, params?: any[]): Record<string, any> | undefined {
+                return db.prepare(sql).get(...(params ?? [])) as Record<string, any> | undefined
+            },
+            all(sql: string, params?: any[]): Record<string, any>[] {
+                return db.prepare(sql).all(...(params ?? [])) as Record<string, any>[]
+            },
+            transaction(fn: () => void) {
+                db.transaction(fn)()
+            },
+        }
     }
 
     private applyMigrations(entries: Migration[]) {

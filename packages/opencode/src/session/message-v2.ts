@@ -6,8 +6,8 @@ import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessag
 import { LSP } from "../util/lsp"
 import { Snapshot } from "@/snapshot"
 import { fn } from "@/util/fn"
-import { NotFoundError, and, desc, eq, inArray, lt, or } from "@/storage/db"
-import { MessageTable, PartTable, SessionTable } from "./session.sql"
+import { NotFoundError } from "@/storage/db"
+import type { Filter } from "@/storage/nosql"
 import { ProviderTransform } from "@/provider/transform"
 import { STATUS_CODES } from "http"
 import { Storage } from "@/storage/storage"
@@ -509,14 +509,14 @@ export namespace MessageV2 {
     },
   }
 
-  const info = (row: typeof MessageTable.$inferSelect) =>
+  const info = (row: Record<string, any>) =>
     ({
       ...row.data,
       id: row.id,
       sessionID: row.session_id,
     }) as MessageV2.Info
 
-  const part = (row: typeof PartTable.$inferSelect) =>
+  const part = (row: Record<string, any>) =>
     ({
       ...row.data,
       id: row.id,
@@ -524,22 +524,24 @@ export namespace MessageV2 {
       messageID: row.message_id,
     }) as MessageV2.Part
 
-  const older = (row: Cursor) =>
-    or(
-      lt(MessageTable.time_created, row.time),
-      and(eq(MessageTable.time_created, row.time), lt(MessageTable.id, row.id)),
-    )
+  const olderFilter = (cursor: Cursor): Filter => ({
+    op: "or", conditions: [
+      { op: "lt", field: "time_created", value: cursor.time },
+      { op: "and", conditions: [
+        { op: "eq", field: "time_created", value: cursor.time },
+        { op: "lt", field: "id", value: cursor.id },
+      ]},
+    ],
+  })
 
-  async function hydrate(context: import("@any-code/opencode/agent/context").AgentContext, rows: (typeof MessageTable.$inferSelect)[]) {
+  async function hydrate(context: import("@any-code/opencode/agent/context").AgentContext, rows: Record<string, any>[]) {
     const ids = rows.map((row) => row.id)
     const partByMessage = new Map<string, MessageV2.Part[]>()
     if (ids.length > 0) {
-      const partRows = context.db
-          .select()
-          .from(PartTable)
-          .where(inArray(PartTable.message_id, ids))
-          .orderBy(PartTable.message_id, PartTable.id)
-          .all()
+      const partRows = context.db.findMany("part", {
+        filter: { op: "in", field: "message_id", values: ids },
+        orderBy: [{ field: "message_id", direction: "asc" }, { field: "id", direction: "asc" }],
+      })
       for (const row of partRows) {
         const next = part(row)
         const list = partByMessage.get(row.message_id)
@@ -791,18 +793,15 @@ export namespace MessageV2 {
 
   export async function page(context: import("@any-code/opencode/agent/context").AgentContext, input: { sessionID: any; limit: number; before?: string }) {
     const before = input.before ? cursor.decode(input.before) : undefined
-    const where = before
-      ? and(eq(MessageTable.session_id, input.sessionID), older(before))
-      : eq(MessageTable.session_id, input.sessionID)
-    const rows = context.db
-        .select()
-        .from(MessageTable)
-        .where(where)
-        .orderBy(desc(MessageTable.time_created), desc(MessageTable.id))
-        .limit(input.limit + 1)
-        .all()
+    const conditions: Filter[] = [{ op: "eq", field: "session_id", value: input.sessionID }]
+    if (before) conditions.push(olderFilter(before))
+    const rows = context.db.findMany("message", {
+      filter: { op: "and", conditions },
+      orderBy: [{ field: "time_created", direction: "desc" }, { field: "id", direction: "desc" }],
+      limit: input.limit + 1,
+    })
     if (rows.length === 0) {
-      const row = context.db.select({ id: SessionTable.id }).from(SessionTable).where(eq(SessionTable.id, input.sessionID)).get()
+      const row = context.db.findOne("session", { op: "eq", field: "id", value: input.sessionID })
       if (!row) throw new NotFoundError({ message: `Session not found: ${input.sessionID}` })
       return {
         items: [] as MessageV2.WithParts[],
@@ -837,18 +836,19 @@ export namespace MessageV2 {
   }
 
   export async function parts(context: import("@any-code/opencode/agent/context").AgentContext, message_id: any) {
-    const rows = context.db.select().from(PartTable).where(eq(PartTable.message_id, message_id)).orderBy(PartTable.id).all()
+    const rows = context.db.findMany("part", {
+      filter: { op: "eq", field: "message_id", value: message_id },
+      orderBy: [{ field: "id", direction: "asc" }],
+    })
     return rows.map(
       (row: any) => ({ ...row.data, id: row.id, sessionID: row.session_id, messageID: row.message_id }) as MessageV2.Part,
     )
   }
 
   export async function get(context: import("@any-code/opencode/agent/context").AgentContext, input: { sessionID: any; messageID: any }): Promise<WithParts> {
-    const row = context.db
-        .select()
-        .from(MessageTable)
-        .where(and(eq(MessageTable.id, input.messageID), eq(MessageTable.session_id, input.sessionID)))
-        .get()
+    const row = context.db.findOne("message",
+      { op: "and", conditions: [{ op: "eq", field: "id", value: input.messageID }, { op: "eq", field: "session_id", value: input.sessionID }] },
+    )
     if (!row) throw new NotFoundError({ message: `Message not found: ${input.messageID}` })
     return {
       info: info(row),

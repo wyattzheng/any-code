@@ -304,15 +304,16 @@ export class CodeAgent {
         }
 
         // Ensure the global project exists in DB
-        const { ProjectTable } = await import("@any-code/opencode/project/project.sql")
-        this._dbClient.insert(ProjectTable).values({
-            id: "global" as any,
-            worktree: "/",
-            vcs: null,
-            sandboxes: [],
-            time_created: Date.now(),
-            time_updated: Date.now()
-        }).onConflictDoNothing().run()
+        if (!this._dbClient.findOne("project", { op: "eq", field: "id", value: "global" })) {
+            this._dbClient.insert("project", {
+                id: "global" as any,
+                worktree: "/",
+                vcs: null,
+                sandboxes: [],
+                time_created: Date.now(),
+                time_updated: Date.now()
+            })
+        }
 
         // Initialize plugins (skip if in test/lightweight mode)
         if (!this.options.skipPlugins) {

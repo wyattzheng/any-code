@@ -2,8 +2,6 @@ import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { SessionID } from "./schema"
 import z from "zod"
-import { eq, asc } from "../storage/db"
-import { TodoTable } from "./session.sql"
 import type { AgentContext } from "@/agent/context"
 
 export namespace Todo {
@@ -28,25 +26,26 @@ export namespace Todo {
 
   export function update(context: AgentContext, input: { sessionID: SessionID; todos: Info[] }) {
     context.db.transaction((tx: any) => {
-      tx.delete(TodoTable).where(eq(TodoTable.session_id, input.sessionID)).run()
+      tx.remove("todo", { op: "eq", field: "session_id", value: input.sessionID })
       if (input.todos.length === 0) return
-      tx.insert(TodoTable)
-        .values(
-          input.todos.map((todo: Info, position: number) => ({
-            session_id: input.sessionID,
-            content: todo.content,
-            status: todo.status,
-            priority: todo.priority,
-            position,
-          })),
-        )
-        .run()
+      for (const [position, todo] of input.todos.entries()) {
+        tx.insert("todo", {
+          session_id: input.sessionID,
+          content: todo.content,
+          status: todo.status,
+          priority: todo.priority,
+          position,
+        })
+      }
     })
     Bus.publish(context, Event.Updated, input)
   }
 
   export function get(context: AgentContext, sessionID: SessionID) {
-    const rows = context.db.select().from(TodoTable).where(eq(TodoTable.session_id, sessionID)).orderBy(asc(TodoTable.position)).all()
+    const rows = context.db.findMany("todo", {
+      filter: { op: "eq", field: "session_id", value: sessionID },
+      orderBy: [{ field: "position", direction: "asc" }],
+    })
     return rows.map((row: any) => ({
       content: row.content,
       status: row.status,

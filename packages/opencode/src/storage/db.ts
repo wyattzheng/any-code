@@ -1,12 +1,8 @@
-export * from "drizzle-orm"
-import { Log } from "../util/log"
 import { NamedError } from "@/util/error"
 import z from "zod"
 import path from "path"
 import { readFileSync, readdirSync, existsSync } from "fs"
 import { Flag } from "../util/flag"
-
-declare const OPENCODE_MIGRATIONS: { sql: string; timestamp: number; name: string }[] | undefined
 
 export const NotFoundError = NamedError.create(
   "NotFoundError",
@@ -15,12 +11,9 @@ export const NotFoundError = NamedError.create(
   }),
 )
 
-const log = Log.create({ service: "db" })
-
 export namespace Database {
   /**
-   * The db client type — any drizzle-compatible client.
-   * Actual typing depends on the StorageProvider implementation.
+   * The db client type — NoSqlDb interface.
    */
   export type Client = any
   export type TxOrDb = any
@@ -76,3 +69,5 @@ export namespace Database {
     return entries
   }
 }
+
+declare const OPENCODE_MIGRATIONS: { sql: string; timestamp: number; name: string }[] | undefined

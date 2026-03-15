@@ -10,10 +10,9 @@ import { Config } from "../config/config"
 import { Flag } from "../util/flag"
 import { Installation } from "../util/installation"
 
-import { NotFoundError, eq, and, or, gte, isNull, desc, like, inArray, lt } from "../storage/db"
-import type { SQL } from "../storage/db"
-import { SessionTable, MessageTable, PartTable } from "./session.sql"
-import { ProjectTable } from "../project/project.sql"
+import { NotFoundError } from "../storage/db"
+import type { Filter } from "../storage/nosql"
+
 import { Storage } from "@/storage/storage"
 import { Log } from "../util/log"
 import { MessageV2 } from "./message-v2"
@@ -54,7 +53,7 @@ export namespace Session {
     ).test(title)
   }
 
-  type SessionRow = typeof SessionTable.$inferSelect
+  type SessionRow = Record<string, any>
 
   export function fromRow(row: SessionRow): Info {
     const summary =
@@ -289,12 +288,10 @@ export namespace Session {
   export async function touch(context: import("@any-code/opencode/agent/context").AgentContext, sessionID: any) {
     const now = Date.now()
     {
-      const row = context.db
-        .update(SessionTable)
-        .set({ time_updated: now })
-        .where(eq(SessionTable.id, sessionID))
-        .returning()
-        .get()
+      const row = context.db.update("session",
+        { op: "eq", field: "id", value: sessionID },
+        { time_updated: now },
+      )
       if (!row) throw new NotFoundError({ message: `Session not found: ${sessionID}` })
       const info = fromRow(row)
       Bus.publish(undefined, Event.Updated, { info })
@@ -329,7 +326,7 @@ export namespace Session {
     }
     log.info("created", result)
     {
-      context.db.insert(SessionTable).values(toRow(result)).run()
+      context.db.insert("session", toRow(result))
       Bus.publish(context, Event.Created, {
           info: result,
         })
@@ -353,7 +350,7 @@ export namespace Session {
   }
 
   export async function get(context: import("@any-code/opencode/agent/context").AgentContext, id: any) {
-    const row = context.db.select().from(SessionTable).where(eq(SessionTable.id, id)).get()
+    const row = context.db.findOne("session", { op: "eq", field: "id", value: id })
     if (!row) throw new NotFoundError({ message: `Session not found: ${id}` })
     return fromRow(row)
   }
@@ -367,12 +364,10 @@ export namespace Session {
   })
 
   export async function setTitle(context: import("@any-code/opencode/agent/context").AgentContext, input: any) {
-    const row = context.db
-      .update(SessionTable)
-      .set({ title: input.title })
-      .where(eq(SessionTable.id, input.sessionID))
-      .returning()
-      .get()
+    const row = context.db.update("session",
+      { op: "eq", field: "id", value: input.sessionID },
+      { title: input.title },
+    )
     if (!row) throw new NotFoundError({ message: `Session not found: ${input.sessionID}` })
     const info = fromRow(row)
     Bus.publish(undefined, Event.Updated, { info })
@@ -380,12 +375,10 @@ export namespace Session {
   }
 
   export async function setArchived(context: import("@any-code/opencode/agent/context").AgentContext, input: any) {
-    const row = context.db
-      .update(SessionTable)
-      .set({ time_archived: input.time })
-      .where(eq(SessionTable.id, input.sessionID))
-      .returning()
-      .get()
+    const row = context.db.update("session",
+      { op: "eq", field: "id", value: input.sessionID },
+      { time_archived: input.time },
+    )
     if (!row) throw new NotFoundError({ message: `Session not found: ${input.sessionID}` })
     const info = fromRow(row)
     Bus.publish(undefined, Event.Updated, { info })
@@ -393,12 +386,10 @@ export namespace Session {
   }
 
   export async function setPermission(context: import("@any-code/opencode/agent/context").AgentContext, input: any) {
-    const row = context.db
-      .update(SessionTable)
-      .set({ permission: input.permission, time_updated: Date.now() })
-      .where(eq(SessionTable.id, input.sessionID))
-      .returning()
-      .get()
+    const row = context.db.update("session",
+      { op: "eq", field: "id", value: input.sessionID },
+      { permission: input.permission, time_updated: Date.now() },
+    )
     if (!row) throw new NotFoundError({ message: `Session not found: ${input.sessionID}` })
     const info = fromRow(row)
     Bus.publish(undefined, Event.Updated, { info })
@@ -406,18 +397,16 @@ export namespace Session {
   }
 
   export async function setRevert(context: import("@any-code/opencode/agent/context").AgentContext, input: any) {
-    const row = context.db
-      .update(SessionTable)
-      .set({
+    const row = context.db.update("session",
+      { op: "eq", field: "id", value: input.sessionID },
+      {
         revert: input.revert ?? null,
         summary_additions: input.summary?.additions,
         summary_deletions: input.summary?.deletions,
         summary_files: input.summary?.files,
         time_updated: Date.now(),
-      })
-      .where(eq(SessionTable.id, input.sessionID))
-      .returning()
-      .get()
+      },
+    )
     if (!row) throw new NotFoundError({ message: `Session not found: ${input.sessionID}` })
     const info = fromRow(row)
     Bus.publish(undefined, Event.Updated, { info })
@@ -425,15 +414,13 @@ export namespace Session {
   }
 
   export async function clearRevert(context: import("@any-code/opencode/agent/context").AgentContext, sessionID: any) {
-    const row = context.db
-      .update(SessionTable)
-      .set({
+    const row = context.db.update("session",
+      { op: "eq", field: "id", value: sessionID },
+      {
         revert: null,
         time_updated: Date.now(),
-      })
-      .where(eq(SessionTable.id, sessionID))
-      .returning()
-      .get()
+      },
+    )
     if (!row) throw new NotFoundError({ message: `Session not found: ${sessionID}` })
     const info = fromRow(row)
     Bus.publish(undefined, Event.Updated, { info })
@@ -441,17 +428,15 @@ export namespace Session {
   }
 
   export async function setSummary(context: import("@any-code/opencode/agent/context").AgentContext, input: any) {
-    const row = context.db
-      .update(SessionTable)
-      .set({
+    const row = context.db.update("session",
+      { op: "eq", field: "id", value: input.sessionID },
+      {
         summary_additions: input.summary?.additions,
         summary_deletions: input.summary?.deletions,
         summary_files: input.summary?.files,
         time_updated: Date.now(),
-      })
-      .where(eq(SessionTable.id, input.sessionID))
-      .returning()
-      .get()
+      },
+    )
     if (!row) throw new NotFoundError({ message: `Session not found: ${input.sessionID}` })
     const info = fromRow(row)
     Bus.publish(undefined, Event.Updated, { info })
@@ -488,33 +473,31 @@ export namespace Session {
     },
   ) {
     const project = context.project
-    const conditions = [eq(SessionTable.project_id, project.id)]
+    const conditions: Filter[] = [{ op: "eq", field: "project_id", value: project.id }]
 
     if (WorkspaceContext.workspaceID) {
-      conditions.push(eq(SessionTable.workspace_id, WorkspaceContext.workspaceID))
+      conditions.push({ op: "eq", field: "workspace_id", value: WorkspaceContext.workspaceID })
     }
     if (input?.directory) {
-      conditions.push(eq(SessionTable.directory, input.directory))
+      conditions.push({ op: "eq", field: "directory", value: input.directory })
     }
     if (input?.roots) {
-      conditions.push(isNull(SessionTable.parent_id))
+      conditions.push({ op: "isNull", field: "parent_id" })
     }
     if (input?.start) {
-      conditions.push(gte(SessionTable.time_updated, input.start))
+      conditions.push({ op: "gte", field: "time_updated", value: input.start })
     }
     if (input?.search) {
-      conditions.push(like(SessionTable.title, `%${input.search}%`))
+      conditions.push({ op: "like", field: "title", value: `%${input.search}%` })
     }
 
     const limit = input?.limit ?? 100
 
-    const rows = context.db
-        .select()
-        .from(SessionTable)
-        .where(and(...conditions))
-        .orderBy(desc(SessionTable.time_updated))
-        .limit(limit)
-        .all()
+    const rows = context.db.findMany("session", {
+      filter: { op: "and", conditions },
+      orderBy: [{ field: "time_updated", direction: "desc" }],
+      limit,
+    })
     
     for (const row of rows) {
       yield fromRow(row)
@@ -532,47 +515,43 @@ export namespace Session {
     limit?: number
     archived?: boolean
   }) {
-    const conditions: SQL[] = []
+    const conditions: Filter[] = []
 
     if (input?.directory) {
-      conditions.push(eq(SessionTable.directory, input.directory))
+      conditions.push({ op: "eq", field: "directory", value: input.directory })
     }
     if (input?.roots) {
-      conditions.push(isNull(SessionTable.parent_id))
+      conditions.push({ op: "isNull", field: "parent_id" })
     }
     if (input?.start) {
-      conditions.push(gte(SessionTable.time_updated, input.start))
+      conditions.push({ op: "gte", field: "time_updated", value: input.start })
     }
     if (input?.cursor) {
-      conditions.push(lt(SessionTable.time_updated, input.cursor))
+      conditions.push({ op: "lt", field: "time_updated", value: input.cursor })
     }
     if (input?.search) {
-      conditions.push(like(SessionTable.title, `%${input.search}%`))
+      conditions.push({ op: "like", field: "title", value: `%${input.search}%` })
     }
     if (!input?.archived) {
-      conditions.push(isNull(SessionTable.time_archived))
+      conditions.push({ op: "isNull", field: "time_archived" })
     }
 
     const limit = input?.limit ?? 100
 
-    const query =
-      conditions.length > 0
-        ? context.db
-            .select()
-            .from(SessionTable)
-            .where(and(...conditions))
-        : context.db.select().from(SessionTable)
-    const rows = query.orderBy(desc(SessionTable.time_updated), desc(SessionTable.id)).limit(limit).all()
+    const rows = context.db.findMany("session", {
+      filter: conditions.length > 0 ? { op: "and", conditions } : undefined,
+      orderBy: [{ field: "time_updated", direction: "desc" }, { field: "id", direction: "desc" }],
+      limit,
+    })
 
     const ids = [...new Set(rows.map((row: any) => row.project_id))]
     const projects = new Map<string, ProjectInfo>()
 
     if (ids.length > 0) {
-      const items = context.db
-          .select({ id: ProjectTable.id, name: ProjectTable.name, worktree: ProjectTable.worktree })
-          .from(ProjectTable)
-          .where(inArray(ProjectTable.id, ids as any))
-          .all()
+      const items = context.db.findMany("project", {
+        filter: { op: "in", field: "id", values: ids },
+        select: ["id", "name", "worktree"],
+      })
       
       for (const item of items) {
         projects.set(item.id, {
@@ -594,11 +573,12 @@ export namespace Session {
     parentID: SessionID,
   ) => {
     const project = context.project
-    const rows = context.db
-        .select()
-        .from(SessionTable)
-        .where(and(eq(SessionTable.project_id, project.id), eq(SessionTable.parent_id, parentID)))
-        .all()
+    const rows = context.db.findMany("session", {
+      filter: { op: "and", conditions: [
+        { op: "eq", field: "project_id", value: project.id },
+        { op: "eq", field: "parent_id", value: parentID },
+      ]},
+    })
     
     return rows.map(fromRow)
   }
@@ -616,7 +596,7 @@ export namespace Session {
       await unshare(sessionID).catch(() => {})
       // CASCADE delete handles messages and parts automatically
       {
-        context.db.delete(SessionTable).where(eq(SessionTable.id, sessionID)).run()
+        context.db.remove("session", { op: "eq", field: "id", value: sessionID })
         Bus.publish(context, Event.Deleted, {
             info: session,
           })
@@ -630,15 +610,11 @@ export namespace Session {
     const time_created = msg.time.created
     const { id, sessionID, ...data } = msg
     {
-      context.db.insert(MessageTable)
-        .values({
-          id,
-          session_id: sessionID,
-          time_created,
-          data,
-        })
-        .onConflictDoUpdate({ target: MessageTable.id, set: { data } })
-        .run()
+      context.db.upsert("message",
+        { id, session_id: sessionID, time_created, data },
+        ["id"],
+        { data },
+      )
       Bus.publish(undefined, MessageV2.Event.Updated, {
           info: msg,
         })
@@ -648,9 +624,9 @@ export namespace Session {
 
   export async function removeMessage(context: import("@any-code/opencode/agent/context").AgentContext, input: any) {
     // CASCADE delete handles parts automatically
-    context.db.delete(MessageTable)
-      .where(and(eq(MessageTable.id, input.messageID), eq(MessageTable.session_id, input.sessionID)))
-      .run()
+    context.db.remove("message",
+      { op: "and", conditions: [{ op: "eq", field: "id", value: input.messageID }, { op: "eq", field: "session_id", value: input.sessionID }] },
+    )
     Bus.publish(undefined, MessageV2.Event.Removed, {
       sessionID: input.sessionID,
       messageID: input.messageID,
@@ -658,9 +634,9 @@ export namespace Session {
   }
 
   export async function removePart(context: import("@any-code/opencode/agent/context").AgentContext, input: any) {
-    context.db.delete(PartTable)
-      .where(and(eq(PartTable.id, input.partID), eq(PartTable.session_id, input.sessionID)))
-      .run()
+    context.db.remove("part",
+      { op: "and", conditions: [{ op: "eq", field: "id", value: input.partID }, { op: "eq", field: "session_id", value: input.sessionID }] },
+    )
     Bus.publish(undefined, MessageV2.Event.PartRemoved, {
       sessionID: input.sessionID,
       messageID: input.messageID,
@@ -673,16 +649,11 @@ export namespace Session {
   export async function updatePart(context: import("@any-code/opencode/agent/context").AgentContext, part: any) {
     const { id, messageID, sessionID, ...data } = part
     const time = Date.now()
-    context.db.insert(PartTable)
-      .values({
-        id,
-        message_id: messageID,
-        session_id: sessionID,
-        time_created: time,
-        data,
-      })
-      .onConflictDoUpdate({ target: PartTable.id, set: { data } })
-      .run()
+    context.db.upsert("part",
+      { id, message_id: messageID, session_id: sessionID, time_created: time, data },
+      ["id"],
+      { data },
+    )
     Bus.publish(undefined, MessageV2.Event.PartUpdated, {
       part: structuredClone(part),
     })
