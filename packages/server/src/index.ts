@@ -555,7 +555,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   // GET /api/sessions/:id
-  const sessionMatch = req.url?.match(/^\/api\/sessions\/([^/]+)$/)
+  const sessionMatch = req.url?.match(/^\/api\/sessions\/([^/?]+)(?:\/([a-z]+))?/)
   if (req.method === "GET" && sessionMatch) {
     const session = getSession(sessionMatch[1])
     if (!session) {
@@ -563,6 +563,70 @@ const server = http.createServer(async (req, res) => {
       res.end(JSON.stringify({ error: "Session not found" }))
       return
     }
+
+    const sub = sessionMatch[2]
+    const url = new URL(req.url!, `http://localhost:${PORT}`)
+
+    // GET /api/sessions/:id/state — polling endpoint for topLevel + changes
+    if (sub === "state") {
+      const dir = session.directory
+      const [topLevel, changes] = await Promise.all([
+        dir ? listDir(dir) : Promise.resolve([]),
+        dir ? getGitChanges(dir) : Promise.resolve([]),
+      ])
+      res.writeHead(200, { "Content-Type": "application/json" })
+      res.end(JSON.stringify({ directory: dir, topLevel, changes }))
+      return
+    }
+
+    // GET /api/sessions/:id/ls?path=xxx — lazy directory listing
+    if (sub === "ls") {
+      const subPath = url.searchParams.get("path") || ""
+      const dir = session.directory
+      if (!dir) {
+        res.writeHead(200, { "Content-Type": "application/json" })
+        res.end(JSON.stringify({ entries: [] }))
+        return
+      }
+      const target = path.resolve(dir, subPath)
+      if (!target.startsWith(path.resolve(dir))) {
+        res.writeHead(403, { "Content-Type": "application/json" })
+        res.end(JSON.stringify({ error: "Forbidden" }))
+        return
+      }
+      const entries = await listDir(target)
+      res.writeHead(200, { "Content-Type": "application/json" })
+      res.end(JSON.stringify({ entries }))
+      return
+    }
+
+    // GET /api/sessions/:id/file?path=xxx — read file content
+    if (sub === "file") {
+      const filePath = url.searchParams.get("path") || ""
+      const dir = session.directory
+      if (!dir) {
+        res.writeHead(200, { "Content-Type": "application/json" })
+        res.end(JSON.stringify({ content: null, error: "No directory" }))
+        return
+      }
+      const target = path.resolve(dir, filePath)
+      if (!target.startsWith(path.resolve(dir))) {
+        res.writeHead(403, { "Content-Type": "application/json" })
+        res.end(JSON.stringify({ error: "Forbidden" }))
+        return
+      }
+      try {
+        const content = await fsPromises.readFile(target, "utf-8")
+        res.writeHead(200, { "Content-Type": "application/json" })
+        res.end(JSON.stringify({ content }))
+      } catch {
+        res.writeHead(200, { "Content-Type": "application/json" })
+        res.end(JSON.stringify({ content: null, error: "读取失败" }))
+      }
+      return
+    }
+
+    // GET /api/sessions/:id (no sub-route) — basic session info
     res.writeHead(200, { "Content-Type": "application/json" })
     res.end(JSON.stringify({
       id: session.id, directory: session.directory, createdAt: session.createdAt,

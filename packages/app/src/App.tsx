@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { TabBar } from "./components/TabBar";
 import { MainView } from "./components/MainView";
 import { ConversationOverlay } from "./components/ConversationOverlay";
@@ -15,12 +15,6 @@ export interface GitChange {
     status: string;
 }
 
-/** WebSocket message: server → client */
-export type WsMessage =
-    | { type: "state"; directory: string; changes: GitChange[]; topLevel: DirEntry[] }
-    | { type: "ls"; path: string; entries: DirEntry[] }
-    | { type: "fileContent"; path: string; content: string | null; error?: string };
-
 const API_BASE = "";
 
 export function App() {
@@ -30,12 +24,6 @@ export function App() {
     const [topLevel, setTopLevel] = useState<DirEntry[]>([]);
     const [changes, setChanges] = useState<GitChange[]>([]);
     const [error, setError] = useState<string | null>(null);
-    const wsRef = useRef<WebSocket | null>(null);
-
-    // ls request-response handlers
-    const lsCallbacks = useRef<Map<string, (entries: DirEntry[]) => void>>(new Map());
-    // readFile request-response handlers
-    const readFileCallbacks = useRef<Map<string, (content: string | null) => void>>(new Map());
 
     // Restore or create session on mount
     useEffect(() => {
@@ -51,7 +39,6 @@ export function App() {
                         if (data.directory) setDirectory(data.directory);
                         return;
                     }
-                    // Session expired — clear stale id
                     sessionStorage.removeItem("anycode-session-id");
                 }
 
@@ -84,104 +71,60 @@ export function App() {
         })();
     }, []);
 
-    // Connect WebSocket when session is ready
+    // Poll state (directory, topLevel, changes) via HTTP
+    const pollRef = useRef<ReturnType<typeof setInterval>>(undefined);
     useEffect(() => {
         if (!sessionId) return;
 
-        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-        const host = API_BASE ? new URL(API_BASE).host : window.location.host;
-        const ws = new WebSocket(`${protocol}//${host}?sessionId=${sessionId}`);
-        wsRef.current = ws;
-
-        ws.onmessage = (event) => {
+        const pollState = async () => {
             try {
-                const msg: WsMessage = JSON.parse(event.data);
-
-                if (msg.type === "state") {
-                    if (msg.directory) setDirectory(msg.directory);
-                    setChanges(msg.changes);
-                    setTopLevel(msg.topLevel);
-                }
-
-                if (msg.type === "ls") {
-                    const cb = lsCallbacks.current.get(msg.path);
-                    if (cb) {
-                        cb(msg.entries);
-                        lsCallbacks.current.delete(msg.path);
-                    }
-                }
-
-                if (msg.type === "fileContent") {
-                    const cb = readFileCallbacks.current.get(msg.path);
-                    if (cb) {
-                        cb(msg.content);
-                        readFileCallbacks.current.delete(msg.path);
-                    }
-                }
+                const res = await fetch(`${API_BASE}/api/sessions/${sessionId}/state`);
+                if (!res.ok) return;
+                const data = await res.json();
+                if (data.directory) setDirectory(data.directory);
+                setTopLevel(data.topLevel);
+                setChanges(data.changes);
             } catch { /* ignore */ }
         };
 
-        ws.onclose = () => {
-            wsRef.current = null;
-        };
+        // Immediate first poll
+        pollState();
+        pollRef.current = setInterval(pollState, 3000);
 
         return () => {
-            ws.close();
-            wsRef.current = null;
+            if (pollRef.current) clearInterval(pollRef.current);
         };
     }, [sessionId]);
 
-    // Also poll directory (fallback if WebSocket hasn't connected yet)
-    useEffect(() => {
-        if (!sessionId || directory) return;
-        const timer = setInterval(async () => {
-            try {
-                const res = await fetch(`${API_BASE}/api/sessions/${sessionId}`);
-                const data = await res.json();
-                if (data.directory) setDirectory(data.directory);
-            } catch { /* ignore */ }
-        }, 2000);
-        return () => clearInterval(timer);
-    }, [sessionId, directory]);
+    /** Request directory listing for a sub-path (lazy tree expand) via HTTP */
+    const requestLs = useCallback(async (subPath: string): Promise<DirEntry[]> => {
+        if (!sessionId) return [];
+        try {
+            const res = await fetch(
+                `${API_BASE}/api/sessions/${sessionId}/ls?path=${encodeURIComponent(subPath)}`
+            );
+            if (!res.ok) return [];
+            const data = await res.json();
+            return data.entries ?? [];
+        } catch {
+            return [];
+        }
+    }, [sessionId]);
 
-    /** Request directory listing for a sub-path (lazy tree expand) */
-    const requestLs = (subPath: string): Promise<DirEntry[]> => {
-        return new Promise((resolve) => {
-            const ws = wsRef.current;
-            if (!ws || ws.readyState !== WebSocket.OPEN) {
-                resolve([]);
-                return;
-            }
-            lsCallbacks.current.set(subPath, resolve);
-            ws.send(JSON.stringify({ type: "ls", path: subPath }));
-            // Timeout: resolve empty after 5s if no response
-            setTimeout(() => {
-                if (lsCallbacks.current.has(subPath)) {
-                    lsCallbacks.current.delete(subPath);
-                    resolve([]);
-                }
-            }, 5000);
-        });
-    };
-
-    /** Request file content by relative path */
-    const requestFile = (filePath: string): Promise<string | null> => {
-        return new Promise((resolve) => {
-            const ws = wsRef.current;
-            if (!ws || ws.readyState !== WebSocket.OPEN) {
-                resolve(null);
-                return;
-            }
-            readFileCallbacks.current.set(filePath, resolve);
-            ws.send(JSON.stringify({ type: "readFile", path: filePath }));
-            setTimeout(() => {
-                if (readFileCallbacks.current.has(filePath)) {
-                    readFileCallbacks.current.delete(filePath);
-                    resolve(null);
-                }
-            }, 5000);
-        });
-    };
+    /** Request file content by relative path via HTTP */
+    const requestFile = useCallback(async (filePath: string): Promise<string | null> => {
+        if (!sessionId) return null;
+        try {
+            const res = await fetch(
+                `${API_BASE}/api/sessions/${sessionId}/file?path=${encodeURIComponent(filePath)}`
+            );
+            if (!res.ok) return null;
+            const data = await res.json();
+            return data.content ?? null;
+        } catch {
+            return null;
+        }
+    }, [sessionId]);
 
     if (error) {
         return (
