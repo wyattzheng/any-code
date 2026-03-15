@@ -1,4 +1,4 @@
-import type { AgentContext } from "@/agent/context"
+import type { AgentContext } from "@/context"
 import path from "path"
 import os from "os"
 import z from "zod"
@@ -8,11 +8,11 @@ import { ConfigMarkdown } from "../util/markdown"
 import { Log } from "../util/log"
 import { Filesystem } from "@/util/filesystem"
 import { Flag } from "@/util/flag"
-import { Bus } from "@/agent/bus"
-import { Session } from "@/agent/session"
+import { Bus } from "@/bus"
+import { Session } from "@/session"
 import { Glob } from "../util/glob"
 import { pathToFileURL } from "url"
-import type { Agent } from "@/agent/agent"
+import type { Agent } from "@/agent"
 
 // ── Discovery ───────────────────────────────────────────────────────────────
 

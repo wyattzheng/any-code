@@ -1,4 +1,4 @@
-import type { AgentContext } from "@/agent/context"
+import type { AgentContext } from "@/context"
 import { NamedError } from "@/util/error"
 import matter from "gray-matter"
 import { z } from "zod"

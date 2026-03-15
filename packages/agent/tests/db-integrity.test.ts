@@ -113,7 +113,7 @@ describe("Cross-agent DB recovery: close agent → reopen → verify data", () =
         const agent2 = makeAgent()
         await agent2.init()
 
-        const { Session } = await import("@any-code/opencode/agent/session/index")
+        const { Session } = await import("@any-code/opencode/session/index")
 
         const recovered1 = await Session.get(agent2.agentContext, s1Id)
         expect(recovered1.id).toBe(s1Id)
@@ -141,8 +141,8 @@ describe("Cross-agent DB recovery: close agent → reopen → verify data", () =
         expect(events.at(-1)?.type).toBe("done")
 
         // Record what agent1 sees
-        const { Session } = await import("@any-code/opencode/agent/session/index")
-        const { MessageV2 } = await import("@any-code/opencode/agent/memory/message-v2")
+        const { Session } = await import("@any-code/opencode/session/index")
+        const { MessageV2 } = await import("@any-code/opencode/memory/message-v2")
 
         const originalMsgs = await Session.messages(agent1.agentContext, { sessionID: sessionId })
         expect(originalMsgs.length).toBeGreaterThanOrEqual(2)
@@ -205,7 +205,7 @@ describe("Cross-agent DB recovery: close agent → reopen → verify data", () =
 
         for await (const _ of agent1.chat(sessionId, "Create continue-1.html")) {}
 
-        const { Session } = await import("@any-code/opencode/agent/session/index")
+        const { Session } = await import("@any-code/opencode/session/index")
         const msgs1 = await Session.messages(agent1.agentContext, { sessionID: sessionId })
         const count1 = msgs1.length
         expect(count1).toBeGreaterThanOrEqual(2)
@@ -238,7 +238,7 @@ describe("Cross-agent DB recovery: close agent → reopen → verify data", () =
         const agent = makeAgent()
         await agent.init()
 
-        const { Session } = await import("@any-code/opencode/agent/session/index")
+        const { Session } = await import("@any-code/opencode/session/index")
         const sessions = [...Session.list(agent.agentContext)]
 
         // Should have all sessions from previous tests

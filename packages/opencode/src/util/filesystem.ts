@@ -1,6 +1,6 @@
 import { lookup } from "mime-types"
 import { dirname, join, relative, resolve as pathResolve } from "path"
-import type { AgentContext } from "../agent/context"
+import type { AgentContext } from "../context"
 
 export namespace Filesystem {
   // ── Read operations (all via context.fs) ──────────────────────────

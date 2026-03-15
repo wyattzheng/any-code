@@ -1,4 +1,4 @@
-import type { AgentContext } from "@/agent/context"
+import type { AgentContext } from "@/context"
 import { EventEmitter } from "events"
 import z from "zod"
 import type { ZodType } from "zod"

@@ -1,8 +1,8 @@
 import z from "zod"
-import type { MessageV2 } from "@/agent/memory/message-v2"
-import type { Agent } from "../agent/agent"
+import type { MessageV2 } from "@/memory/message-v2"
+import type { Agent } from "../agent"
 
-import type { SessionID, MessageID } from "@/agent/session/schema"
+import type { SessionID, MessageID } from "@/session/schema"
 import { Truncate } from "./truncation"
 
 export namespace Tool {
@@ -13,10 +13,10 @@ export namespace Tool {
   export interface InitContext {
     agent?: Agent.Info
     directory?: string
-    agentContext?: import("../agent/context").AgentContext
+    agentContext?: import("../context").AgentContext
   }
 
-  export type Context<M extends Metadata = Metadata> = import("../agent/context").AgentContext & {
+  export type Context<M extends Metadata = Metadata> = import("../context").AgentContext & {
     sessionID: SessionID
     messageID: MessageID
     agent: string

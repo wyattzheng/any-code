@@ -2,7 +2,7 @@ import z from "zod"
 import * as path from "path"
 
 import { Tool } from "./tool"
-import { Bus } from "@/agent/bus"
+import { Bus } from "@/bus"
 
 import { Patch } from "./patch"
 import { createTwoFilesPatch, diffLines } from "diff"
@@ -10,8 +10,8 @@ import { assertExternalDirectory } from "./external-directory"
 import { trimDiff } from "./edit"
 import { LSP } from "../util/lsp"
 import DESCRIPTION from "./apply_patch.txt"
-import { File } from "@/agent/project"
-import type { AgentContext } from "@/agent/context"
+import { File } from "@/project"
+import type { AgentContext } from "@/context"
 
 const PatchParams = z.object({
   patchText: z.string().describe("The full patch text that describes all changes to be made"),

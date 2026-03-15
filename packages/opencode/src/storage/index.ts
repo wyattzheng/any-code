@@ -14,8 +14,8 @@ export const Timestamps = {
 // ── Schema (table re-exports) ───────────────────────────────────────────────
 
 // Account tables removed (account module deleted)
-export { ProjectTable } from "@/agent/project"
-export { SessionTable, MessageTable, PartTable, TodoTable } from "@/agent/session/session.sql"
+export { ProjectTable } from "@/project"
+export { SessionTable, MessageTable, PartTable, TodoTable } from "@/session/session.sql"
 
 // ── NoSqlDb Interface ───────────────────────────────────────────────────────
 
@@ -330,7 +330,7 @@ function deserializeRow(row: Record<string, any>): Record<string, any> {
 
 // ── Storage ─────────────────────────────────────────────────────────────────
 
-import type { AgentContext } from "@/agent/context"
+import type { AgentContext } from "@/context"
 import { Log } from "../util/log"
 import fs from "fs/promises"
 import { Filesystem } from "../util/filesystem"

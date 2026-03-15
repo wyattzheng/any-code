@@ -1,4 +1,4 @@
-import type { AgentContext } from "@/agent/context"
+import type { AgentContext } from "@/context"
 import z from "zod"
 import fuzzysort from "fuzzysort"
 import { mapValues, mergeDeep, omit, pickBy, sortBy } from "remeda"

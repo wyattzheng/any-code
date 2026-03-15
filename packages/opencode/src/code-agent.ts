@@ -26,41 +26,41 @@
 import path from "path"
 import type { AgentContext } from "./context"
 import type { Project } from "./project"
-import type { VFS } from "../util/vfs"
-import type { SearchProvider } from "../util/search"
-import { NodeGitProvider, type GitProvider } from "../util/git"
-import { EnvService } from "../util/env"
-import { BusService } from "@/agent/bus"
-import { SchedulerService } from "../util/scheduler"
+import type { VFS } from "./util/vfs"
+import type { SearchProvider } from "./util/search"
+import { NodeGitProvider, type GitProvider } from "./util/git"
+import { EnvService } from "./util/env"
+import { BusService } from "@/bus"
+import { SchedulerService } from "./util/scheduler"
 import { FileTimeService } from "./project"
-import { Database } from "../storage"
-import { ToolRegistry } from "../tool/registry"
-import { Tool } from "../tool/tool"
-import { Session } from "@/agent/session"
-import { SessionPrompt } from "@/agent/session/session"
-import { Bus } from "@/agent/bus"
-import { GlobalBus } from "@/agent/bus"
-import { MessageV2 } from "@/agent/memory/message-v2"
+import { Database } from "./storage"
+import { ToolRegistry } from "./tool/registry"
+import { Tool } from "./tool/tool"
+import { Session } from "@/session"
+import { SessionPrompt } from "@/session/session"
+import { Bus } from "@/bus"
+import { GlobalBus } from "@/bus"
+import { MessageV2 } from "@/memory/message-v2"
 
-import { Truncate } from "../tool/truncation"
-
-
-
-import { Question } from "../tool/question-service"
-import { SessionStatus } from "@/agent/session"
+import { Truncate } from "./tool/truncation"
 
 
-import { Agent } from "../agent/agent"
-import { Provider } from "@/agent/provider/provider"
-import { ModelsDev } from "@/agent/provider/models"
-import { Skill } from "../skill"
+
+import { Question } from "./tool/question-service"
+import { SessionStatus } from "@/session"
+
+
+import { Agent } from "./agent"
+import { Provider } from "@/provider/provider"
+import { ModelsDev } from "@/provider/models"
+import { Skill } from "./skill"
 
 import z from "zod"
 
-import { NamedError } from "../util/error"
-import { defer } from "../util/defer"
+import { NamedError } from "./util/error"
+import { defer } from "./util/defer"
 import { ulid } from "ulid"
-import { PartID, MessageID as MsgID, SessionID } from "@/agent/session/schema"
+import { PartID, MessageID as MsgID, SessionID } from "@/session/schema"
 import { SystemPrompt } from "./prompt"
 
 import { ContextCompaction } from "./memory/compaction"

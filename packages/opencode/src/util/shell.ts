@@ -5,7 +5,7 @@ import { which } from "@/util/which"
 import path from "path"
 import { spawn, type ChildProcess } from "child_process"
 import { setTimeout as sleep } from "node:timers/promises"
-import type { AgentContext } from "@/agent/context"
+import type { AgentContext } from "@/context"
 
 const SIGKILL_TIMEOUT_MS = 200
 

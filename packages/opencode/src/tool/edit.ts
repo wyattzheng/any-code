@@ -9,9 +9,9 @@ import { Tool } from "./tool"
 import { LSP } from "../util/lsp"
 import { createTwoFilesPatch, diffLines } from "diff"
 import DESCRIPTION from "./edit.txt"
-import { File } from "@/agent/project"
+import { File } from "@/project"
 
-import { Bus } from "@/agent/bus"
+import { Bus } from "@/bus"
 
 
 import { assertExternalDirectory } from "./external-directory"

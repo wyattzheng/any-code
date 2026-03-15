@@ -1,5 +1,5 @@
 /**
- * @any-code/agent — re-exports from @any-code/opencode/agent/code-agent
+ * @any-code/agent — re-exports from @any-code/opencode/code-agent
  *
  * CodeAgent now lives in the opencode package for direct access to all services.
  * This package re-exports everything for backward compatibility.
@@ -16,7 +16,7 @@ export {
     type PermissionReply,
     type StorageProvider,
     type Migration,
-} from "@any-code/opencode/agent/code-agent"
+} from "@any-code/opencode/code-agent"
 
 // VFS stays here (Node-specific implementations)
 export type { VirtualFileSystem, VFSStat, VFSDirEntry } from "./vfs"

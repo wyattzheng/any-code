@@ -1,6 +1,6 @@
-import type { AgentContext } from "@/agent/context"
-import type { Provider } from "@/agent/provider/provider"
-import type { Agent } from "@/agent/agent"
+import type { AgentContext } from "@/context"
+import type { Provider } from "@/provider/provider"
+import type { Agent } from "@/agent"
 import { Skill } from "@/skill"
 
 import PROMPT_ANTHROPIC from "./anthropic.txt"

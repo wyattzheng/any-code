@@ -1,23 +1,23 @@
 import { Project } from "./project"
-import { VFS } from "../util/vfs"
-import { SearchProvider } from "../util/search"
-import type { GitProvider } from "../util/git"
-import type { EnvService } from "../util/env"
-import type { BusService } from "@/agent/bus"
-import type { SchedulerService } from "../util/scheduler"
+import { VFS } from "./util/vfs"
+import { SearchProvider } from "./util/search"
+import type { GitProvider } from "./util/git"
+import type { EnvService } from "./util/env"
+import type { BusService } from "@/bus"
+import type { SchedulerService } from "./util/scheduler"
 import type { FileTimeService } from "./project"
 
-import type { Question } from "../tool/question-service"
-import type { SessionStatus } from "@/agent/session"
+import type { Question } from "./tool/question-service"
+import type { SessionStatus } from "@/session"
 
-import type { SessionPrompt } from "@/agent/session/session"
+import type { SessionPrompt } from "@/session/session"
 
 
-import type { Agent } from "../agent/agent"
-import type { Provider } from "@/agent/provider/provider"
-import type { ModelsDev } from "@/agent/provider/models"
-import type { ToolRegistry } from "../tool/registry"
-import type { Skill } from "../skill"
+import type { Agent } from "./agent"
+import type { Provider } from "@/provider/provider"
+import type { ModelsDev } from "@/provider/models"
+import type { ToolRegistry } from "./tool/registry"
+import type { Skill } from "./skill"
 
 
 

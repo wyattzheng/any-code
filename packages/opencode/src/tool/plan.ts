@@ -2,13 +2,13 @@ import z from "zod"
 import path from "path"
 import { Tool } from "./tool"
 import { Question } from "./question-service"
-import { Session } from "@/agent/session"
-import { MessageV2 } from "@/agent/memory/message-v2"
-import { Provider } from "@/agent/provider/provider"
-import { type SessionID, MessageID, PartID } from "@/agent/session/schema"
+import { Session } from "@/session"
+import { MessageV2 } from "@/memory/message-v2"
+import { Provider } from "@/provider/provider"
+import { type SessionID, MessageID, PartID } from "@/session/schema"
 import EXIT_DESCRIPTION from "./plan-exit.txt"
 
-async function getLastModel(context: import("../agent/context").AgentContext, sessionID: SessionID) {
+async function getLastModel(context: import("../context").AgentContext, sessionID: SessionID) {
   for await (const item of MessageV2.stream(context, sessionID)) {
     if (item.info.role === "user" && item.info.model) return item.info.model
   }

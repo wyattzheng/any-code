@@ -1,12 +1,12 @@
-import type { AgentContext } from "@/agent/context"
-import { Bus } from "@/agent/bus"
+import type { AgentContext } from "@/context"
+import { Bus } from "@/bus"
 import { Decimal } from "decimal.js"
 import z from "zod"
 import { type ProviderMetadata } from "ai"
 
-import { SessionID, MessageID, PartID } from "@/agent/session/schema"
-import { MessageV2 } from "@/agent/memory/message-v2"
-import type { Provider } from "@/agent/provider/provider"
+import { SessionID, MessageID, PartID } from "@/session/schema"
+import { MessageV2 } from "@/memory/message-v2"
+import type { Provider } from "@/provider/provider"
 import type { LanguageModelV2Usage } from "@ai-sdk/provider"
 
 import { fn } from "@/util/fn"
