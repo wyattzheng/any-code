@@ -1,4 +1,3 @@
-import { getState } from "@/agent/context"
 import type { AgentContext } from "@/agent/context"
 import z from "zod"
 import path from "path"
@@ -81,10 +80,6 @@ export namespace Skill {
     }
   }
 
-  const STATE_KEY = Symbol("skill")
-  export function state(context: AgentContext) {
-    return getState(context, STATE_KEY, () => new SkillService(context))._promise
-  }
   async function initSkills(context: AgentContext) {
     const skills: Record<string, Info> = {}
     const dirs = new Set<string>()
@@ -211,22 +206,20 @@ export namespace Skill {
     }
   }
 
-  export async function get(context: AgentContext, name: string) {
-    return state(context).then((x) => x.skills[name])
+  /** @deprecated */ export async function get(context: AgentContext, name: string) {
+    return context.skill.get(name)
   }
 
-  export async function all(context: AgentContext) {
-    return state(context).then((x) => Object.values(x.skills))
+  /** @deprecated */ export async function all(context: AgentContext) {
+    return context.skill.all()
   }
 
-  export async function dirs(context: AgentContext) {
-    return state(context).then((x) => x.dirs)
+  /** @deprecated */ export async function dirs(context: AgentContext) {
+    return context.skill.dirs()
   }
 
-  export async function available(context: AgentContext, agent?: Agent.Info) {
-    const list = await all(context)
-    if (!agent) return list
-    return list.filter((skill) => PermissionNext.evaluate("skill", skill.name, agent.permission).action !== "deny")
+  /** @deprecated */ export async function available(context: AgentContext, agent?: Agent.Info) {
+    return context.skill.available(agent)
   }
 
   export function fmt(list: Info[], opts: { verbose: boolean }) {

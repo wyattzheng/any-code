@@ -14,7 +14,6 @@ import { InvalidTool } from "./invalid"
 import { SkillTool } from "./skill"
 import type { Agent } from "../agent/agent"
 import { Tool } from "./tool"
-import { getState } from "../agent/context"
 import type { AgentContext } from "../agent/context"
 import { Config } from "../config/config"
 import path from "path"
@@ -65,10 +64,6 @@ export namespace ToolRegistry {
     }
   }
 
-  const STATE_KEY = Symbol("tool.registry")
-  export function state(context: AgentContext) {
-    return getState(context, STATE_KEY, () => new ToolRegistryService(context))._promise
-  }
   async function initTools(context: AgentContext) {
     const custom = [] as Tool.Info[]
 
@@ -119,18 +114,12 @@ export namespace ToolRegistry {
     }
   }
 
-  export async function register(context: AgentContext, tool: Tool.Info) {
-    const { custom } = await state(context)
-    const idx = custom.findIndex((t) => t.id === tool.id)
-    if (idx >= 0) {
-      custom.splice(idx, 1, tool)
-      return
-    }
-    custom.push(tool)
+  /** @deprecated */ export async function register(context: AgentContext, tool: Tool.Info) {
+    return context.toolRegistry.register(tool)
   }
 
   async function all(context: AgentContext): Promise<Tool.Info[]> {
-    const custom = await state(context).then((x) => x.custom)
+    const custom = await context.toolRegistry._promise.then((x) => x.custom)
     const config = await context.config.get()
     const question = ["app", "cli", "desktop"].includes(Flag.OPENCODE_CLIENT) || Flag.OPENCODE_ENABLE_QUESTION_TOOL
 

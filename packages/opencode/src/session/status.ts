@@ -1,6 +1,5 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
-import { getState } from "@/agent/context"
 import type { AgentContext } from "@/agent/context"
 import { SessionID } from "./schema"
 import z from "zod"
@@ -74,36 +73,16 @@ export namespace SessionStatus {
     }
   }
 
-  const STATE_KEY = Symbol("session.status")
-  function state(context: AgentContext) {
-    return getState(context, STATE_KEY, () => new SessionStatusService())
+
+  /** @deprecated */ export function get(context: AgentContext, sessionID: SessionID) {
+    return context.sessionStatus.get(sessionID)
   }
 
-  export function get(context: AgentContext, sessionID: SessionID) {
-    return (
-      state(context)[sessionID] ?? {
-        type: "idle",
-      }
-    )
+  /** @deprecated */ export function list(context: AgentContext) {
+    return context.sessionStatus.list()
   }
 
-  export function list(context: AgentContext) {
-    return state(context)
-  }
-
-  export function set(context: AgentContext, sessionID: SessionID, status: Info) {
-    Bus.publish(context, Event.Status, {
-      sessionID,
-      status,
-    })
-    if (status.type === "idle") {
-      // deprecated
-      Bus.publish(context, Event.Idle, {
-        sessionID,
-      })
-      delete state(context)[sessionID]
-      return
-    }
-    state(context)[sessionID] = status
+  /** @deprecated */ export function set(context: AgentContext, sessionID: SessionID, status: Info) {
+    context.sessionStatus.set(sessionID, status)
   }
 }

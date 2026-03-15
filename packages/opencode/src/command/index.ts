@@ -2,12 +2,10 @@ import { BusEvent } from "@/bus/bus-event"
 import { SessionID, MessageID } from "@/session/schema"
 import z from "zod"
 import { Config } from "../config/config"
-import { getState } from "@/agent/context"
 import type { AgentContext } from "@/agent/context"
 import { Identifier } from "../util/id"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
 import PROMPT_REVIEW from "./template/review.txt"
-import { Skill } from "../skill"
 
 export namespace Command {
   export const Event = {
@@ -66,12 +64,16 @@ export namespace Command {
     constructor(context: AgentContext) {
       this._promise = initCommands(context)
     }
+
+    async get(name: string): Promise<Info | undefined> {
+      return (await this._promise)[name]
+    }
+
+    async list(): Promise<Info[]> {
+      return Object.values(await this._promise)
+    }
   }
 
-  const STATE_KEY = Symbol("command")
-  function state(context: AgentContext) {
-    return getState(context, STATE_KEY, () => new CommandService(context))._promise
-  }
   async function initCommands(context: AgentContext) {
     const cfg = await context.config.get()
 
@@ -114,7 +116,7 @@ export namespace Command {
 
 
     // Add skills as invokable commands
-    for (const skill of await Skill.all(context)) {
+    for (const skill of await context.skill.all()) {
       // Skip if a command with this name already exists
       if (result[skill.name]) continue
       result[skill.name] = {
@@ -131,11 +133,11 @@ export namespace Command {
     return result
   }
 
-  export async function get(context: AgentContext, name: string) {
-    return state(context).then((x) => x[name])
+  /** @deprecated */ export async function get(context: AgentContext, name: string) {
+    return context.command.get(name)
   }
 
-  export async function list(context: AgentContext) {
-    return state(context).then((x) => Object.values(x))
+  /** @deprecated */ export async function list(context: AgentContext) {
+    return context.command.list()
   }
 }
