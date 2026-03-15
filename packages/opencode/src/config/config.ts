@@ -1263,8 +1263,6 @@ export namespace Config {
     return result
   }
 
-  export function readFile(context: AgentContext, filepath: string) { return ConfigPaths.readFile(context, filepath) }
-
   async function loadFile(context: AgentContext, filepath: string): Promise<Info> {
     log.info("loading", { path: filepath })
     const text = await readFile(context, filepath)

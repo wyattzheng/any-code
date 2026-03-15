@@ -121,14 +121,4 @@ export namespace FileWatcher {
 
       return { subs }
   }
-  function state(context: AgentContext) {
-    return context.fileWatcher._promise
-  }
-
-  export function init(context: AgentContext) {
-    if (Flag.OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER) {
-      return
-    }
-    context.fileWatcher._promise
-  }
 }
