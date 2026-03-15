@@ -198,15 +198,15 @@ async function createSession(directory: string = ""): Promise<SessionEntry> {
     console.log(`📂  Session ${id} directory set to: ${dir}`)
     // Push state to all connected WebSocket clients
     pushState(id)
+    // Start watching the directory for file changes
+    watchDirectory(id, dir)
   })
 
-  // Debounced push after agent goes idle (tool round finished)
+  // Supplementary: also trigger on agent bus events (file edits via tools)
   let pushTimer: ReturnType<typeof setTimeout> | null = null
   agent.bus.subscribeAll((payload: any) => {
     if (!payload || !entry.directory) return
-    const type = payload.type
-    // Push after file edits or when session becomes idle
-    if (type === "file.edited" || (type === "session.status.changed" && payload.properties?.status?.type === "idle")) {
+    if (payload.type === "file.edited") {
       if (pushTimer) clearTimeout(pushTimer)
       pushTimer = setTimeout(() => pushState(id), 300)
     }
@@ -295,6 +295,35 @@ function broadcast(sessionId: string, data: Record<string, unknown>) {
   const json = JSON.stringify(data)
   for (const ws of clients) {
     if (ws.readyState === WS.OPEN) ws.send(json)
+  }
+}
+
+// ── fs.watch-based directory watcher ──────────────────────────────────────
+
+const watchers = new Map<string, fs.FSWatcher>()
+
+function watchDirectory(sessionId: string, dir: string) {
+  // Clean up existing watcher for this session
+  const existing = watchers.get(sessionId)
+  if (existing) existing.close()
+
+  let timer: ReturnType<typeof setTimeout> | null = null
+  const debouncedPush = () => {
+    if (timer) clearTimeout(timer)
+    timer = setTimeout(() => pushState(sessionId), 500)
+  }
+
+  try {
+    // macOS and Windows support recursive: true natively
+    const watcher = fs.watch(dir, { recursive: true }, (eventType, filename) => {
+      // Ignore .git internals (too noisy), node_modules, etc.
+      if (filename && (filename.startsWith(".git/") || filename.startsWith("node_modules/"))) return
+      debouncedPush()
+    })
+    watchers.set(sessionId, watcher)
+    console.log(`👁  Watching directory: ${dir}`)
+  } catch (err) {
+    console.error(`❌  fs.watch failed for ${dir}:`, err)
   }
 }
 
