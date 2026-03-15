@@ -45,7 +45,6 @@ import { Truncate } from "./tool/truncation"
 
 
 
-import { Question } from "./tool/question-service"
 import { SessionStatus } from "./session"
 
 
@@ -338,7 +337,6 @@ export class CodeAgent {
 
         // Phase 1: context-dependent services
         ctx.config = (this.options.config ?? {}) as Record<string, any>
-        ctx.question = new Question.QuestionService()
         ctx.sessionStatus = new SessionStatus.SessionStatusService(ctx)
 
         ctx.sessionPrompt = new SessionPrompt.SessionPromptService()
@@ -355,7 +353,6 @@ export class CodeAgent {
 
 
         ctx.provider.bind(ctx)
-        ctx.question.bind(ctx)
 
         this._context = ctx
 

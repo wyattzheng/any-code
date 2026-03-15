@@ -1,7 +1,6 @@
 import z from "zod"
 import * as path from "../util/path"
 import { Tool } from "./tool"
-import { Question } from "./question-service"
 import { Session } from "../session"
 import { MessageV2 } from "../memory/message-v2"
 import { Provider } from "../provider/provider"
@@ -21,24 +20,6 @@ export const PlanExitTool = Tool.define("plan_exit", {
   async execute(_params, ctx) {
     const session = await Session.get(ctx, ctx.sessionID)
     const plan = path.relative(ctx.worktree, Session.plan(ctx, session))
-    const answers = await ctx.question.ask({
-      sessionID: ctx.sessionID,
-      questions: [
-        {
-          question: `Plan at ${plan} is complete. Would you like to switch to the build agent and start implementing?`,
-          header: "Build Agent",
-          custom: false,
-          options: [
-            { label: "Yes", description: "Switch to build agent and start implementing the plan" },
-            { label: "No", description: "Stay with plan agent to continue refining the plan" },
-          ],
-        },
-      ],
-      tool: ctx.callID ? { messageID: ctx.messageID, callID: ctx.callID } : undefined,
-    })
-
-    const answer = answers[0]?.[0]
-    if (answer === "No") throw new Question.RejectedError()
 
     const model = await getLastModel(ctx, ctx.sessionID)
 

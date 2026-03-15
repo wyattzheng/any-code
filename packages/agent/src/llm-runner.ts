@@ -19,7 +19,6 @@ import { iife } from "./util/fn"
 
 import { Bus } from "./bus"
 
-import { Question } from "./tool/question-service"
 
 export namespace SessionRetry {
   export const RETRY_INITIAL_DELAY = 2000
@@ -539,11 +538,6 @@ export namespace LLMRunner {
                       },
                     })
 
-                    if (
-                      value.error instanceof Question.RejectedError
-                    ) {
-                      blocked = shouldBreak
-                    }
                     delete toolcalls[value.toolCallId]
                   }
                   break

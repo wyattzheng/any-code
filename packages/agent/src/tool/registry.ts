@@ -1,5 +1,4 @@
 import { PlanExitTool } from "./plan"
-import { QuestionTool } from "./question"
 import { BashTool } from "./bash"
 import { EditTool } from "./edit"
 import { GlobTool } from "./glob"
@@ -111,11 +110,8 @@ export namespace ToolRegistry {
   async function all(context: AgentContext): Promise<Tool.Info[]> {
     const custom = await context.toolRegistry._promise.then((x) => x.custom)
     const config = context.config
-    const question = ["app", "cli", "desktop"].includes(Flag.OPENCODE_CLIENT) || Flag.OPENCODE_ENABLE_QUESTION_TOOL
-
     return [
       InvalidTool,
-      ...(question ? [QuestionTool] : []),
       BashTool,
       ReadTool,
       GlobTool,

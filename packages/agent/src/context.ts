@@ -7,7 +7,6 @@ import type { BusService } from "./bus"
 import type { SchedulerService } from "./util/scheduler"
 import type { FileTimeService } from "./project"
 
-import type { Question } from "./tool/question-service"
 import type { SessionStatus } from "./session"
 
 import type { SessionPrompt } from "./session/session"
@@ -80,7 +79,6 @@ export interface AgentContext {
 
     // Phase 1+: context-dependent services (created in CodeAgent.init())
     config: Record<string, any>
-    question: Question.QuestionService
     sessionStatus: SessionStatus.SessionStatusService
 
     sessionPrompt: SessionPrompt.SessionPromptService
