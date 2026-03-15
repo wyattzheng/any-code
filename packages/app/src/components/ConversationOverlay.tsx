@@ -16,15 +16,8 @@ type ToolCard = {
     error?: string;
 };
 type TextBlock = { kind: "text"; content: string };
-type UsageBlock = {
-    kind: "usage";
-    inputTokens: number;
-    outputTokens: number;
-    reasoningTokens: number;
-    cost: number;
-};
 type ErrorBlock = { kind: "error"; message: string };
-type ResponsePart = ThinkingBlock | ToolCard | TextBlock | UsageBlock | ErrorBlock;
+type ResponsePart = ThinkingBlock | ToolCard | TextBlock | ErrorBlock;
 
 type ChatMessage =
     | { role: "user"; text: string }
@@ -36,9 +29,7 @@ function fmtDur(ms?: number) {
     if (ms == null) return "";
     return ms >= 1000 ? (ms / 1000).toFixed(1) + "s" : ms + "ms";
 }
-function fmtK(n: number) {
-    return n >= 1000 ? (n / 1000).toFixed(1) + "k" : String(n);
-}
+
 function argSummary(args?: Record<string, unknown>) {
     if (!args) return "";
     const keys = Object.keys(args);
@@ -174,15 +165,6 @@ export function ConversationOverlay() {
                 }));
                 break;
             case "message.done":
-                if (data.usage) {
-                    appendPart({
-                        kind: "usage",
-                        inputTokens: data.usage.inputTokens,
-                        outputTokens: data.usage.outputTokens,
-                        reasoningTokens: data.usage.reasoningTokens,
-                        cost: data.usage.cost,
-                    });
-                }
                 break;
             case "error":
                 appendPart({ kind: "error", message: data.error || "unknown error" });
@@ -297,15 +279,7 @@ export function ConversationOverlay() {
                 );
             case "text":
                 return <div key={i} className="co-text">{part.content}</div>;
-            case "usage":
-                return (
-                    <div key={i} className="co-usage">
-                        <span>↓{fmtK(part.inputTokens)}</span>
-                        <span>↑{fmtK(part.outputTokens)}</span>
-                        {part.reasoningTokens > 0 && <span>🧠{fmtK(part.reasoningTokens)}</span>}
-                        <span>${part.cost.toFixed(4)}</span>
-                    </div>
-                );
+
             case "error":
                 return <div key={i} className="co-error">⚠ {part.message}</div>;
         }
