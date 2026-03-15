@@ -1,21 +1,21 @@
-import type { AgentContext } from "@/context"
+import type { AgentContext } from "./context"
 import z from "zod"
-import { Provider } from "@/provider/provider"
-import { ModelID, ProviderID } from "@/provider/schema"
+import { Provider } from "./provider/provider"
+import { ModelID, ProviderID } from "./provider/schema"
 import { generateObject, streamObject, type ModelMessage } from "ai"
 import { SystemPrompt } from "./prompt"
 import { Truncate } from "./tool/truncation"
 import { Auth } from "./util/auth"
-import { ProviderTransform } from "@/provider/transform"
+import { ProviderTransform } from "./provider/transform"
 
-import PROMPT_GENERATE from "./generate.txt"
-import PROMPT_COMPACTION from "./prompt/compaction.txt"
-import PROMPT_EXPLORE from "./prompt/explore.txt"
-import PROMPT_SUMMARY from "./prompt/summary.txt"
-import PROMPT_TITLE from "./prompt/title.txt"
+import PROMPT_GENERATE from "./generate.txt.ts"
+import PROMPT_COMPACTION from "./prompt/compaction.txt.ts"
+import PROMPT_EXPLORE from "./prompt/explore.txt.ts"
+import PROMPT_SUMMARY from "./prompt/summary.txt.ts"
+import PROMPT_TITLE from "./prompt/title.txt.ts"
 
 import { mergeDeep, pipe, sortBy, values } from "remeda"
-import path from "path"
+import * as path from "./util/path"
 
 export namespace Agent {
   export const Info = z

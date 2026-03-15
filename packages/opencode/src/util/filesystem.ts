@@ -1,5 +1,4 @@
-import { lookup } from "mime-types"
-import { dirname, join, relative, resolve as pathResolve } from "path"
+import { dirname, extname, join, relative, resolve as pathResolve } from "./path"
 import type { AgentContext } from "../context"
 
 export namespace Filesystem {
@@ -60,23 +59,31 @@ export namespace Filesystem {
 
   // ── Path utilities (pure, no fs dependency) ─────────────────────────
 
+  const MIME_MAP: Record<string, string> = {
+    ".html": "text/html", ".css": "text/css", ".js": "application/javascript",
+    ".mjs": "application/javascript", ".json": "application/json",
+    ".ts": "text/typescript", ".tsx": "text/typescript",
+    ".jsx": "text/javascript", ".md": "text/markdown",
+    ".txt": "text/plain", ".csv": "text/csv", ".xml": "application/xml",
+    ".yaml": "text/yaml", ".yml": "text/yaml", ".toml": "text/plain",
+    ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp",
+    ".ico": "image/x-icon", ".pdf": "application/pdf",
+    ".zip": "application/zip", ".gz": "application/gzip",
+    ".wasm": "application/wasm", ".mp4": "video/mp4",
+    ".webm": "video/webm", ".mp3": "audio/mpeg",
+    ".sh": "text/x-shellscript", ".py": "text/x-python",
+    ".rb": "text/x-ruby", ".go": "text/x-go", ".rs": "text/x-rust",
+    ".java": "text/x-java", ".c": "text/x-c", ".cpp": "text/x-c++",
+    ".h": "text/x-c", ".hpp": "text/x-c++",
+  }
+
   export function mimeType(p: string): string {
-    return lookup(p) || "application/octet-stream"
+    return MIME_MAP[extname(p).toLowerCase()] || "application/octet-stream"
   }
 
   export function resolve(p: string): string {
-    return pathResolve(windowsPath(p))
-  }
-
-  export function windowsPath(p: string): string {
-    if (process.platform !== "win32") return p
-    return (
-      p
-        .replace(/^\/([a-zA-Z]):(?:[\\\/]|$)/, (_, drive) => `${drive.toUpperCase()}:/`)
-        .replace(/^\/([a-zA-Z])(?:\/|$)/, (_, drive) => `${drive.toUpperCase()}:/`)
-        .replace(/^\/cygdrive\/([a-zA-Z])(?:\/|$)/, (_, drive) => `${drive.toUpperCase()}:/`)
-        .replace(/^\/mnt\/([a-zA-Z])(?:\/|$)/, (_, drive) => `${drive.toUpperCase()}:/`)
-    )
+    return pathResolve(p)
   }
 
   export function overlaps(a: string, b: string) {

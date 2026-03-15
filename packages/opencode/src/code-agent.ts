@@ -23,36 +23,36 @@
  * ```
  */
 
-import path from "path"
-import type { AgentContext } from "./context"
+import * as path from "./util/path"
+import type { AgentContext, ShellProvider } from "./context"
 import type { Project } from "./project"
 import type { VFS } from "./util/vfs"
 import type { SearchProvider } from "./util/search"
-import { NodeGitProvider, type GitProvider } from "./util/git"
+import type { GitProvider } from "./util/git"
 import { EnvService } from "./util/env"
-import { BusService } from "@/bus"
+import { BusService } from "./bus"
 import { SchedulerService } from "./util/scheduler"
 import { FileTimeService } from "./project"
 import { Database } from "./storage"
 import { ToolRegistry } from "./tool/registry"
 import { Tool } from "./tool/tool"
-import { Session } from "@/session"
-import { SessionPrompt } from "@/session/session"
-import { Bus } from "@/bus"
-import { GlobalBus } from "@/bus"
-import { MessageV2 } from "@/memory/message-v2"
+import { Session } from "./session"
+import { SessionPrompt } from "./session/session"
+import { Bus } from "./bus"
+import { GlobalBus } from "./bus"
+import { MessageV2 } from "./memory/message-v2"
 
 import { Truncate } from "./tool/truncation"
 
 
 
 import { Question } from "./tool/question-service"
-import { SessionStatus } from "@/session"
+import { SessionStatus } from "./session"
 
 
 import { Agent } from "./agent"
-import { Provider } from "@/provider/provider"
-import { ModelsDev } from "@/provider/models"
+import { Provider } from "./provider/provider"
+import { ModelsDev } from "./provider/models"
 import { Skill } from "./skill"
 
 import z from "zod"
@@ -60,12 +60,12 @@ import z from "zod"
 import { NamedError } from "./util/error"
 import { defer } from "./util/fn"
 import { ulid } from "ulid"
-import { PartID, MessageID as MsgID, SessionID } from "@/session/schema"
+import { PartID, MessageID as MsgID, SessionID } from "./session/schema"
 import { SystemPrompt } from "./prompt"
 
 import { ContextCompaction } from "./memory/compaction"
 import { LLMRunner } from "./llm-runner"
-import MAX_STEPS from "./prompt/max-steps.txt"
+import MAX_STEPS from "./prompt/prompt/max-steps.txt.ts"
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -117,9 +117,6 @@ export interface CodeAgentOptions {
      */
     config?: Record<string, unknown>
 
-    /** Skip plugin initialization (useful for testing when MCP/server deps are not available) */
-    skipPlugins?: boolean
-
     /**
 
 
@@ -170,10 +167,21 @@ export interface CodeAgentOptions {
 
     /**
      * Git command executor.
-     * Defaults to NodeGitProvider (shells out to local git binary).
-     * Provide a custom implementation for non-Node environments.
+     * Must be provided by the host (e.g. NodeGitProvider in agent/).
      */
-    git?: GitProvider
+    git: GitProvider
+
+    /**
+     * Initial environment variables snapshot.
+     * Typically `{ ...process.env }` from the host.
+     */
+    env: Record<string, string | undefined>
+
+    /**
+     * Shell execution provider (spawn/kill).
+     * Required — provides process execution for the bash tool.
+     */
+    shell: ShellProvider
 }
 
 export interface CodeAgentSession {
@@ -226,10 +234,10 @@ export class CodeAgent {
 
     constructor(options: CodeAgentOptions) {
         this.options = options
-        this._git = options.git ?? new NodeGitProvider()
+        this._git = options.git
 
         // Create stateless services
-        this.env = new EnvService()
+        this.env = new EnvService(options.env)
         this.bus = new BusService()
         this.scheduler = new SchedulerService()
         this.fileTime = new FileTimeService()
@@ -261,7 +269,6 @@ export class CodeAgent {
         // Set provider API key via environment variable (opencode convention)
         const envKey = this.getProviderEnvKey(this.options.provider.id)
         if (envKey) {
-            process.env[envKey] = this.options.provider.apiKey
             this.env.set(envKey, this.options.provider.apiKey)
         }
 
@@ -269,7 +276,6 @@ export class CodeAgent {
         if (this.options.provider.baseUrl) {
             const baseUrlEnv = this.getProviderBaseUrlEnv(this.options.provider.id)
             if (baseUrlEnv) {
-                process.env[baseUrlEnv] = this.options.provider.baseUrl
                 this.env.set(baseUrlEnv, this.options.provider.baseUrl)
             }
         }
@@ -290,6 +296,7 @@ export class CodeAgent {
             project: (this.options.project ?? { id: "global", worktree }) as any,
             fs: this.options.fs as any,
             git: this._git as any,
+            shell: this.options.shell,
             search: this.options.search as any,
             paths: this.options.paths as any,
             configOverrides: this.options.config as any,
@@ -376,10 +383,6 @@ export class CodeAgent {
                     time_updated: Date.now()
                 })
             }
-        }
-
-        // Initialize plugins (skip if in test/lightweight mode)
-        if (!this.options.skipPlugins) {
         }
 
         this.initialized = true

@@ -1,11 +1,11 @@
 import z from "zod"
-import * as path from "path"
+import * as path from "../util/path"
 import { Tool } from "./tool"
 import { LSP } from "../util/lsp"
 import { createTwoFilesPatch } from "diff"
-import DESCRIPTION from "./write.txt"
-import { Bus } from "@/bus"
-import { File } from "@/project"
+import DESCRIPTION from "./write.txt.ts"
+import { Bus } from "../bus"
+import { File } from "../project"
 
 
 import { trimDiff } from "./edit"

@@ -1,18 +1,11 @@
 import z from "zod"
-import { spawn } from "child_process"
 import { Tool } from "./tool"
-import path from "path"
-import DESCRIPTION from "./bash.txt"
+import * as path from "../util/path"
+import DESCRIPTION from "./bash.txt.ts"
 import { Log } from "../util/log"
-import { lazy } from "@/util/lazy"
-import { Language } from "web-tree-sitter"
 
-
-import { Filesystem } from "@/util/filesystem"
-import { fileURLToPath } from "url"
-import { Flag } from "@/util/flag"
-import { Shell } from "@/util/shell"
-
+import { Filesystem } from "../util/filesystem"
+import { Flag } from "../util/flag"
 
 import { Truncate } from "./truncation"
 
@@ -21,38 +14,78 @@ const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 
 
 export const log = Log.create({ service: "bash-tool" })
 
-const resolveWasm = (asset: string) => {
-  if (asset.startsWith("file://")) return fileURLToPath(asset)
-  if (asset.startsWith("/") || /^[a-z]:/i.test(asset)) return asset
-  const url = new URL(asset, import.meta.url)
-  return fileURLToPath(url)
+// ── Simple bash command parser ─────────────────────────────────────────────
+// Extracts individual commands from a bash string by splitting on ;, &&, ||, |
+// For each command, returns { text, words } where words[0] is the command name.
+
+interface ParsedCommand {
+  /** Full command text (trimmed) */
+  text: string
+  /** Tokenized words (respecting quotes) */
+  words: string[]
 }
 
-const parser = lazy(async () => {
-  const { Parser } = await import("web-tree-sitter")
-  const { default: treeWasm } = await import("web-tree-sitter/tree-sitter.wasm" as string, {
-    with: { type: "wasm" },
-  })
-  const treePath = resolveWasm(treeWasm)
-  await Parser.init({
-    locateFile() {
-      return treePath
-    },
-  })
-  const { default: bashWasm } = await import("tree-sitter-bash/tree-sitter-bash.wasm" as string, {
-    with: { type: "wasm" },
-  })
-  const bashPath = resolveWasm(bashWasm)
-  const bashLanguage = await Language.load(bashPath)
-  const p = new Parser()
-  p.setLanguage(bashLanguage)
-  return p
-})
+function parseBashCommands(input: string): ParsedCommand[] {
+  const results: ParsedCommand[] = []
 
-// TODO: we may wanna rename this tool so it works better on other shells
+  // Split on command separators: &&, ||, ;, |, newlines
+  // This is intentionally simple — AI-generated commands are well-formed
+  const segments = input.split(/\s*(?:&&|\|\||[;|\n])\s*/)
+
+  for (const segment of segments) {
+    const trimmed = segment.trim()
+    if (!trimmed) continue
+
+    const words = tokenize(trimmed)
+    if (words.length > 0) {
+      results.push({ text: trimmed, words })
+    }
+  }
+  return results
+}
+
+/** Tokenize a single command string, respecting single/double quotes */
+function tokenize(input: string): string[] {
+  const words: string[] = []
+  let current = ""
+  let inSingle = false
+  let inDouble = false
+  let escape = false
+
+  for (const ch of input) {
+    if (escape) {
+      current += ch
+      escape = false
+      continue
+    }
+    if (ch === "\\" && !inSingle) {
+      escape = true
+      continue
+    }
+    if (ch === "'" && !inDouble) {
+      inSingle = !inSingle
+      continue
+    }
+    if (ch === '"' && !inSingle) {
+      inDouble = !inDouble
+      continue
+    }
+    if (/\s/.test(ch) && !inSingle && !inDouble) {
+      if (current) {
+        words.push(current)
+        current = ""
+      }
+      continue
+    }
+    current += ch
+  }
+  if (current) words.push(current)
+  return words
+}
+
+// ── Bash Tool ──────────────────────────────────────────────────────────────
+
 export const BashTool = Tool.define("bash", async (initCtx?: Tool.InitContext) => {
-  const shell = await Shell.acceptable(initCtx as any)
-  log.info("bash tool using shell", { shell })
 
   return {
     description: DESCRIPTION.replaceAll("${directory}", initCtx?.directory || "")
@@ -79,48 +112,27 @@ export const BashTool = Tool.define("bash", async (initCtx?: Tool.InitContext) =
         throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
       }
       const timeout = params.timeout ?? DEFAULT_TIMEOUT
-      const tree = await parser().then((p) => p.parse(params.command))
-      if (!tree) {
-        throw new Error("Failed to parse command")
-      }
+
+      const commands = parseBashCommands(params.command)
+
       const directories = new Set<string>()
       if (!ctx.containsPath(cwd)) directories.add(cwd)
       const patterns = new Set<string>()
       const always = new Set<string>()
 
-      for (const node of tree.rootNode.descendantsOfType("command")) {
-        if (!node) continue
-
-        // Get full command text including redirects if present
-        let commandText = node.parent?.type === "redirected_statement" ? node.parent.text : node.text
-
-        const command = []
-        for (let i = 0; i < node.childCount; i++) {
-          const child = node.child(i)
-          if (!child) continue
-          if (
-            child.type !== "command_name" &&
-            child.type !== "word" &&
-            child.type !== "string" &&
-            child.type !== "raw_string" &&
-            child.type !== "concatenation"
-          ) {
-            continue
-          }
-          command.push(child.text)
-        }
+      for (const cmd of commands) {
+        if (!cmd.words.length) continue
+        const [name, ...args] = cmd.words
 
         // not an exhaustive list, but covers most common cases
-        if (["cd", "rm", "cp", "mv", "mkdir", "touch", "chmod", "chown", "cat"].includes(command[0])) {
-          for (const arg of command.slice(1)) {
-            if (arg.startsWith("-") || (command[0] === "chmod" && arg.startsWith("+"))) continue
+        if (["cd", "rm", "cp", "mv", "mkdir", "touch", "chmod", "chown", "cat"].includes(name)) {
+          for (const arg of args) {
+            if (arg.startsWith("-") || (name === "chmod" && arg.startsWith("+"))) continue
             const resolved = Filesystem.resolve(path.resolve(cwd, arg))
             log.info("resolved path", { arg, resolved })
             if (resolved) {
-              const normalized =
-                process.platform === "win32" ? Filesystem.windowsPath(resolved).replace(/\//g, "\\") : resolved
-              if (!ctx.containsPath(normalized)) {
-                const dir = (await Filesystem.isDir(ctx, normalized)) ? normalized : path.dirname(normalized)
+              if (!ctx.containsPath(resolved)) {
+                const dir = (await Filesystem.isDir(ctx, resolved)) ? resolved : path.dirname(resolved)
                 directories.add(dir)
               }
             }
@@ -128,15 +140,14 @@ export const BashTool = Tool.define("bash", async (initCtx?: Tool.InitContext) =
         }
 
         // cd covered by above check
-        if (command.length && command[0] !== "cd") {
-          patterns.add(commandText)
-          always.add(command.slice(0, 1).join(" ") + " *")
+        if (name !== "cd") {
+          patterns.add(cmd.text)
+          always.add(name + " *")
         }
       }
 
       if (directories.size > 0) {
         const globs = Array.from(directories).map((dir) => {
-          // Preserve POSIX-looking paths with /s, even on Windows
           if (dir.startsWith("/")) return `${dir.replace(/[\\/]+$/, "")}/*`
           return path.join(dir, "*")
         })
@@ -157,18 +168,10 @@ export const BashTool = Tool.define("bash", async (initCtx?: Tool.InitContext) =
         })
       }
 
-      const shellEnv = { env: {} as Record<string, string> }
-      const proc = spawn(params.command, {
-        shell,
+      const proc = ctx.shell.spawn(params.command, {
         cwd,
-        env: {
-          ...process.env,
-          ...shellEnv.env,
-        },
-        stdio: ["ignore", "pipe", "pipe"],
-        detached: process.platform !== "win32",
-        windowsHide: process.platform === "win32",
-      } as any)
+        env: {},
+      })
 
       let output = ""
 
@@ -184,7 +187,6 @@ export const BashTool = Tool.define("bash", async (initCtx?: Tool.InitContext) =
         output += chunk.toString()
         ctx.metadata({
           metadata: {
-            // truncate the metadata to avoid GIANT blobs of data (has nothing to do w/ what agent can access)
             output: output.length > MAX_METADATA_LENGTH ? output.slice(0, MAX_METADATA_LENGTH) + "\n\n..." : output,
             description: params.description,
           },
@@ -198,7 +200,7 @@ export const BashTool = Tool.define("bash", async (initCtx?: Tool.InitContext) =
       let aborted = false
       let exited = false
 
-      const kill = () => Shell.killTree(proc, { exited: () => exited })
+      const kill = () => ctx.shell.kill(proc, { exited: () => exited })
 
       if (ctx.abort.aborted) {
         aborted = true

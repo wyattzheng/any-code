@@ -1,8 +1,8 @@
-import type { AgentContext } from "@/context"
+import type { AgentContext } from "../context"
 import { EventEmitter } from "events"
 import z from "zod"
 import type { ZodType } from "zod"
-import { Log } from "@/util/log"
+import { Log } from "../util/log"
 
 // ── GlobalBus (process-level singleton) ─────────────────────────────
 

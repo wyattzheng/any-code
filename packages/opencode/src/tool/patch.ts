@@ -1,6 +1,6 @@
-import type { AgentContext } from "@/context"
+import type { AgentContext } from "../context"
 import z from "zod"
-import * as path from "path"
+import * as path from "../util/path"
 import { Filesystem } from "../util/filesystem"
 import { Log } from "../util/log"
 

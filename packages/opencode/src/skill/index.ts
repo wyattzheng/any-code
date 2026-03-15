@@ -1,18 +1,18 @@
-import type { AgentContext } from "@/context"
-import path from "path"
-import os from "os"
+import type { AgentContext } from "../context"
+import * as path from "../util/path"
+
 import z from "zod"
 
-import { NamedError } from "@/util/error"
+import { NamedError } from "../util/error"
 import { ConfigMarkdown } from "../util/markdown"
 import { Log } from "../util/log"
-import { Filesystem } from "@/util/filesystem"
-import { Flag } from "@/util/flag"
-import { Bus } from "@/bus"
-import { Session } from "@/session"
+import { Filesystem } from "../util/filesystem"
+import { Flag } from "../util/flag"
+import { Bus } from "../bus"
+import { Session } from "../session"
 import { Glob } from "../util/glob"
 import { pathToFileURL } from "url"
-import type { Agent } from "@/agent"
+import type { Agent } from "../agent"
 
 // ── Discovery ───────────────────────────────────────────────────────────────
 
@@ -252,7 +252,7 @@ export namespace Skill {
     // Scan additional skill paths from config
     const config = context.config
     for (const skillPath of config.skills?.paths ?? []) {
-      const expanded = skillPath.startsWith("~/") ? path.join(os.homedir(), skillPath.slice(2)) : skillPath
+      const expanded = skillPath.startsWith("~/") ? path.join(context.paths.home, skillPath.slice(2)) : skillPath
       const resolved = path.isAbsolute(expanded) ? expanded : path.join(context.directory, expanded)
       if (!(await Filesystem.isDir(context, resolved))) {
         log.warn("skill path not found", { path: resolved })

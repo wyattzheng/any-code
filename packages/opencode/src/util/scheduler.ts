@@ -1,4 +1,4 @@
-import type { AgentContext } from "@/context"
+import type { AgentContext } from "../context"
 import { Log } from "../util/log"
 
 /**

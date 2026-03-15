@@ -1,14 +1,14 @@
-import type { AgentContext } from "@/context"
-import type { Provider } from "@/provider/provider"
-import type { Agent } from "@/agent"
-import { Skill } from "@/skill"
+import type { AgentContext } from "../context"
+import type { Provider } from "../provider/provider"
+import type { Agent } from "../agent"
+import { Skill } from "../skill"
 
-import PROMPT_ANTHROPIC from "./anthropic.txt"
-import PROMPT_ANTHROPIC_WITHOUT_TODO from "./qwen.txt"
-import PROMPT_BEAST from "./beast.txt"
-import PROMPT_GEMINI from "./gemini.txt"
-import PROMPT_CODEX from "./codex_header.txt"
-import PROMPT_TRINITY from "./trinity.txt"
+import PROMPT_ANTHROPIC from "./prompt/anthropic.txt.ts"
+import PROMPT_ANTHROPIC_WITHOUT_TODO from "./prompt/qwen.txt.ts"
+import PROMPT_BEAST from "./prompt/beast.txt.ts"
+import PROMPT_GEMINI from "./prompt/gemini.txt.ts"
+import PROMPT_CODEX from "./prompt/codex_header.txt.ts"
+import PROMPT_TRINITY from "./prompt/trinity.txt.ts"
 
 export namespace SystemPrompt {
   export function instructions() {
@@ -35,14 +35,13 @@ export namespace SystemPrompt {
         `  Working directory: ${context.directory}`,
         `  Workspace root folder: ${context.worktree}`,
         `  Is directory a git repo: ${project.vcs === "git" ? "yes" : "no"}`,
-        `  Platform: ${process.platform}`,
+        `  Platform: ${context.shell.platform}`,
         `  Today's date: ${new Date().toDateString()}`,
         `</env>`,
         `<directories>`,
-        `  ${
-          project.vcs === "git" && false
-            ? await context.search?.tree({ cwd: context.directory, limit: 50 })
-            : ""
+        `  ${project.vcs === "git" && false
+          ? await context.search?.tree({ cwd: context.directory, limit: 50 })
+          : ""
         }`,
         `</directories>`,
       ].join("\n"),

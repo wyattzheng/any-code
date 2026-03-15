@@ -2,7 +2,7 @@ import z from "zod"
 import { text } from "node:stream/consumers"
 import { Tool } from "./tool"
 
-import path from "path"
+import * as path from "../util/path"
 import { assertExternalDirectory } from "./external-directory"
 
 const MAX_LINE_LENGTH = 2000

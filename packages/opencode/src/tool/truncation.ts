@@ -1,11 +1,11 @@
-import path from "path"
+import * as path from "../util/path"
 import { Identifier } from "../util/id"
 import type { Agent } from "../agent"
 import { Scheduler } from "../util/scheduler"
 import { Filesystem } from "../util/filesystem"
 import { Glob } from "../util/glob"
 import { ToolID } from "./schema"
-import type { AgentContext } from "@/context"
+import type { AgentContext } from "../context"
 
 export namespace Truncate {
   export const MAX_LINES = 2000

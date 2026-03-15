@@ -1,8 +1,8 @@
 import z from "zod"
-import path from "path"
+import * as path from "../util/path"
 import { Tool } from "./tool"
 
-import DESCRIPTION from "./glob.txt"
+import DESCRIPTION from "./glob.txt.ts"
 import { assertExternalDirectory } from "./external-directory"
 
 export const GlobTool = Tool.define("glob", {

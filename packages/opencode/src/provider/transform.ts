@@ -4,7 +4,7 @@ import type { JSONSchema7 } from "@ai-sdk/provider"
 import type { JSONSchema } from "zod/v4/core"
 import type { Provider } from "./provider"
 import type { ModelsDev } from "./models"
-import { Flag } from "@/util/flag"
+import { Flag } from "../util/flag"
 
 type Modality = NonNullable<ModelsDev.Model["modalities"]>["input"][number]
 

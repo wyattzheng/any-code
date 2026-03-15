@@ -16,12 +16,7 @@
       "DOM.Iterable"
     ],
     "types": [],
-    "noUncheckedIndexedAccess": false,
-    "paths": {
-      "@/*": [
-        "./src/*"
-      ]
-    }
+    "noUncheckedIndexedAccess": false
   },
   "include": [
     "src"

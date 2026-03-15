@@ -6,8 +6,19 @@
   "license": "MIT",
   "private": true,
   "exports": {
-    ".": "./src/index.ts",
-    "./*": "./src/*.ts"
+    ".": "./dist/index.js",
+    "./code-agent": "./dist/code-agent.js",
+    "./storage/index": "./dist/storage/index.js",
+    "./util/search": "./dist/util/search.js",
+    "./util/git": "./dist/util/git.js",
+    "./util/markdown": "./dist/util/markdown.js",
+    "./project/index": "./dist/project/index.js",
+    "./session/index": "./dist/session/index.js",
+    "./memory/message-v2": "./dist/memory/message-v2.js",
+    "./skill/index": "./dist/skill/index.js"
+  },
+  "scripts": {
+    "build": "tsup"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.11",
@@ -18,6 +29,7 @@
     "drizzle-kit": "1.0.0-beta.16-ea816b6",
     "drizzle-orm": "1.0.0-beta.16-ea816b6",
     "typescript": "5.8.2",
+    "tsup": "^8.4.0",
     "vscode-languageserver-types": "3.17.5",
     "zod-to-json-schema": "3.24.5"
   },

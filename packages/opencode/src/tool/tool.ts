@@ -1,8 +1,8 @@
 import z from "zod"
-import type { MessageV2 } from "@/memory/message-v2"
+import type { MessageV2 } from "../memory/message-v2"
 import type { Agent } from "../agent"
 
-import type { SessionID, MessageID } from "@/session/schema"
+import type { SessionID, MessageID } from "../session/schema"
 import { Truncate } from "./truncation"
 
 export namespace Tool {

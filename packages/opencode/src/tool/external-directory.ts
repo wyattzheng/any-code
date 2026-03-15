@@ -1,4 +1,4 @@
-import path from "path"
+import * as path from "../util/path"
 import type { Tool } from "./tool"
 
 type Kind = "file" | "directory"

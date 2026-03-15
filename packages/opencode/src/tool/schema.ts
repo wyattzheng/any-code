@@ -1,8 +1,8 @@
 import { Schema } from "effect"
 import z from "zod"
 
-import { Identifier } from "@/util/id"
-import { withStatics } from "@/util/schema"
+import { Identifier } from "../util/id"
+import { withStatics } from "../util/schema"
 
 const toolIdSchema = Schema.String.pipe(Schema.brand("ToolID"))
 

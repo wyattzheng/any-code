@@ -4,14 +4,14 @@
 // https://github.com/cline/cline/blob/main/evals/diff-edits/diff-apply/diff-06-26-25.ts
 
 import z from "zod"
-import * as path from "path"
+import * as path from "../util/path"
 import { Tool } from "./tool"
 import { LSP } from "../util/lsp"
 import { createTwoFilesPatch, diffLines } from "diff"
-import DESCRIPTION from "./edit.txt"
-import { File } from "@/project"
+import DESCRIPTION from "./edit.txt.ts"
+import { File } from "../project"
 
-import { Bus } from "@/bus"
+import { Bus } from "../bus"
 
 
 import { assertExternalDirectory } from "./external-directory"

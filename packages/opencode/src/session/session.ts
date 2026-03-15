@@ -1,55 +1,55 @@
-import path from "path"
-import os from "os"
+import * as path from "../util/path"
+
 
 import z from "zod"
-import { Filesystem } from "@/util/filesystem"
+import { Filesystem } from "../util/filesystem"
 import { SessionID, MessageID, PartID } from "./schema"
-import { MessageV2 } from "@/memory/message-v2"
-import { Log } from "@/util/log"
+import { MessageV2 } from "../memory/message-v2"
+import { Log } from "../util/log"
 
 import { Session } from "."
-import { Agent } from "@/agent"
-import { Provider } from "@/provider/provider"
-import { ModelID, ProviderID } from "@/provider/schema"
+import { Agent } from "../agent"
+import { Provider } from "../provider/provider"
+import { ModelID, ProviderID } from "../provider/schema"
 import { type Tool as AITool, tool, jsonSchema, type ToolCallOptions, asSchema, wrapLanguageModel, type ModelMessage, type StreamTextResult, type ToolSet, streamText } from "ai"
 import { mergeDeep, pipe } from "remeda"
-import { Bus } from "@/bus"
-import { ProviderTransform } from "@/provider/transform"
-import { SystemPrompt } from "@/prompt"
+import { Bus } from "../bus"
+import { ProviderTransform } from "../provider/transform"
+import { SystemPrompt } from "../prompt"
 
-import { type AgentContext } from "@/context"
-import PROMPT_PLAN from "@/prompt/plan.txt"
-import BUILD_SWITCH from "@/prompt/build-switch.txt"
-import MAX_STEPS from "@/prompt/max-steps.txt"
-import { defer } from "@/util/fn"
-import { ToolRegistry } from "@/tool/registry"
+import { type AgentContext } from "../context"
+import PROMPT_PLAN from "../prompt/prompt/plan.txt.ts"
+import BUILD_SWITCH from "../prompt/prompt/build-switch.txt.ts"
+import MAX_STEPS from "../prompt/prompt/max-steps.txt.ts"
+import { defer } from "../util/fn"
+import { ToolRegistry } from "../tool/registry"
 // MCP module removed (agent mode)
-import { LSP } from "@/util/lsp"
-import { ReadTool } from "@/tool/read"
-import { FileTime } from "@/project"
-import { Flag } from "@/util/flag"
+import { LSP } from "../util/lsp"
+import { ReadTool } from "../tool/read"
+import { FileTime } from "../project"
+import { Flag } from "../util/flag"
 import { ulid } from "ulid"
 
 import { pathToFileURL, fileURLToPath } from "url"
-import { ConfigMarkdown } from "@/util/markdown"
+import { ConfigMarkdown } from "../util/markdown"
 
-import { NamedError } from "@/util/error"
-import { fn } from "@/util/fn"
-import { Tool } from "@/tool/tool"
+import { NamedError } from "../util/error"
+import { fn } from "../util/fn"
+import { Tool } from "../tool/tool"
 
 import { SessionStatus } from "."
-import { LLMRunner, LLM } from "@/llm-runner"
-import { iife } from "@/util/fn"
-import { Truncate } from "@/tool/truncation"
-import { decodeDataUrl } from "@/util/data-url"
+import { LLMRunner, LLM } from "../llm-runner"
+import { iife } from "../util/fn"
+import { Truncate } from "../tool/truncation"
+import { decodeDataUrl } from "../util/data-url"
 
 
 
-import { Question } from "@/tool/question-service"
-import { Installation } from "@/util/installation"
-import { BusEvent } from "@/bus"
-import { Token } from "@/util/fn"
-import { Auth } from "@/util/auth"
+import { Question } from "../tool/question-service"
+import { Installation } from "../util/installation"
+import { BusEvent } from "../bus"
+import { Token } from "../util/fn"
+import { Auth } from "../util/auth"
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
 
@@ -171,7 +171,7 @@ export namespace SessionPrompt {
         if (seen.has(name)) return
         seen.add(name)
         const filepath = name.startsWith("~/")
-          ? path.join(os.homedir(), name.slice(2))
+          ? path.join(context.paths.home, name.slice(2))
           : path.resolve(context.worktree, name)
 
         const stats = await Filesystem.stat(context, filepath).catch(() => undefined)

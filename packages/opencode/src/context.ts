@@ -3,24 +3,46 @@ import { VFS } from "./util/vfs"
 import { SearchProvider } from "./util/search"
 import type { GitProvider } from "./util/git"
 import type { EnvService } from "./util/env"
-import type { BusService } from "@/bus"
+import type { BusService } from "./bus"
 import type { SchedulerService } from "./util/scheduler"
 import type { FileTimeService } from "./project"
 
 import type { Question } from "./tool/question-service"
-import type { SessionStatus } from "@/session"
+import type { SessionStatus } from "./session"
 
-import type { SessionPrompt } from "@/session/session"
+import type { SessionPrompt } from "./session/session"
 
 
 import type { Agent } from "./agent"
-import type { Provider } from "@/provider/provider"
-import type { ModelsDev } from "@/provider/models"
+import type { Provider } from "./provider/provider"
+import type { ModelsDev } from "./provider/models"
 import type { ToolRegistry } from "./tool/registry"
 import type { Skill } from "./skill"
 
 
 
+/** Abstraction over child_process for bash tool execution */
+export interface ShellProcess {
+    readonly pid: number | undefined
+    readonly exitCode: number | null
+    readonly stdout: { on(event: "data", cb: (chunk: Buffer) => void): void } | null
+    readonly stderr: { on(event: "data", cb: (chunk: Buffer) => void): void } | null
+    once(event: "exit", cb: (code: number | null) => void): void
+    once(event: "error", cb: (err: Error) => void): void
+    kill(signal?: string): boolean
+}
+
+export interface ShellProvider {
+    /** Platform identifier (e.g. "darwin", "linux", "win32") */
+    platform: string
+    /** Spawn a command in the shell */
+    spawn(command: string, opts: {
+        cwd: string
+        env: Record<string, string | undefined>
+    }): ShellProcess
+    /** Kill a process and all its children */
+    kill(proc: ShellProcess, opts?: { exited?: () => boolean }): Promise<void>
+}
 
 export interface InstancePaths {
     data: string
@@ -43,6 +65,8 @@ export interface AgentContext {
     fs: VFS
     /** Git command executor */
     git: GitProvider
+    /** Shell execution (spawn/kill) */
+    shell: ShellProvider
     /** Search Provider implementation */
     search: SearchProvider
     /** Common local paths specific to this context */

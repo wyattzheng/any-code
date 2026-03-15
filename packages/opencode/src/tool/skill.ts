@@ -1,9 +1,9 @@
-import path from "path"
+import * as path from "../util/path"
 import { pathToFileURL } from "url"
 import z from "zod"
 import { Tool } from "./tool"
 import { Skill } from "../skill"
-import { iife } from "@/util/fn"
+import { iife } from "../util/fn"
 
 export const SkillTool = Tool.define("skill", async (ctx) => {
   const list = await ctx?.agentContext?.skill.available(ctx?.agent) ?? []

@@ -1,17 +1,17 @@
-import type { AgentContext } from "@/context"
-import { Bus } from "@/bus"
+import type { AgentContext } from "../context"
+import { Bus } from "../bus"
 import { Decimal } from "decimal.js"
 import z from "zod"
 import { type ProviderMetadata } from "ai"
 
-import { SessionID, MessageID, PartID } from "@/session/schema"
-import { MessageV2 } from "@/memory/message-v2"
-import type { Provider } from "@/provider/provider"
+import { SessionID, MessageID, PartID } from "../session/schema"
+import { MessageV2 } from "./message-v2"
+import type { Provider } from "../provider/provider"
 import type { LanguageModelV2Usage } from "@ai-sdk/provider"
 
-import { fn } from "@/util/fn"
-import { iife } from "@/util/fn"
-import { NotFoundError } from "@/storage"
+import { fn } from "../util/fn"
+import { iife } from "../util/fn"
+import { NotFoundError } from "../storage"
 
 export namespace Memory {
   export async function updateMessage(context: AgentContext, msg: any) {

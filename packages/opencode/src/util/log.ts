@@ -1,6 +1,4 @@
-import path from "path"
-import fs from "fs/promises"
-import { createWriteStream } from "fs"
+import * as path from "./path"
 import z from "zod"
 
 export namespace Log {
@@ -50,45 +48,26 @@ export namespace Log {
   export function file() {
     return logpath
   }
+
+  /** The write function can be replaced at init time (e.g. to write to a file stream) */
   let write = (msg: any) => {
-    process.stderr.write(msg)
+    console.error(msg)
     return msg.length
   }
 
-  export async function init(options: Options & { paths: { log: string } }) {
+  export async function init(options: Options & { paths: { log: string }; writer?: (msg: string) => void }) {
     if (options.level) level = options.level
-    cleanup(options.paths.log)
+    if (options.writer) {
+      write = (msg: any) => {
+        options.writer!(msg)
+        return msg.length
+      }
+    }
     if (options.print) return
     logpath = path.join(
       options.paths.log,
       options.dev ? "dev.log" : new Date().toISOString().split(".")[0].replace(/:/g, "") + ".log",
     )
-    await fs.truncate(logpath).catch(() => {})
-    const stream = createWriteStream(logpath, { flags: "a" })
-    write = async (msg: any) => {
-      return new Promise((resolve, reject) => {
-        stream.write(msg, (err) => {
-          if (err) reject(err)
-          else resolve(msg.length)
-        })
-      })
-    }
-  }
-
-  async function cleanup(dir: string) {
-    try {
-      const entries = await fs.readdir(dir)
-      const logPattern = /^\d{4}-\d{2}-\d{2}T\d{6}\.log$/
-      const files = entries
-        .filter(e => logPattern.test(e))
-        .map(e => path.join(dir, e))
-        .sort()
-      if (files.length <= 5) return
-      const filesToDelete = files.slice(0, -10)
-      await Promise.all(filesToDelete.map((file) => fs.unlink(file).catch(() => {})))
-    } catch {
-      // dir may not exist yet
-    }
   }
 
   function formatError(error: Error, depth = 0): string {

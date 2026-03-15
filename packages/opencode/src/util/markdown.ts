@@ -1,5 +1,5 @@
-import type { AgentContext } from "@/context"
-import { NamedError } from "@/util/error"
+import type { AgentContext } from "../context"
+import { NamedError } from "./error"
 import matter from "gray-matter"
 import { z } from "zod"
 import { Filesystem } from "../util/filesystem"

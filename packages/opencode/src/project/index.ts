@@ -2,22 +2,22 @@
 
 import { Schema } from "effect"
 import z from "zod"
-import { withStatics } from "@/util/schema"
+import { withStatics } from "../util/schema"
 import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core"
-import { Timestamps } from "@/storage"
-import type { AgentContext } from "@/context"
-import { Filesystem } from "@/util/filesystem"
-import path from "path"
-import os from "os"
-import { Log } from "@/util/log"
-import { Flag } from "@/util/flag"
-import { fn } from "@/util/fn"
-import { BusEvent } from "@/bus"
-import { Bus } from "@/bus"
-import { iife } from "@/util/fn"
-import { GlobalBus } from "@/bus"
-import { Glob } from "@/util/glob"
-import { which } from "@/util/which"
+import { Timestamps } from "../storage"
+import type { AgentContext } from "../context"
+import { Filesystem } from "../util/filesystem"
+import * as path from "../util/path"
+
+import { Log } from "../util/log"
+import { Flag } from "../util/flag"
+import { fn } from "../util/fn"
+import { BusEvent } from "../bus"
+import { Bus } from "../bus"
+import { iife } from "../util/fn"
+import { GlobalBus } from "../bus"
+import { Glob } from "../util/glob"
+import { which } from "../util/which"
 
 
 
@@ -50,7 +50,7 @@ export const ProjectTable = sqliteTable("project", {
 
 // ── Protected ───────────────────────────────────────────────────────────────
 
-const home = os.homedir()
+
 
 const DARWIN_HOME = [
   "Music", "Pictures", "Movies", "Downloads", "Desktop", "Documents",
@@ -67,20 +67,20 @@ const DARWIN_ROOT = ["/.DocumentRevisions-V100", "/.Spotlight-V100", "/.Trashes"
 const WIN32_HOME = ["AppData", "Downloads", "Desktop", "Documents", "Pictures", "Music", "Videos", "OneDrive"]
 
 export namespace Protected {
-  export function names(): ReadonlySet<string> {
-    if (process.platform === "darwin") return new Set(DARWIN_HOME)
-    if (process.platform === "win32") return new Set(WIN32_HOME)
+  export function names(platform: string): ReadonlySet<string> {
+    if (platform === "darwin") return new Set(DARWIN_HOME)
+    if (platform === "win32") return new Set(WIN32_HOME)
     return new Set()
   }
 
-  export function paths(): string[] {
-    if (process.platform === "darwin")
+  export function paths(home: string, platform: string): string[] {
+    if (platform === "darwin")
       return [
         ...DARWIN_HOME.map((n) => path.join(home, n)),
         ...DARWIN_LIBRARY.map((n) => path.join(home, "Library", n)),
         ...DARWIN_ROOT,
       ]
-    if (process.platform === "win32") return WIN32_HOME.map((n) => path.join(home, n))
+    if (platform === "win32") return WIN32_HOME.map((n) => path.join(home, n))
     return []
   }
 }

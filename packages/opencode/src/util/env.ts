@@ -9,8 +9,8 @@ import type { AgentContext } from "../context"
 export class EnvService {
   private env: Record<string, string | undefined>
 
-  constructor() {
-    this.env = { ...process.env } as Record<string, string | undefined>
+  constructor(initialEnv: Record<string, string | undefined> = {}) {
+    this.env = { ...initialEnv }
   }
 
   get(key: string): string | undefined {
