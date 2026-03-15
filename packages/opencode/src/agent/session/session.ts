@@ -6,7 +6,7 @@ import { Filesystem } from "@/util/filesystem"
 import { SessionID, MessageID, PartID } from "./schema"
 import { MessageV2 } from "@/agent/memory/message-v2"
 import { Log } from "@/util/log"
-import { SessionRevert } from "@/session/revert"
+
 import { Session } from "."
 import { Agent } from "@/agent/agent"
 import { Provider } from "@/agent/provider/provider"
@@ -16,7 +16,7 @@ import { mergeDeep, pipe } from "remeda"
 import { Bus } from "@/agent/bus"
 import { ProviderTransform } from "@/agent/provider/transform"
 import { SystemPrompt } from "@/agent/prompt"
-import { InstructionPrompt } from "@/session/instruction"
+
 import { type AgentContext } from "@/agent/context"
 import PROMPT_PLAN from "@/agent/prompt/plan.txt"
 import BUILD_SWITCH from "@/agent/prompt/build-switch.txt"
@@ -32,7 +32,7 @@ import { ulid } from "ulid"
 
 import { pathToFileURL, fileURLToPath } from "url"
 import { ConfigMarkdown } from "@/util/markdown"
-import { SessionSummary } from "@/session/summary"
+
 import { NamedError } from "@/util/error"
 import { fn } from "@/util/fn"
 import { Tool } from "@/tool/tool"
@@ -379,7 +379,7 @@ export namespace SessionPrompt {
       format: input.format,
       variant,
     }
-    using _ = defer(() => input.context.instruction.clear(info.id))
+
 
     type Draft<T> = T extends MessageV2.Part ? Omit<T, "id"> & { id?: string } : never
     const assign = (part: Draft<MessageV2.Part>): MessageV2.Part => ({

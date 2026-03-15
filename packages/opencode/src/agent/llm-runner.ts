@@ -18,7 +18,7 @@ import { iife } from "@/util/iife"
 
 
 import { Bus } from "@/agent/bus"
-import { SessionSummary } from "@/session/summary"
+
 import { Question } from "@/tool/question-service"
 
 export namespace SessionRetry {
@@ -579,10 +579,7 @@ export namespace LLMRunner {
                     cost: usage.cost,
                   })
                   await Session.updateMessage(input.context, input.assistantMessage)
-                  SessionSummary.summarize(input.context, {
-                    sessionID: input.sessionID,
-                    messageID: input.assistantMessage.parentID,
-                  })
+
                   if (
                     !input.assistantMessage.summary &&
                     (await ContextCompaction.isOverflow({ tokens: usage.tokens, model: input.model, context: input.context }))

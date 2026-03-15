@@ -6,7 +6,7 @@ import { LSP } from "../util/lsp"
 
 import DESCRIPTION from "./read.txt"
 import { assertExternalDirectory } from "./external-directory"
-import { InstructionPrompt } from "../session/instruction"
+
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -105,7 +105,6 @@ export const ReadTool = Tool.define("read", {
       }
     }
 
-    const instructions = await ctx.instruction.resolve(ctx.messages, filepath, ctx.messageID)
 
     // Exclude SVG (XML-based) and vnd.fastbidsheet (.fbs extension, commonly FlatBuffers schema files)
     const { lookup } = await import("mime-types")
@@ -120,7 +119,7 @@ export const ReadTool = Tool.define("read", {
         metadata: {
           preview: msg,
           truncated: false,
-          loaded: instructions.map((i) => i.filepath),
+          loaded: [],
         },
         attachments: [
           {
@@ -196,9 +195,7 @@ export const ReadTool = Tool.define("read", {
     LSP.touchFile(filepath, false)
     ctx.fileTime.read(ctx.sessionID, filepath)
 
-    if (instructions.length > 0) {
-      output += `\n\n<system-reminder>\n${instructions.map((i) => i.content).join("\n\n")}\n</system-reminder>`
-    }
+
 
     return {
       title,
@@ -206,7 +203,7 @@ export const ReadTool = Tool.define("read", {
       metadata: {
         preview,
         truncated,
-        loaded: instructions.map((i) => i.filepath),
+        loaded: [] as string[],
       },
     }
   },

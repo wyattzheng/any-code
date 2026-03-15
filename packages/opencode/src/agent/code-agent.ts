@@ -48,7 +48,7 @@ import { Truncate } from "../tool/truncation"
 
 import { Question } from "../tool/question-service"
 import { SessionStatus } from "@/agent/session"
-import { InstructionPrompt } from "../session/instruction"
+
 
 import { Agent } from "../agent/agent"
 import { Provider } from "@/agent/provider/provider"
@@ -56,13 +56,13 @@ import { ModelsDev } from "@/agent/provider/models"
 import { Skill } from "../skill"
 
 import z from "zod"
-import { SessionRevert } from "../session/revert"
+
 import { NamedError } from "../util/error"
 import { defer } from "../util/defer"
 import { ulid } from "ulid"
 import { PartID, MessageID as MsgID, SessionID } from "@/agent/session/schema"
 import { SystemPrompt } from "./prompt"
-import { SessionSummary } from "../session/summary"
+
 import { ContextCompaction } from "./memory/compaction"
 import { LLMRunner } from "./llm-runner"
 import MAX_STEPS from "./prompt/max-steps.txt"
@@ -311,7 +311,7 @@ export class CodeAgent {
         ctx.config = (this.options.config ?? {}) as Record<string, any>
         ctx.question = new Question.QuestionService()
         ctx.sessionStatus = new SessionStatus.SessionStatusService(ctx)
-        ctx.instruction = new InstructionPrompt.InstructionService()
+
         ctx.sessionPrompt = new SessionPrompt.SessionPromptService()
 
 
@@ -324,8 +324,6 @@ export class CodeAgent {
 
 
 
-        // Bind context to services that need it for instance methods
-        ctx.instruction.bind(ctx)
 
         ctx.provider.bind(ctx)
         ctx.question.bind(ctx)
@@ -594,7 +592,7 @@ export class CodeAgent {
     async prepare(input: SessionPrompt.PromptInput): Promise<MessageV2.WithParts | void> {
         const context = this.agentContext
         const session = await Session.get(context, input.sessionID)
-        await SessionRevert.cleanup(context, session)
+
 
         const message = await SessionPrompt.createUserMessage(context, input)
         await Session.touch(context, input.sessionID)
@@ -738,7 +736,7 @@ export class CodeAgent {
             })) as MessageV2.Assistant,
             sessionID, model, abort, context,
         })
-        using _ = defer(() => context.instruction.clear(processor.message.id))
+
 
         const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
         const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
@@ -756,7 +754,7 @@ export class CodeAgent {
         }
 
         if (step === 1) {
-            SessionSummary.summarize(context, { sessionID, messageID: lastUser.id })
+
         }
 
         // Ephemerally wrap queued user messages
@@ -782,7 +780,7 @@ export class CodeAgent {
         const system = [
             ...(await SystemPrompt.environment(model, context)),
             ...(skills ? [skills] : []),
-            ...(await context.instruction.system()),
+
         ]
         const format = lastUser.format ?? { type: "text" }
         if (format.type === "json_schema") {

@@ -9,7 +9,7 @@ import type { FileTimeService } from "./project"
 
 import type { Question } from "../tool/question-service"
 import type { SessionStatus } from "@/agent/session"
-import type { InstructionPrompt } from "../session/instruction"
+
 import type { SessionPrompt } from "@/agent/session/session"
 
 
@@ -67,7 +67,7 @@ export interface AgentContext {
     config: Record<string, any>
     question: Question.QuestionService
     sessionStatus: SessionStatus.SessionStatusService
-    instruction: InstructionPrompt.InstructionService
+
     sessionPrompt: SessionPrompt.SessionPromptService
 
 
