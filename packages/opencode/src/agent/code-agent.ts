@@ -582,6 +582,8 @@ export class CodeAgent {
                         context: this.agentContext,
                     })
 
+                    await this.runLoop(sessionId as any)
+
                 } catch (err: any) {
                     console.error("Error from SessionPrompt.prompt:", err)
                     push({
@@ -666,7 +668,8 @@ export class CodeAgent {
     // ── Core Loop ──────────────────────────────────────────────────
 
     /**
-     * Entry point — create user message and enter the agent loop.
+     * Prepare a prompt — create user message, set permissions.
+     * Call runLoop() after this to start the agent loop.
      */
     async prepare(input: SessionPrompt.PromptInput): Promise<MessageV2.WithParts | void> {
         const context = this.agentContext
@@ -684,8 +687,7 @@ export class CodeAgent {
             session.permission = permissions
             await Session.setPermission(context, { sessionID: session.id, permission: permissions })
         }
-        if (input.noReply === true) return message
-        return this.runLoop(input.sessionID)
+        return message
     }
 
     /**
