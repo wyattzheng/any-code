@@ -142,7 +142,7 @@ describe("Cross-agent DB recovery: close agent → reopen → verify data", () =
 
         // Record what agent1 sees
         const { Session } = await import("@any-code/opencode/session/index")
-        const { MessageV2 } = await import("@any-code/opencode/session/message-v2")
+        const { MessageV2 } = await import("@any-code/opencode/agent/memory/message-v2")
 
         const originalMsgs = await Session.messages(agent1.agentContext, { sessionID: sessionId })
         expect(originalMsgs.length).toBeGreaterThanOrEqual(2)

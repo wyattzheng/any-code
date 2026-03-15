@@ -5,7 +5,7 @@ import z from "zod"
 import { type ProviderMetadata } from "ai"
 
 import { SessionID, MessageID, PartID } from "@/session/schema"
-import { MessageV2 } from "@/session/message-v2"
+import { MessageV2 } from "@/agent/memory/message-v2"
 import type { Provider } from "@/provider/provider"
 import type { LanguageModelV2Usage } from "@ai-sdk/provider"
 

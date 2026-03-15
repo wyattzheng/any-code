@@ -6,7 +6,7 @@ import type { AgentContext } from "@/agent/context"
 import { Flag } from "@/util/flag"
 import { Log } from "../util/log"
 import { Glob } from "../util/glob"
-import type { MessageV2 } from "./message-v2"
+import type { MessageV2 } from "@/agent/memory/message-v2"
 
 const log = Log.create({ service: "instruction" })
 

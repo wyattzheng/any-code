@@ -2,7 +2,7 @@ import { fn } from "@/util/fn"
 import z from "zod"
 import { Session } from "."
 
-import { MessageV2 } from "./message-v2"
+import { MessageV2 } from "@/agent/memory/message-v2"
 import { Identifier } from "@/util/id"
 import { SessionID, MessageID } from "./schema"
 

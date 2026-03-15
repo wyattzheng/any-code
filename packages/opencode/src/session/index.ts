@@ -16,7 +16,7 @@ import type { Filter } from "../storage"
 
 import { Storage } from "@/storage"
 import { Log } from "../util/log"
-import { MessageV2 } from "./message-v2"
+import { MessageV2 } from "@/agent/memory/message-v2"
 
 import { fn } from "@/util/fn"
 

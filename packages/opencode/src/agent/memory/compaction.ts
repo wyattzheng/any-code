@@ -1,7 +1,7 @@
 import z from "zod"
 import type { AgentContext } from "@/agent/context"
 import { SessionID, MessageID, PartID } from "@/session/schema"
-import { MessageV2 } from "@/session/message-v2"
+import { MessageV2 } from "@/agent/memory/message-v2"
 import { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
 import { Bus } from "@/bus"

@@ -1,5 +1,5 @@
 import z from "zod"
-import type { MessageV2 } from "../session/message-v2"
+import type { MessageV2 } from "@/agent/memory/message-v2"
 import type { Agent } from "../agent/agent"
 
 import type { SessionID, MessageID } from "../session/schema"

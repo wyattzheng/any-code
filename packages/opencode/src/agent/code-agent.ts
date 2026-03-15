@@ -40,7 +40,7 @@ import { Session } from "../session"
 import { SessionPrompt } from "../session/session"
 import { Bus } from "../bus"
 import { GlobalBus } from "../bus/global"
-import { MessageV2 } from "../session/message-v2"
+import { MessageV2 } from "@/agent/memory/message-v2"
 
 import { Truncate } from "../tool/truncation"
 
