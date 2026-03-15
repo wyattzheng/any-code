@@ -1,4 +1,4 @@
-import { testPaths } from "./_test-paths"
+import { testPaths, testNodeDeps } from "./_test-paths"
 /**
  * Test: Cross-agent DB recovery
  *
@@ -81,12 +81,13 @@ describe("Cross-agent DB recovery: close agent → reopen → verify data", () =
 
     function makeAgent() {
         return new CodeAgent({
+            ...testNodeDeps(),
             storage,
             directory: tmpDir,
             skipPlugins: true,
             fs: new InMemoryFS(),
             search: new InMemorySearchProvider(new InMemoryFS()),
-            paths: testPaths(),
+            dataPath: testPaths(),
             provider: {
                 id: "openai",
                 apiKey: "test-key-not-real",

@@ -146,18 +146,10 @@ export interface CodeAgentOptions {
     storage?: StorageProvider
 
     /**
-     * System directory paths for this agent instance.
-     * Each CodeAgent instance can have its own data/cache/config directories.
+     * Base data directory for this agent instance.
+     * Used for tool output, plans, skills cache, models cache, etc.
      */
-    paths: {
-        data: string
-        bin: string
-        log: string
-        cache: string
-        config: string
-        state: string
-        home: string
-    }
+    dataPath: string
 
     /** Override project metadata (discovered from directory if not provided) */
     project?: Project.Info
@@ -170,12 +162,6 @@ export interface CodeAgentOptions {
      * Must be provided by the host (e.g. NodeGitProvider in agent/).
      */
     git: GitProvider
-
-    /**
-     * Initial environment variables snapshot.
-     * Typically `{ ...process.env }` from the host.
-     */
-    env: Record<string, string | undefined>
 
     /**
      * Shell execution provider (spawn/kill).
@@ -237,7 +223,7 @@ export class CodeAgent {
         this._git = options.git
 
         // Create stateless services
-        this.env = new EnvService(options.env)
+        this.env = new EnvService()
         this.bus = new BusService()
         this.scheduler = new SchedulerService()
         this.fileTime = new FileTimeService()
@@ -298,14 +284,14 @@ export class CodeAgent {
             git: this._git as any,
             shell: this.options.shell,
             search: this.options.search as any,
-            paths: this.options.paths as any,
+            dataPath: this.options.dataPath,
             configOverrides: this.options.config as any,
             instructions: this.options.instructions,
             db: this._dbClient,
             containsPath: (filepath: string) => {
                 const normalized = path.resolve(filepath)
                 return normalized.startsWith(path.resolve(worktree)) ||
-                    normalized.startsWith(path.resolve(this.options.paths.data))
+                    normalized.startsWith(path.resolve(this.options.dataPath))
             },
             // Phase 0: stateless services
             env: this.env,

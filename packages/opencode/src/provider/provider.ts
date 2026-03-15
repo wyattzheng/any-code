@@ -405,18 +405,6 @@ export namespace Provider {
       if (cfg.model) return parseModel(cfg.model)
 
       const providers = await this.list()
-      const recent = (await Filesystem.readJson<{ recent?: { providerID: ProviderID; modelID: ModelID }[] }>(this.context, 
-        path.join(this.context.paths.state, "model.json"),
-      )
-        .then((x) => (Array.isArray(x.recent) ? x.recent : []))
-        .catch(() => [])) as { providerID: ProviderID; modelID: ModelID }[]
-      for (const entry of recent) {
-        const provider = providers[entry.providerID]
-        if (!provider) continue
-        if (!provider.models[entry.modelID]) continue
-        return { providerID: entry.providerID, modelID: entry.modelID }
-      }
-
       const provider = Object.values(providers).find((p) => !cfg.provider || Object.keys(cfg.provider).includes(p.id))
       if (!provider) throw new Error("no providers found")
       const [model] = sort(Object.values(provider.models))

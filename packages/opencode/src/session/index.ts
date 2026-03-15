@@ -328,7 +328,7 @@ export namespace Session {
   export function plan(context: import("@any-code/opencode/agent/context").AgentContext, input: { slug: string; time: { created: number } }) {
     const base = context.project.vcs
       ? path.join(context.worktree, ".opencode", "plans")
-      : path.join(context.paths.data, "plans")
+      : path.join(context.dataPath, "plans")
     return path.join(base, [input.time.created, input.slug].join("-") + ".md")
   }
 

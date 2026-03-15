@@ -1,4 +1,4 @@
-import { testPaths } from "./_test-paths"
+import { testPaths, testNodeDeps } from "./_test-paths"
 /**
  * Test: VFS interface — NodeFS implementation
  *
@@ -128,11 +128,12 @@ describe("CodeAgent: VFS integration", () => {
         const { NodeFS: NodeFSClass } = await import("../src/vfs-node")
         const nodeFs = new NodeFSClass()
         const agent = new CodeAgent({
+            ...testNodeDeps(),
             storage: new SqlJsStorage(),
             directory: "/tmp/test",
             provider: { id: "openai", apiKey: "test", model: "gpt-4o" },
             fs: nodeFs,
-            paths: testPaths(),
+            dataPath: testPaths(),
         })
         expect(agent.fs).toBeDefined()
         expect(agent.fs).toBe(nodeFs)
@@ -155,11 +156,12 @@ describe("CodeAgent: VFS integration", () => {
         }
 
         const agent = new CodeAgent({
+            ...testNodeDeps(),
             storage: new SqlJsStorage(),
             directory: "/tmp/test",
             provider: { id: "openai", apiKey: "test", model: "gpt-4o" },
             fs: customFS,
-            paths: testPaths(),
+            dataPath: testPaths(),
         })
 
         // Verify it's using our custom FS

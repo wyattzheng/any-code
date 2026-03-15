@@ -1,4 +1,4 @@
-import { testPaths } from "./_test-paths"
+import { testPaths, testNodeDeps } from "./_test-paths"
 /**
  * Test: Text streaming flow
  *
@@ -18,12 +18,13 @@ describe("CodeAgent text streaming", () => {
         tmpDir = createTempDir()
 
         agent = new CodeAgent({
+            ...testNodeDeps(),
             storage: new SqlJsStorage(),
             directory: tmpDir,
             skipPlugins: true,
             fs: new NodeFS(),
             search: new NodeSearchProvider(),
-            paths: testPaths(),
+            dataPath: testPaths(),
             provider: {
                 // Use openai provider so ai-sdk makes calls to /v1/chat/completions
                 // MSW will intercept these

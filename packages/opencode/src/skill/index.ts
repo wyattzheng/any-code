@@ -28,7 +28,7 @@ export namespace Discovery {
   }
 
   export function dir(context: AgentContext) {
-    return path.join(context.paths.cache, "skills")
+    return path.join(context.dataPath, "skills")
   }
 
   async function get(context: AgentContext, url: string, dest: string): Promise<boolean> {
@@ -232,12 +232,6 @@ export namespace Skill {
     // Scan external skill directories (.claude/skills/, .agents/skills/, etc.)
     // Load global (home) first, then project-level (so project-level overwrites)
     if (!Flag.OPENCODE_DISABLE_EXTERNAL_SKILLS) {
-      for (const dir of EXTERNAL_DIRS) {
-        const root = path.join(context.paths.home, dir)
-        if (!(await Filesystem.isDir(context, root))) continue
-        await scanExternal(root, "global")
-      }
-
       for await (const root of Filesystem.up(context, {
         targets: EXTERNAL_DIRS,
         start: context.directory,
@@ -252,8 +246,7 @@ export namespace Skill {
     // Scan additional skill paths from config
     const config = context.config
     for (const skillPath of config.skills?.paths ?? []) {
-      const expanded = skillPath.startsWith("~/") ? path.join(context.paths.home, skillPath.slice(2)) : skillPath
-      const resolved = path.isAbsolute(expanded) ? expanded : path.join(context.directory, expanded)
+      const resolved = path.isAbsolute(skillPath) ? skillPath : path.join(context.directory, skillPath)
       if (!(await Filesystem.isDir(context, resolved))) {
         log.warn("skill path not found", { path: resolved })
         continue

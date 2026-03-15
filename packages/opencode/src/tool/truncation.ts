@@ -11,7 +11,7 @@ export namespace Truncate {
   export const MAX_LINES = 2000
   export const MAX_BYTES = 50 * 1024
   export function dir(context: AgentContext) {
-    return path.join(context.paths.data, "tool-output")
+    return path.join(context.dataPath, "tool-output")
   }
   export function glob(context?: AgentContext) {
     return context ? path.join(dir(context), "*") : path.join("tool-output", "*")

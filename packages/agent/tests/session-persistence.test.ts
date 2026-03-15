@@ -1,4 +1,4 @@
-import { testPaths } from "./_test-paths"
+import { testPaths, testNodeDeps } from "./_test-paths"
 /**
  * Test: Session persistence
  *
@@ -15,18 +15,19 @@ import { SqlJsStorage } from "../src/storage-sqljs"
 describe("CodeAgent: session persistence", () => {
     let agent: CodeAgent
     let tmpDir: string
-    let paths: ReturnType<typeof testPaths>
+    let dataPath: ReturnType<typeof testPaths>
 
     beforeAll(async () => {
         tmpDir = createTempDir()
-        paths = testPaths()
+        dataPath = testPaths()
         agent = new CodeAgent({
+            ...testNodeDeps(),
             storage: new SqlJsStorage(),
             directory: tmpDir,
             skipPlugins: true,
             fs: new NodeFS(),
             search: new NodeSearchProvider(),
-            paths,
+            dataPath,
             provider: {
                 id: "openai",
                 apiKey: "test-key-not-real",

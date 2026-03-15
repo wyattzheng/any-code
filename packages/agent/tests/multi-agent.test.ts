@@ -1,4 +1,4 @@
-import { testPaths } from "./_test-paths"
+import { testPaths, testNodeDeps } from "./_test-paths"
 /**
  * Test: Multi-agent isolation
  *
@@ -27,21 +27,23 @@ describe("CodeAgent: multi-agent isolation", () => {
 
     it("should create independent agents", () => {
         const agent1 = new CodeAgent({
+            ...testNodeDeps(),
             storage: new SqlJsStorage(),
             directory: tmpDir,
             skipPlugins: true,
             fs: new NodeFS(),
             search: new NodeSearchProvider(),
-            paths: testPaths(),
+            dataPath: testPaths(),
             provider: { id: "openai", apiKey: "key1", model: "gpt-4o" },
         })
         const agent2 = new CodeAgent({
+            ...testNodeDeps(),
             storage: new SqlJsStorage(),
             directory: tmpDir,
             skipPlugins: true,
             fs: new NodeFS(),
             search: new NodeSearchProvider(),
-            paths: testPaths(),
+            dataPath: testPaths(),
             provider: { id: "openai", apiKey: "key2", model: "gpt-4o" },
         })
 
@@ -77,12 +79,13 @@ describe("CodeAgent: multi-agent isolation", () => {
         )
 
         const agent1 = new CodeAgent({
+            ...testNodeDeps(),
             storage: new SqlJsStorage(),
             directory: tmpDir,
             skipPlugins: true,
             fs: memFS1,
             search: new NodeSearchProvider(),
-            paths: testPaths(),
+            dataPath: testPaths(),
             provider: {
                 id: "openai",
                 apiKey: "test-key-not-real",
@@ -92,12 +95,13 @@ describe("CodeAgent: multi-agent isolation", () => {
         })
 
         const agent2 = new CodeAgent({
+            ...testNodeDeps(),
             storage: new SqlJsStorage(),
             directory: tmpDir,
             skipPlugins: true,
             fs: memFS2,
             search: new NodeSearchProvider(),
-            paths: testPaths(),
+            dataPath: testPaths(),
             provider: {
                 id: "openai",
                 apiKey: "test-key-not-real",

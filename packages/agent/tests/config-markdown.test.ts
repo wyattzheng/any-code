@@ -1,4 +1,4 @@
-import { testPaths } from "./_test-paths"
+import { testPaths, testNodeDeps } from "./_test-paths"
 /**
  * Test: ConfigMarkdown — YAML frontmatter parsing
  *
@@ -20,20 +20,21 @@ import { SqlJsStorage } from "../src/storage-sqljs"
 describe("ConfigMarkdown", () => {
     let memfs: InMemoryFS
     let agent: CodeAgent
-    let paths: ReturnType<typeof testPaths>
+    let dataPath: ReturnType<typeof testPaths>
     const workDir = "/virtual/config-md-test"
 
     beforeAll(async () => {
-        paths = testPaths()
+        dataPath = testPaths()
         memfs = new InMemoryFS()
 
         agent = new CodeAgent({
+            ...testNodeDeps(),
             storage: new SqlJsStorage(),
             directory: workDir,
             skipPlugins: true,
             fs: memfs,
             search: new InMemorySearchProvider(memfs),
-            paths,
+            dataPath,
             provider: {
                 id: "openai",
                 apiKey: "test-key-not-real",

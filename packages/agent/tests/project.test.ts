@@ -1,4 +1,4 @@
-import { testPaths } from "./_test-paths"
+import { testPaths, testNodeDeps } from "./_test-paths"
 /**
  * Test: Project module — project discovery
  *
@@ -23,11 +23,11 @@ describe("Project: discovery from directories", () => {
     let gitDir: string
     let nonGitDir: string
     let agent: CodeAgent
-    let paths: ReturnType<typeof testPaths>
+    let dataPath: ReturnType<typeof testPaths>
 
     beforeAll(async () => {
         tmpDir = createTempDir("project-test-")
-        paths = testPaths()
+        dataPath = testPaths()
 
         // Create a git-initialized directory
         gitDir = path.join(tmpDir, "git-project")
@@ -44,12 +44,13 @@ describe("Project: discovery from directories", () => {
         fs.writeFileSync(path.join(nonGitDir, "readme.md"), "# Plain")
 
         agent = new CodeAgent({
+            ...testNodeDeps(),
             storage: new SqlJsStorage(),
             directory: tmpDir,
             skipPlugins: true,
             fs: new NodeFS(),
             search: new NodeSearchProvider(),
-            paths,
+            dataPath,
             provider: {
                 id: "openai",
                 apiKey: "test-key-not-real",

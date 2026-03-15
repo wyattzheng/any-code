@@ -13,7 +13,7 @@ import { Filesystem } from "../util/filesystem"
 export namespace ModelsDev {
   const log = Log.create({ service: "models.dev" })
   export function filepath(context: AgentContext) {
-    return path.join(context.paths.cache, "models.json")
+    return path.join(context.dataPath, "models.json")
   }
 
   export const Model = z.object({

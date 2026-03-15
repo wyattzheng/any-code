@@ -43,22 +43,9 @@ if (!API_KEY) {
 // ── Paths ──────────────────────────────────────────────────────────────────
 
 function makePaths() {
-  const base = path.join(os.homedir(), ".any-code", "dev")
-  const paths = {
-    data: path.join(base, "data"),
-    bin: path.join(base, "bin"),
-    log: path.join(base, "log"),
-    cache: path.join(base, "cache"),
-    config: path.join(base, "config"),
-    state: path.join(base, "state"),
-    home: os.homedir(),
-  }
-  for (const dir of Object.values(paths)) {
-    if (dir !== os.homedir()) {
-      fs.mkdirSync(dir, { recursive: true })
-    }
-  }
-  return paths
+  const dataPath = path.join(os.homedir(), ".any-code", "dev", "data")
+  fs.mkdirSync(dataPath, { recursive: true })
+  return dataPath
 }
 
 // ── HTML Page ──────────────────────────────────────────────────────────────
@@ -278,8 +265,7 @@ async function initAgent() {
     storage: new SqlJsStorage(),
     shell: new NodeShellProvider(),
     git: new NodeGitProvider(),
-    env: { ...process.env } as Record<string, string | undefined>,
-    paths: agentPaths,
+    dataPath: agentPaths,
     skipPlugins: true,
     provider: {
       id: PROVIDER_ID,

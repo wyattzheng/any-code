@@ -1,4 +1,4 @@
-import { testPaths } from "./_test-paths"
+import { testPaths, testNodeDeps } from "./_test-paths"
 /**
  * Test: Create a Hello World HTML page
  *
@@ -32,12 +32,13 @@ describe("CodeAgent: create hello world HTML page", () => {
         memFS = new InMemoryFS()
 
         agent = new CodeAgent({
+            ...testNodeDeps(),
             storage: new SqlJsStorage(),
             directory: tmpDir,
             skipPlugins: true,
             fs: memFS,
             search: new InMemorySearchProvider(new InMemoryFS()),
-            paths: testPaths(),
+            dataPath: testPaths(),
             provider: {
                 id: "openai",
                 apiKey: "test-key-not-real",

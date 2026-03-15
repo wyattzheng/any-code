@@ -1,4 +1,4 @@
-import { testPaths } from "./_test-paths"
+import { testPaths, testNodeDeps } from "./_test-paths"
 /**
  * Test: Tool calling flow
  *
@@ -37,6 +37,7 @@ describe("CodeAgent tool calling", () => {
         )
 
         agent = new CodeAgent({
+            ...testNodeDeps(),
             storage: new SqlJsStorage(),
             directory: tmpDir,
             skipPlugins: true,
@@ -47,7 +48,7 @@ describe("CodeAgent tool calling", () => {
                 baseUrl: "http://localhost:19283/v1",
             },
             fs: new (await import("../src/vfs-node")).NodeFS(),
-            paths: testPaths(),
+            dataPath: testPaths(),
         })
 
         await agent.init()

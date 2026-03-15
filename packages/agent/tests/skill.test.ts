@@ -1,4 +1,4 @@
-import { testPaths } from "./_test-paths"
+import { testPaths, testNodeDeps } from "./_test-paths"
 /**
  * Test: Skill module — skill discovery and loading
  *
@@ -22,11 +22,11 @@ import { SqlJsStorage } from "../src/storage-sqljs"
 describe("Skill: auto-loading from designated directories", () => {
     let agent: CodeAgent
     let memfs: InMemoryFS
-    let paths: ReturnType<typeof testPaths>
+    let dataPath: ReturnType<typeof testPaths>
     const workDir = "/virtual/skill-test"
 
     beforeAll(async () => {
-        paths = testPaths()
+        dataPath = testPaths()
         memfs = new InMemoryFS()
 
         // ── .opencode/skills/ — primary skill directory ──
@@ -81,13 +81,14 @@ describe("Skill: auto-loading from designated directories", () => {
         ].join("\n"))
 
         agent = new CodeAgent({
+            ...testNodeDeps(),
             storage: new SqlJsStorage(),
             directory: workDir,
             worktree: workDir,
             skipPlugins: true,
             fs: memfs,
             search: new InMemorySearchProvider(memfs),
-            paths,
+            dataPath,
             provider: {
                 id: "openai",
                 apiKey: "test-key-not-real",

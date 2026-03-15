@@ -566,7 +566,7 @@ export namespace Storage {
   ]
 
   async function getDir(context: AgentContext) {
-    const dir = path.join(context.paths.data, "storage")
+    const dir = path.join(context.dataPath, "storage")
     const migration = await Filesystem.readJson<string>(context, path.join(dir, "migration"))
       .then((x) => parseInt(x))
       .catch(() => 0)

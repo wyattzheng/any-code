@@ -170,9 +170,7 @@ export namespace SessionPrompt {
         const name = match[1]
         if (seen.has(name)) return
         seen.add(name)
-        const filepath = name.startsWith("~/")
-          ? path.join(context.paths.home, name.slice(2))
-          : path.resolve(context.worktree, name)
+        const filepath = path.resolve(context.worktree, name)
 
         const stats = await Filesystem.stat(context, filepath).catch(() => undefined)
         if (!stats) {

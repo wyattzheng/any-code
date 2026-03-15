@@ -44,15 +44,6 @@ export interface ShellProvider {
     kill(proc: ShellProcess, opts?: { exited?: () => boolean }): Promise<void>
 }
 
-export interface InstancePaths {
-    data: string
-    bin: string
-    log: string
-    cache: string
-    config: string
-    state: string
-    home: string
-}
 
 export interface AgentContext {
     /** Current working directory for the agent execution */
@@ -69,8 +60,8 @@ export interface AgentContext {
     shell: ShellProvider
     /** Search Provider implementation */
     search: SearchProvider
-    /** Common local paths specific to this context */
-    paths: InstancePaths
+    /** Base data directory for this agent instance */
+    dataPath: string
     /** Function to determine if a path is considered within the working scope */
     containsPath: (filepath: string) => boolean
     /** Injected config overrides (optional, used by CodeAgent to bypass file-based config) */

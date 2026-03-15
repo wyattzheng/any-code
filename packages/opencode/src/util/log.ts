@@ -44,18 +44,13 @@ export namespace Log {
     level?: Level
   }
 
-  let logpath = ""
-  export function file() {
-    return logpath
-  }
-
   /** The write function can be replaced at init time (e.g. to write to a file stream) */
   let write = (msg: any) => {
     console.error(msg)
     return msg.length
   }
 
-  export async function init(options: Options & { paths: { log: string }; writer?: (msg: string) => void }) {
+  export async function init(options: Options & { writer?: (msg: string) => void }) {
     if (options.level) level = options.level
     if (options.writer) {
       write = (msg: any) => {
@@ -63,11 +58,6 @@ export namespace Log {
         return msg.length
       }
     }
-    if (options.print) return
-    logpath = path.join(
-      options.paths.log,
-      options.dev ? "dev.log" : new Date().toISOString().split(".")[0].replace(/:/g, "") + ".log",
-    )
   }
 
   function formatError(error: Error, depth = 0): string {
