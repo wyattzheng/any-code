@@ -76,3 +76,8 @@ export { ConfigMarkdown } from "./util/markdown"
 
 // Prompt
 export { SystemPrompt } from "./prompt"
+
+// Node.js implementations (used by tests and server)
+export { NodeFS } from "./vfs-node"
+export { NodeSearchProvider } from "./search-node"
+export { SqlJsStorage } from "./storage-sqljs"

@@ -376,7 +376,7 @@ export function ConversationOverlay({ sessionId }: ConversationOverlayProps) {
                     </>
                 )}
             </div>
-            <div className="resize-grip" onMouseDown={handleResizeMouseDown} onTouchStart={handleResizeTouchStart} />
+            <div className="co-resize-grip" onMouseDown={handleResizeMouseDown} onTouchStart={handleResizeTouchStart} />
         </div>
     );
 }
