@@ -144,9 +144,14 @@ async function initAgent() {
       small_model: `${PROVIDER_ID}/${MODEL}`,
       provider: {
         [PROVIDER_ID]: {
-          npm: "@ai-sdk/openai-compatible",
+          // Use @ai-sdk/anthropic for Claude models — it natively handles
+          // thinking blocks and signatures. Other models use openai-compatible.
+          npm: /claude/i.test(MODEL) ? "@ai-sdk/anthropic" : "@ai-sdk/openai-compatible",
           ...(BASE_URL ? { api: BASE_URL } : {}),
-          options: { apiKey: API_KEY },
+          options: {
+            apiKey: API_KEY,
+            ...(BASE_URL ? { baseURL: BASE_URL } : {}),
+          },
           models: {
             [MODEL]: {
               name: MODEL,
