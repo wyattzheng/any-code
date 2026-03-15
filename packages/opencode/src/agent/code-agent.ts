@@ -66,7 +66,7 @@ import { PartID, MessageID as MsgID, SessionID } from "../session/schema"
 import { SystemPrompt } from "../session"
 import { TaskTool } from "../tool/task"
 import { SessionSummary } from "../session/summary"
-import { SessionCompaction, SessionProcessor } from "../session/session"
+import { SessionCompaction, LLMRunner } from "../session/session"
 import MAX_STEPS from "../session/prompt/max-steps.txt"
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -331,7 +331,7 @@ export class CodeAgent {
             containsPath: (filepath: string) => {
                 const normalized = path.resolve(filepath)
                 return normalized.startsWith(path.resolve(worktree)) ||
-                       normalized.startsWith(path.resolve(this.options.paths.data))
+                    normalized.startsWith(path.resolve(this.options.paths.data))
             },
             // Phase 0: stateless services
             env: this.env,
@@ -460,145 +460,145 @@ export class CodeAgent {
 
         // Start the agent loop in the background
         const promptPromise = (async () => {
-                // Subscribe to message part events
-                const unsubs: (() => void)[] = []
+            // Subscribe to message part events
+            const unsubs: (() => void)[] = []
 
-                try {
-                    // Use GlobalBus to receive ALL events (scoped Bus.subscribe
-                    // misses events published with undefined context)
-                    const globalHandler = (evt: { directory?: string; payload: any }) => {
-                        const payload = evt.payload
-                        if (!payload) return
-                        const type = payload.type
-                        const props = payload.properties
+            try {
+                // Use GlobalBus to receive ALL events (scoped Bus.subscribe
+                // misses events published with undefined context)
+                const globalHandler = (evt: { directory?: string; payload: any }) => {
+                    const payload = evt.payload
+                    if (!payload) return
+                    const type = payload.type
+                    const props = payload.properties
 
-                        if (type === MessageV2.Event.PartDelta.type) {
-                            if (props?.sessionID !== sessionId) return
+                    if (type === MessageV2.Event.PartDelta.type) {
+                        if (props?.sessionID !== sessionId) return
+                        push({
+                            type: "text_delta",
+                            content: props.delta,
+                        })
+                    }
+
+                    if (type === MessageV2.Event.PartUpdated.type) {
+                        const part = props?.part
+                        if (!part || part.sessionID !== sessionId) return
+                        if (part.type === "tool" && part.state.status === "running") {
                             push({
-                                type: "text_delta",
-                                content: props.delta,
+                                type: "tool_call_start",
+                                toolName: part.tool,
+                                toolArgs: part.state.input as Record<string, unknown>,
                             })
                         }
-
-                        if (type === MessageV2.Event.PartUpdated.type) {
-                            const part = props?.part
-                            if (!part || part.sessionID !== sessionId) return
-                            if (part.type === "tool" && part.state.status === "running") {
-                                push({
-                                    type: "tool_call_start",
-                                    toolName: part.tool,
-                                    toolArgs: part.state.input as Record<string, unknown>,
-                                })
-                            }
-                            if (part.type === "tool" && part.state.status === "completed") {
-                                push({
-                                    type: "tool_call_done",
-                                    toolName: part.tool,
-                                    toolOutput: part.state.output,
-                                })
-                            }
-                            if (part.type === "tool" && part.state.status === "error") {
-                                push({
-                                    type: "error",
-                                    error: part.state.error,
-                                })
-                            }
+                        if (part.type === "tool" && part.state.status === "completed") {
+                            push({
+                                type: "tool_call_done",
+                                toolName: part.tool,
+                                toolOutput: part.state.output,
+                            })
                         }
-
-                        if (type === Session.Event.Error.type) {
-                            if (props?.sessionID !== sessionId) return
+                        if (part.type === "tool" && part.state.status === "error") {
                             push({
                                 type: "error",
-                                error: props.error?.message ?? "Unknown error",
+                                error: part.state.error,
                             })
                         }
                     }
-                    GlobalBus.on("event", globalHandler)
-                    unsubs.push(() => GlobalBus.off("event", globalHandler))
 
-                    // ── Permission handling ────────────────────────────
-                    unsubs.push(
-                        Bus.subscribe(this.agentContext, PermissionNext.Event.Asked, async (payload: any) => {
-                            const request = payload.properties
-                            if (request.sessionID !== sessionId) return
-
-                            const permRequest: PermissionRequest = {
-                                id: request.id,
-                                permission: request.permission,
-                                patterns: request.patterns ?? [],
-                                metadata: request.metadata ?? {},
-                            }
-
-                            push({
-                                type: "permission_request" as CodeAgentEventType,
-                                toolName: request.permission,
-                                toolArgs: request.metadata,
-                            })
-
-                            let reply: PermissionReply = "allow"
-                            if (this.options.onPermissionRequest) {
-                                try {
-                                    reply = await this.options.onPermissionRequest(permRequest)
-                                } catch {
-                                    reply = "deny"
-                                }
-                            }
-
-                            const replyMap: Record<PermissionReply, "once" | "always" | "reject"> = {
-                                allow: "once",
-                                always: "always",
-                                deny: "reject",
-                            }
-
-                            await this.agentContext.permissionNext.reply({
-                                requestID: request.id,
-                                reply: replyMap[reply],
-                            })
-
-                            push({
-                                type: "permission_resolved" as CodeAgentEventType,
-                                toolName: request.permission,
-                                content: reply,
-                            })
-                        }),
-                    )
-
-                    const providerID = this.options.provider.id
-                    const modelID = this.options.provider.model
-
-                    await this.prepare({
-                        sessionID: sessionId as any,
-                        model: {
-                            providerID: providerID as any,
-                            modelID: modelID as any,
-                        },
-                        parts: [
-                            {
-                                type: "text",
-                                text: message,
-                            },
-                        ],
-                        ...(this.options.systemPrompt ? { system: this.options.systemPrompt } : {}),
-                        context: this.agentContext,
-                    })
-
-                    await this.runLoop(sessionId as any)
-
-                } catch (err: any) {
-                    console.error("Error from SessionPrompt.prompt:", err)
-                    push({
-                        type: "error",
-                        error: err?.message ?? String(err),
-                    })
-                } finally {
-
-                    done = true
-                    push({ type: "done" })
-                    // Cleanup subscriptions
-                    for (const unsub of unsubs) {
-                        unsub()
+                    if (type === Session.Event.Error.type) {
+                        if (props?.sessionID !== sessionId) return
+                        push({
+                            type: "error",
+                            error: props.error?.message ?? "Unknown error",
+                        })
                     }
                 }
+                GlobalBus.on("event", globalHandler)
+                unsubs.push(() => GlobalBus.off("event", globalHandler))
+
+                // ── Permission handling ────────────────────────────
+                unsubs.push(
+                    Bus.subscribe(this.agentContext, PermissionNext.Event.Asked, async (payload: any) => {
+                        const request = payload.properties
+                        if (request.sessionID !== sessionId) return
+
+                        const permRequest: PermissionRequest = {
+                            id: request.id,
+                            permission: request.permission,
+                            patterns: request.patterns ?? [],
+                            metadata: request.metadata ?? {},
+                        }
+
+                        push({
+                            type: "permission_request" as CodeAgentEventType,
+                            toolName: request.permission,
+                            toolArgs: request.metadata,
+                        })
+
+                        let reply: PermissionReply = "allow"
+                        if (this.options.onPermissionRequest) {
+                            try {
+                                reply = await this.options.onPermissionRequest(permRequest)
+                            } catch {
+                                reply = "deny"
+                            }
+                        }
+
+                        const replyMap: Record<PermissionReply, "once" | "always" | "reject"> = {
+                            allow: "once",
+                            always: "always",
+                            deny: "reject",
+                        }
+
+                        await this.agentContext.permissionNext.reply({
+                            requestID: request.id,
+                            reply: replyMap[reply],
+                        })
+
+                        push({
+                            type: "permission_resolved" as CodeAgentEventType,
+                            toolName: request.permission,
+                            content: reply,
+                        })
+                    }),
+                )
+
+                const providerID = this.options.provider.id
+                const modelID = this.options.provider.model
+
+                await this.prepare({
+                    sessionID: sessionId as any,
+                    model: {
+                        providerID: providerID as any,
+                        modelID: modelID as any,
+                    },
+                    parts: [
+                        {
+                            type: "text",
+                            text: message,
+                        },
+                    ],
+                    ...(this.options.systemPrompt ? { system: this.options.systemPrompt } : {}),
+                    context: this.agentContext,
+                })
+
+                await this.runLoop(sessionId as any)
+
+            } catch (err: any) {
+                console.error("Error from SessionPrompt.prompt:", err)
+                push({
+                    type: "error",
+                    error: err?.message ?? String(err),
+                })
+            } finally {
+
+                done = true
+                push({ type: "done" })
+                // Cleanup subscriptions
+                for (const unsub of unsubs) {
+                    unsub()
+                }
+            }
         })()
 
         // Yield events as they come in
@@ -819,7 +819,7 @@ export class CodeAgent {
 
         const msgs = await SessionPrompt.insertReminders({ context, messages: input.msgs, agent, session })
 
-        const processor = SessionProcessor.create({
+        const processor = LLMRunner.create({
             assistantMessage: (await Session.updateMessage(context, {
                 id: MsgID.ascending(), parentID: lastUser.id, role: "assistant",
                 mode: agent.name, agent: agent.name, variant: lastUser.variant,
@@ -968,19 +968,23 @@ export class CodeAgent {
         await Session.updateMessage(context, assistantMessage)
 
         if (result && part.state.status === "running") {
-            await Session.updatePart(context, { ...part, state: {
-                status: "completed", input: part.state.input, title: result.title, metadata: result.metadata,
-                output: result.output, attachments, time: { ...part.state.time, end: Date.now() },
-            }} satisfies MessageV2.ToolPart)
+            await Session.updatePart(context, {
+                ...part, state: {
+                    status: "completed", input: part.state.input, title: result.title, metadata: result.metadata,
+                    output: result.output, attachments, time: { ...part.state.time, end: Date.now() },
+                }
+            } satisfies MessageV2.ToolPart)
         }
         if (!result) {
-            await Session.updatePart(context, { ...part, state: {
-                status: "error",
-                error: executionError ? `Tool execution failed: ${executionError.message}` : "Tool execution failed",
-                time: { start: part.state.status === "running" ? part.state.time.start : Date.now(), end: Date.now() },
-                metadata: "metadata" in part.state ? part.state.metadata : undefined,
-                input: part.state.input,
-            }} satisfies MessageV2.ToolPart)
+            await Session.updatePart(context, {
+                ...part, state: {
+                    status: "error",
+                    error: executionError ? `Tool execution failed: ${executionError.message}` : "Tool execution failed",
+                    time: { start: part.state.status === "running" ? part.state.time.start : Date.now(), end: Date.now() },
+                    metadata: "metadata" in part.state ? part.state.metadata : undefined,
+                    input: part.state.input,
+                }
+            } satisfies MessageV2.ToolPart)
         }
 
         if (task.command) {

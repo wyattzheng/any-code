@@ -552,7 +552,7 @@ export namespace SessionPrompt {
         session,
       })
 
-      const processor = SessionProcessor.create({
+      const processor = LLMRunner.create({
         assistantMessage: (await Session.updateMessage(context, {
           id: MessageID.ascending(),
           parentID: lastUser.id,
@@ -733,7 +733,7 @@ export namespace SessionPrompt {
     model: Provider.Model
     session: Session.Info
     tools?: Record<string, boolean>
-    processor: SessionProcessor.Info
+    processor: LLMRunner.Info
     bypassAgentCheck: boolean
     messages: MessageV2.WithParts[]
     agentContext: AgentContext
@@ -1845,7 +1845,7 @@ export namespace LLM {
 }
 
 // Merged from session/processor.ts
-export namespace SessionProcessor {
+export namespace LLMRunner {
   const DOOM_LOOP_THRESHOLD = 3
   const log = Log.create({ service: "session.processor" })
 
@@ -2398,7 +2398,7 @@ export namespace SessionCompaction {
         created: Date.now(),
       },
     })) as MessageV2.Assistant
-    const processor = SessionProcessor.create({
+    const processor = LLMRunner.create({
       assistantMessage: msg,
       sessionID: input.sessionID,
       model,
