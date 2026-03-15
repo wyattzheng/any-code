@@ -280,6 +280,31 @@ export class CodeAgent {
     }
 
     /**
+     * Change the working directory for this agent instance.
+     * Mutates internal context (directory, worktree, project, containsPath).
+     * Can only be called once (from empty → set). Throws if already set.
+     */
+    setWorkingDirectory(dir: string) {
+        const current = this.options.directory
+        // Allow setting only if currently unset (empty, or defaulted to tmpdir)
+        if (current && current !== "" && !current.includes("/tmp") && !current.includes("\\Temp")) {
+            throw new Error(`Working directory already set to "${current}". Cannot change once set.`)
+        }
+        this.options.directory = dir
+        this.options.worktree = dir
+        if (this._context) {
+            ;(this._context as any).directory = dir
+            ;(this._context as any).worktree = dir
+            ;(this._context as any).project = { ...this._context.project, worktree: dir }
+            ;(this._context as any).containsPath = (filepath: string) => {
+                const normalized = path.resolve(filepath)
+                return normalized.startsWith(path.resolve(dir)) ||
+                    normalized.startsWith(path.resolve(this.options.dataPath))
+            }
+        }
+    }
+
+    /**
      * Initialize the agent - must be called before chat.
      * Boots up opencode subsystems: database, config, plugins, tool registry,
      * and constructs all service instances.

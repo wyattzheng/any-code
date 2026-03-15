@@ -190,8 +190,11 @@ async function createSession(directory: string = ""): Promise<SessionEntry> {
 
   // Listen for directory.set events from the agent's set_working_directory tool
   agent.bus.subscribe(SetDirectory.Event, (event) => {
-    entry.directory = event.properties.directory
-    console.log(`📂  Session ${id} directory set to: ${event.properties.directory}`)
+    const dir = event.properties.directory
+    entry.directory = dir
+    // Also update the agent's internal context (options, project, containsPath)
+    try { agent.setWorkingDirectory(dir) } catch { /* already set */ }
+    console.log(`📂  Session ${id} directory set to: ${dir}`)
   })
 
   console.log(`✅  Session ${id} created (directory: ${directory || "(none)"})`)

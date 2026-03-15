@@ -18,16 +18,16 @@ IMPORTANT: This tool can only be called ONCE per session. Once the working direc
     directory: z.string().describe("Absolute path to the project directory"),
   }),
   async execute(params, ctx) {
-    // Check if directory is already set (non-empty worktree means it was set)
-    if (ctx.worktree && ctx.worktree !== "" && ctx.worktree !== "/") {
+    const dir = params.directory
+
+    // Check if directory is already set
+    if (ctx.worktree && ctx.worktree !== "" && ctx.worktree !== "/" && !ctx.worktree.includes("/tmp")) {
       return {
         title: "Already set",
         output: `Working directory is already set to "${ctx.worktree}". It can only be set once per session.`,
         metadata: {},
       }
     }
-
-    const dir = params.directory
 
     // Validate using the agent's VFS
     const stat = await ctx.fs.stat(dir)
@@ -41,7 +41,8 @@ IMPORTANT: This tool can only be called ONCE per session. Once the working direc
       }
     }
 
-    // Emit bus event — server listens and handles directory change
+    // Emit bus event — server handler calls agent.setWorkingDirectory()
+    // which updates options, context, project, and containsPath
     ctx.bus.publish(SetDirectory.Event, { directory: dir })
 
     return {

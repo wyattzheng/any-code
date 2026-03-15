@@ -66,9 +66,12 @@ export function App() {
     if (!directory) {
         return (
             <div className="app">
-                <div className="main-view" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <p style={{ color: "var(--color-text-dim)", fontSize: "13px", opacity: 0.5 }}>
-                        等待选择工作目录…
+                <div className="main-view" style={{ display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: "16px" }}>
+                    <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-dim)" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.3 }}>
+                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                    </svg>
+                    <p style={{ color: "var(--color-text-dim)", fontSize: "13px", opacity: 0.5, textAlign: "center", lineHeight: 1.6, maxWidth: "200px" }}>
+                        通过对话面板<br />打开一个新项目
                     </p>
                 </div>
                 <ConversationOverlay sessionId={sessionId} />
