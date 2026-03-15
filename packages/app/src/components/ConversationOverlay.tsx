@@ -264,14 +264,17 @@ export function ConversationOverlay({ sessionId }: ConversationOverlayProps) {
         window.addEventListener("touchmove", onMove, { passive: false }); window.addEventListener("touchend", onUp);
     };
 
-    // ── Resize (bottom-left handle) ──
-    const onResizeStart = useCallback((cx: number, cy: number) => {
+    // ── Resize (shared logic for bottom-left & bottom-right) ──
+    const resizeDirRef = useRef<"bl" | "br">("bl");
+    const onResizeStart = useCallback((cx: number, cy: number, dir: "bl" | "br") => {
+        resizeDirRef.current = dir;
         resizeRef.current = { startX: cx, startY: cy, origW: size.w, origH: size.h };
     }, [size]);
     const onResizeMove = useCallback((cx: number, cy: number) => {
         if (!resizeRef.current) return;
-        const dw = resizeRef.current.startX - cx; // drag left → wider
-        const dh = cy - resizeRef.current.startY; // drag down → taller
+        const dx = cx - resizeRef.current.startX;
+        const dh = cy - resizeRef.current.startY;
+        const dw = resizeDirRef.current === "bl" ? -dx : dx;
         setSize({
             w: Math.max(180, Math.min(600, resizeRef.current.origW + dw)),
             h: Math.max(200, Math.min(800, resizeRef.current.origH + dh)),
@@ -279,16 +282,16 @@ export function ConversationOverlay({ sessionId }: ConversationOverlayProps) {
     }, []);
     const onResizeEnd = useCallback(() => { resizeRef.current = null; }, []);
 
-    const handleResizeMouseDown = (e: React.MouseEvent) => {
+    const makeResizeMouseDown = (dir: "bl" | "br") => (e: React.MouseEvent) => {
         e.preventDefault(); e.stopPropagation();
-        onResizeStart(e.clientX, e.clientY);
+        onResizeStart(e.clientX, e.clientY, dir);
         const onMove = (ev: MouseEvent) => onResizeMove(ev.clientX, ev.clientY);
         const onUp = () => { onResizeEnd(); window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
         window.addEventListener("mousemove", onMove); window.addEventListener("mouseup", onUp);
     };
-    const handleResizeTouchStart = (e: React.TouchEvent) => {
+    const makeResizeTouchStart = (dir: "bl" | "br") => (e: React.TouchEvent) => {
         e.stopPropagation();
-        const t = e.touches[0]; onResizeStart(t.clientX, t.clientY);
+        const t = e.touches[0]; onResizeStart(t.clientX, t.clientY, dir);
         const onMove = (ev: TouchEvent) => { ev.preventDefault(); onResizeMove(ev.touches[0].clientX, ev.touches[0].clientY); };
         const onUp = () => { onResizeEnd(); window.removeEventListener("touchmove", onMove); window.removeEventListener("touchend", onUp); };
         window.addEventListener("touchmove", onMove, { passive: false }); window.addEventListener("touchend", onUp);
@@ -376,7 +379,8 @@ export function ConversationOverlay({ sessionId }: ConversationOverlayProps) {
                     </>
                 )}
             </div>
-            <div className="co-resize-grip" onMouseDown={handleResizeMouseDown} onTouchStart={handleResizeTouchStart} />
+            <div className="co-resize-grip co-resize-bl" onMouseDown={makeResizeMouseDown("bl")} onTouchStart={makeResizeTouchStart("bl")} />
+            <div className="co-resize-grip co-resize-br" onMouseDown={makeResizeMouseDown("br")} onTouchStart={makeResizeTouchStart("br")} />
         </div>
     );
 }

@@ -5,16 +5,7 @@
  * Returns a NoSqlDb interface backed by sql.js.
  */
 import type { NoSqlDb, RawSqliteDb } from "./storage"
-
-export interface Migration {
-    name: string
-    sql: string
-    timestamp: number
-}
-
-export interface StorageProvider {
-    connect(migrations: Migration[]): Promise<NoSqlDb>
-}
+import type { StorageProvider, Migration } from "./code-agent"
 
 export class SqlJsStorage implements StorageProvider {
     private db: any = null

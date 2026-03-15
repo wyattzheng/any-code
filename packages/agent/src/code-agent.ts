@@ -286,8 +286,8 @@ export class CodeAgent {
      */
     setWorkingDirectory(dir: string) {
         const current = this.options.directory
-        // Allow setting only if currently unset (empty, or defaulted to tmpdir)
-        if (current && current !== "" && !current.includes("/tmp") && !current.includes("\\Temp")) {
+        // Allow setting only if currently unset (empty string)
+        if (current && current !== "") {
             throw new Error(`Working directory already set to "${current}". Cannot change once set.`)
         }
         this.options.directory = dir

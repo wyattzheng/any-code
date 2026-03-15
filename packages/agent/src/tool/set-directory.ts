@@ -21,7 +21,7 @@ IMPORTANT: This tool can only be called ONCE per session. Once the working direc
     const dir = params.directory
 
     // Check if directory is already set
-    if (ctx.worktree && ctx.worktree !== "" && ctx.worktree !== "/" && !ctx.worktree.includes("/tmp")) {
+    if (ctx.worktree && ctx.worktree !== "") {
       return {
         title: "Already set",
         output: `Working directory is already set to "${ctx.worktree}". It can only be set once per session.`,

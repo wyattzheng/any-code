@@ -137,7 +137,7 @@ const PROVIDER_ID = BASE_URL ? `${PROVIDER}-proxy` : PROVIDER
 
 function createAgentConfig(directory: string) {
   return {
-    directory: directory || os.tmpdir(),
+    directory: directory,
     fs: new NodeFS(),
     search: new NodeSearchProvider(),
     storage: new SqlJsStorage(),
@@ -203,6 +203,84 @@ async function createSession(directory: string = ""): Promise<SessionEntry> {
 
 function getSession(id: string): SessionEntry | undefined {
   return sessions.get(id)
+}
+
+// ── File Tree & Git Changes helpers ────────────────────────────────────────
+
+interface FileTreeNode {
+  name: string
+  type: "file" | "dir"
+  children?: FileTreeNode[]
+}
+
+const FILE_TREE_LIMIT = 500
+const IGNORE_DIRS = new Set([".git", "node_modules", ".next", "dist", ".opencode", ".any-code", "__pycache__", ".venv"])
+
+async function getFileTree(dir: string): Promise<FileTreeNode[]> {
+  if (!dir) return []
+  try {
+    const entries = await fsPromises.readdir(dir, { withFileTypes: true })
+    const result: FileTreeNode[] = []
+    let count = 0
+
+    // Sort: dirs first, then files, alphabetical
+    const sorted = entries
+      .filter(e => !e.name.startsWith(".") || e.name === ".gitignore")
+      .sort((a, b) => {
+        const aDir = a.isDirectory() ? 0 : 1
+        const bDir = b.isDirectory() ? 0 : 1
+        if (aDir !== bDir) return aDir - bDir
+        return a.name.localeCompare(b.name)
+      })
+
+    for (const entry of sorted) {
+      if (count >= FILE_TREE_LIMIT) break
+      if (IGNORE_DIRS.has(entry.name)) continue
+
+      if (entry.isDirectory()) {
+        const children = await getFileTree(path.join(dir, entry.name))
+        result.push({ name: entry.name, type: "dir", children })
+        count += 1 + (children?.length ?? 0)
+      } else if (entry.isFile()) {
+        result.push({ name: entry.name, type: "file" })
+        count++
+      }
+    }
+    return result
+  } catch {
+    return []
+  }
+}
+
+interface GitChange {
+  file: string
+  status: string  // "M" | "A" | "D" | "R" | "?" | etc.
+}
+
+const gitProvider = new NodeGitProvider()
+
+async function getGitChanges(dir: string): Promise<GitChange[]> {
+  if (!dir) return []
+  try {
+    const result = await gitProvider.run(["status", "--porcelain", "-uall"], { cwd: dir })
+    if (result.exitCode !== 0) return []
+    const text = result.text()
+    if (!text.trim()) return []
+    return text
+      .split("\n")
+      .filter((line: string) => line.trim())
+      .map((line: string) => {
+        // porcelain format: XY filename
+        const xy = line.slice(0, 2)
+        const file = line.slice(3)
+        // Pick the most relevant status char
+        let status = xy.trim().charAt(0) || "?"
+        if (xy[0] === "?" || xy[1] === "?") status = "?"
+        return { file, status }
+      })
+  } catch {
+    return []
+  }
 }
 
 // ── HTTP Server ────────────────────────────────────────────────────────────
@@ -420,9 +498,15 @@ const server = http.createServer((req, res) => {
       res.end(JSON.stringify({ error: "Session not found" }))
       return
     }
+    // Enrich with file tree + git changes when directory is set
+    const dir = session.directory
+    const [fileTree, changes] = dir
+      ? await Promise.all([getFileTree(dir), getGitChanges(dir)])
+      : [[], []]
     res.writeHead(200, { "Content-Type": "application/json" })
     res.end(JSON.stringify({
-      id: session.id, directory: session.directory, createdAt: session.createdAt,
+      id: session.id, directory: dir, createdAt: session.createdAt,
+      fileTree, changes,
     }))
     return
   }

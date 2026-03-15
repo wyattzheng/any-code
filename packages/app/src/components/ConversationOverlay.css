@@ -316,14 +316,22 @@
     color: var(--color-text-dim);
 }
 
-/* ── Resize grip (bottom-left, invisible hot zone) ── */
+/* ── Resize grips (invisible hot zones) ── */
 .co-resize-grip {
     position: absolute;
-    left: 0;
     bottom: 0;
     width: 16px;
     height: 16px;
-    cursor: ne-resize;
     z-index: 10;
     touch-action: none;
+}
+
+.co-resize-bl {
+    left: 0;
+    cursor: ne-resize;
+}
+
+.co-resize-br {
+    right: 0;
+    cursor: nw-resize;
 }
