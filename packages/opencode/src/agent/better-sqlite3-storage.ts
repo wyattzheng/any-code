@@ -46,7 +46,7 @@ export class BetterSqliteStorage implements StorageProvider {
 
         // Wrap better-sqlite3 as RawSqliteDb
         const raw = this.createRawDb()
-        const { SqliteNoSqlDb } = await import("../storage/sqlite-nosql")
+        const { SqliteNoSqlDb } = await import("../storage")
         return new SqliteNoSqlDb(raw)
     }
 
