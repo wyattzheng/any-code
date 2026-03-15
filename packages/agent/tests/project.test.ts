@@ -62,22 +62,18 @@ describe("Project: discovery from directories", () => {
     afterAll(() => cleanupTempDir(tmpDir))
 
     it("should detect a git project via fromDirectory()", async () => {
-        await agent.withDb(async () => {
-            const result = await Project.fromDirectory(agent.agentContext, gitDir)
+        const result = await Project.fromDirectory(agent.agentContext, gitDir)
 
-            expect(result).toBeDefined()
-            expect(result.project.vcs).toBe("git")
-            expect(result.project.worktree).toBe(gitDir)
-            expect(result.project.id).toBeDefined()
-        })
+        expect(result).toBeDefined()
+        expect(result.project.vcs).toBe("git")
+        expect(result.project.worktree).toBe(gitDir)
+        expect(result.project.id).toBeDefined()
     })
 
     it("should handle a non-git directory (no vcs)", async () => {
-        await agent.withDb(async () => {
-            const result = await Project.fromDirectory(agent.agentContext, nonGitDir)
-            // Non-git directories won't have vcs: "git"
-            expect(result.project.vcs).toBeUndefined()
-        })
+        const result = await Project.fromDirectory(agent.agentContext, nonGitDir)
+        // Non-git directories won't have vcs: "git"
+        expect(result.project.vcs).toBeUndefined()
     })
 
     it("should map DB rows to Project.Info via fromRow()", () => {

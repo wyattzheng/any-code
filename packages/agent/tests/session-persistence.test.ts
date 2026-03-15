@@ -68,27 +68,23 @@ describe("CodeAgent: session persistence", () => {
         const session = await agent.createSession("Persistent Session")
 
         // Verify we can access the session through the underlying Session module
-        await agent.withDb(async () => {
-            const { Session } = await import("@any-code/opencode/session/index")
-            const sessions = [...Session.list(agent.agentContext)]
-            const found = sessions.find(s => s.id === session.id)
+        const { Session } = await import("@any-code/opencode/session/index")
+        const sessions = [...Session.list(agent.agentContext)]
+        const found = sessions.find(s => s.id === session.id)
 
-            expect(found).toBeDefined()
-            expect(found!.id).toBe(session.id)
-        })
+        expect(found).toBeDefined()
+        expect(found!.id).toBe(session.id)
     })
 
     it("should list all created sessions", async () => {
         // Create a fresh session to ensure at least one exists
         await agent.createSession("Listed Session")
 
-        await agent.withDb(async () => {
-            const { Session } = await import("@any-code/opencode/session/index")
-            const sessions = [...Session.list(agent.agentContext)]
+        const { Session } = await import("@any-code/opencode/session/index")
+        const sessions = [...Session.list(agent.agentContext)]
 
-            // Should have at least the sessions created in this describe block
-            expect(sessions.length).toBeGreaterThanOrEqual(1)
-        })
+        // Should have at least the sessions created in this describe block
+        expect(sessions.length).toBeGreaterThanOrEqual(1)
     })
 })
 
