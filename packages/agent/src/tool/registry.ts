@@ -2,6 +2,7 @@ import { PlanExitTool } from "./plan"
 import { BashTool } from "./bash"
 import { EditTool } from "./edit"
 import { GlobTool } from "./glob"
+import { SetWorkingDirectoryTool } from "./set-directory"
 import { GrepTool } from "./grep"
 import { BatchTool } from "./batch"
 import { ReadTool } from "./read"
@@ -112,6 +113,7 @@ export namespace ToolRegistry {
     const config = context.config
     return [
       InvalidTool,
+      SetWorkingDirectoryTool,
       BashTool,
       ReadTool,
       GlobTool,

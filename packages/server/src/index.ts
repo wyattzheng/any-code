@@ -31,7 +31,6 @@ const MODEL = process.env.MODEL ?? "claude-sonnet-4-20250514"
 const API_KEY = process.env.API_KEY
 const BASE_URL = process.env.BASE_URL
 const PORT = parseInt(process.env.PORT ?? "3210", 10)
-const PROJECT_DIR = path.resolve(process.argv[2] ?? process.cwd())
 
 if (!API_KEY) {
   console.error("❌  Missing API_KEY environment variable")
@@ -117,22 +116,34 @@ class NodeGitProvider {
 
 // ── Agent Bootstrap ────────────────────────────────────────────────────────
 
-let agent: InstanceType<typeof CodeAgent>
+import { SetDirectory } from "@any-code/agent"
 
+interface SessionEntry {
+  id: string
+  agent: InstanceType<typeof CodeAgent>
+  directory: string  // empty = no project directory set yet
+  createdAt: number
+}
 
-async function initAgent() {
-  const agentPaths = makePaths()
+const sessions = new Map<string, SessionEntry>()
 
-  const PROVIDER_ID = BASE_URL ? `${PROVIDER}-proxy` : PROVIDER
+let sessionCounter = 0
 
-  agent = new CodeAgent({
-    directory: PROJECT_DIR,
+function generateSessionId(): string {
+  return `ses_${Date.now().toString(36)}_${(++sessionCounter).toString(36)}`
+}
+
+const PROVIDER_ID = BASE_URL ? `${PROVIDER}-proxy` : PROVIDER
+
+function createAgentConfig(directory: string) {
+  return {
+    directory: directory || os.tmpdir(),
     fs: new NodeFS(),
     search: new NodeSearchProvider(),
     storage: new SqlJsStorage(),
     shell: new NodeShellProvider(),
     git: new NodeGitProvider(),
-    dataPath: agentPaths,
+    dataPath: makePaths(),
     provider: {
       id: PROVIDER_ID,
       apiKey: API_KEY!,
@@ -166,9 +177,29 @@ async function initAgent() {
         },
       },
     },
-  })
+  }
+}
+
+async function createSession(directory: string = ""): Promise<SessionEntry> {
+  const id = generateSessionId()
+  const agent = new CodeAgent(createAgentConfig(directory))
   await agent.init()
-  console.log(`✅  Agent initialized (project: ${PROJECT_DIR})`)
+
+  const entry: SessionEntry = { id, agent, directory, createdAt: Date.now() }
+  sessions.set(id, entry)
+
+  // Listen for directory.set events from the agent's set_working_directory tool
+  agent.bus.subscribe(SetDirectory.Event, (event) => {
+    entry.directory = event.properties.directory
+    console.log(`📂  Session ${id} directory set to: ${event.properties.directory}`)
+  })
+
+  console.log(`✅  Session ${id} created (directory: ${directory || "(none)"})`)
+  return entry
+}
+
+function getSession(id: string): SessionEntry | undefined {
+  return sessions.get(id)
 }
 
 // ── HTTP Server ────────────────────────────────────────────────────────────
@@ -176,7 +207,14 @@ async function initAgent() {
 async function handleChat(req: http.IncomingMessage, res: http.ServerResponse) {
   let body = ""
   for await (const chunk of req) body += chunk
-  const { message } = JSON.parse(body)
+  const { message, sessionId } = JSON.parse(body)
+
+  const session = sessionId ? getSession(sessionId) : undefined
+  if (!session) {
+    res.writeHead(404, { "Content-Type": "application/json" })
+    res.end(JSON.stringify({ error: "Session not found" }))
+    return
+  }
 
   res.writeHead(200, {
     "Content-Type": "text/event-stream",
@@ -185,7 +223,7 @@ async function handleChat(req: http.IncomingMessage, res: http.ServerResponse) {
   })
 
   try {
-    for await (const event of agent.chat(message, agent.sessionId ?? undefined)) {
+    for await (const event of session.agent.chat(message, session.agent.sessionId ?? undefined)) {
       res.write(`data: ${JSON.stringify(event)}\n\n`)
     }
   } catch (err: any) {
@@ -248,7 +286,7 @@ function adminHTML() {
     <div class="row"><span class="label">Provider</span><span class="value">${PROVIDER}</span></div>
     <div class="row"><span class="label">Model</span><span class="value">${MODEL}</span></div>
     <div class="row"><span class="label">Port</span><span class="value">${PORT}</span></div>
-    <div class="row"><span class="label">Project</span><span class="value" style="font-size:9px;max-width:280px;overflow:hidden;text-overflow:ellipsis">${PROJECT_DIR}</span></div>
+    <div class="row"><span class="label">Sessions</span><span class="value" id="session-count">0</span></div>
   </div>
   <div class="card">
     <h2>📊 Runtime Stats</h2>
@@ -344,18 +382,70 @@ const server = http.createServer((req, res) => {
     return
   }
 
-  if (req.method === "GET" && req.url === "/api/status") {
-    const stats = agent.getStats()
+  // ── Session management ──
+  if (req.method === "POST" && req.url === "/api/sessions") {
+    (async () => {
+      let body = ""
+      for await (const chunk of req) body += chunk
+      const { directory } = body ? JSON.parse(body) : { directory: "" }
+      createSession(directory || "").then((entry) => {
+        res.writeHead(200, { "Content-Type": "application/json" })
+        res.end(JSON.stringify({ id: entry.id, directory: entry.directory }))
+      }).catch((err: any) => {
+        res.writeHead(500, { "Content-Type": "application/json" })
+        res.end(JSON.stringify({ error: err.message }))
+      })
+    })()
+    return
+  }
+
+  if (req.method === "GET" && req.url === "/api/sessions") {
+    const list = Array.from(sessions.values()).map((s) => ({
+      id: s.id, directory: s.directory, createdAt: s.createdAt,
+    }))
+    res.writeHead(200, { "Content-Type": "application/json" })
+    res.end(JSON.stringify(list))
+    return
+  }
+
+  // GET /api/sessions/:id
+  const sessionMatch = req.url?.match(/^\/api\/sessions\/([^/]+)$/)
+  if (req.method === "GET" && sessionMatch) {
+    const session = getSession(sessionMatch[1])
+    if (!session) {
+      res.writeHead(404, { "Content-Type": "application/json" })
+      res.end(JSON.stringify({ error: "Session not found" }))
+      return
+    }
     res.writeHead(200, { "Content-Type": "application/json" })
     res.end(JSON.stringify({
-      stats,
-      sessionId: agent.sessionId,
+      id: session.id, directory: session.directory, createdAt: session.createdAt,
     }))
     return
   }
 
-  if (req.method === "GET" && req.url === "/api/messages") {
-    agent.getSessionMessages({ limit: 30 }).then((messages: any) => {
+  if (req.method === "GET" && req.url === "/api/status") {
+    const list = Array.from(sessions.values()).map((s) => ({
+      id: s.id, directory: s.directory,
+      stats: s.agent.getStats(),
+      sessionId: s.agent.sessionId,
+    }))
+    res.writeHead(200, { "Content-Type": "application/json" })
+    res.end(JSON.stringify({ sessions: list }))
+    return
+  }
+
+  // GET /api/messages?sessionId=xxx
+  if (req.method === "GET" && req.url?.startsWith("/api/messages")) {
+    const url = new URL(req.url, `http://localhost:${PORT}`)
+    const sessionId = url.searchParams.get("sessionId")
+    const session = sessionId ? getSession(sessionId) : undefined
+    if (!session) {
+      res.writeHead(404, { "Content-Type": "application/json" })
+      res.end(JSON.stringify({ error: "Session not found" }))
+      return
+    }
+    session.agent.getSessionMessages({ limit: 30 }).then((messages: any) => {
       res.writeHead(200, { "Content-Type": "application/json" })
       res.end(JSON.stringify(messages))
     }).catch((err: any) => {
@@ -386,11 +476,9 @@ const server = http.createServer((req, res) => {
 
 export async function startServer() {
   console.log("🚀  Starting any-code-server…")
-  await initAgent()
   const appDistExists = fs.existsSync(APP_DIST)
   server.listen(PORT, () => {
     console.log(`🌐  http://localhost:${PORT}`)
-    console.log(`📂  Project: ${PROJECT_DIR}`)
     console.log(`🤖  Provider: ${PROVIDER} / ${MODEL}`)
     console.log(`🖥  Admin: http://localhost:${PORT}/admin`)
     if (appDistExists) {
@@ -398,6 +486,7 @@ export async function startServer() {
     } else {
       console.log(`⚠  App dist not found at ${APP_DIST} — run 'pnpm --filter app build' first`)
     }
+    console.log(`📋  Sessions: POST /api/sessions to create`)
   })
 }
 

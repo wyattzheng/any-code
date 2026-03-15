@@ -28,6 +28,7 @@ export { MessageV2 } from "./memory/message-v2"
 // Tools
 export { Tool } from "./tool/tool"
 export { ToolRegistry } from "./tool/registry"
+export { SetDirectory } from "./tool/set-directory"
 
 // Provider
 export { Provider } from "./provider/provider"

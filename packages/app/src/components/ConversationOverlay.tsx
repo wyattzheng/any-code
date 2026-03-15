@@ -41,7 +41,12 @@ function argSummary(args?: Record<string, unknown>) {
 
 // ── Component ──────────────────────────────────────────────────────────────
 
-export function ConversationOverlay() {
+interface ConversationOverlayProps {
+    sessionId: string;
+    fullscreen?: boolean;
+}
+
+export function ConversationOverlay({ sessionId, fullscreen = false }: ConversationOverlayProps) {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [input, setInput] = useState("");
     const [recording, setRecording] = useState(false);
@@ -191,7 +196,7 @@ export function ConversationOverlay() {
             const res = await fetch("/api/chat", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ message: text }),
+                body: JSON.stringify({ message: text, sessionId }),
             });
             const reader = res.body!.getReader();
             const decoder = new TextDecoder();
@@ -286,16 +291,20 @@ export function ConversationOverlay() {
     };
 
     return (
-        <div className="conversation-panel" style={{ transform: `translate(${position.x}px, ${position.y}px)` }}>
-            <div className="conversation-header" onMouseDown={handleMouseDown} onTouchStart={handleTouchStart}>
-                <div className="drag-grip" />
-                <div className="conversation-header-content"><ChatIcon /> 对话</div>
-            </div>
+        <div className={`conversation-panel ${fullscreen ? "fullscreen" : ""}`} style={fullscreen ? {} : { transform: `translate(${position.x}px, ${position.y}px)` }}>
+            {!fullscreen && (
+                <div className="conversation-header" onMouseDown={handleMouseDown} onTouchStart={handleTouchStart}>
+                    <div className="drag-grip" />
+                    <div className="conversation-header-content"><ChatIcon /> 对话</div>
+                </div>
+            )}
 
             <div className="conversation-messages" ref={msgsRef}>
                 {messages.length === 0 && (
                     <div className="co-text" style={{ color: "var(--color-text-dim)" }}>
-                        你好！告诉我你想做什么 ✨
+                        {fullscreen
+                            ? "你好！告诉我你想打开哪个项目目录 📂"
+                            : "你好！告诉我你想做什么 ✨"}
                     </div>
                 )}
                 {messages.map((msg, i) =>
