@@ -11,7 +11,7 @@ import { testPaths } from "./_test-paths"
 import { describe, it, expect, beforeAll, afterAll } from "vitest"
 import path from "path"
 import { NodeFS } from "../src/vfs-node"
-import { CodeAgent } from "../src/index"
+import { CodeAgent, NodeSearchProvider } from "../src/index"
 import { createTempDir, cleanupTempDir } from "./setup"
 import { SqlJsStorage } from "../src/storage-sqljs"
 

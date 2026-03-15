@@ -24,6 +24,7 @@ import { RESPONSES_API_BODY } from "./fixtures/text-stream"
 import type { StorageProvider, Migration } from "../src/storage"
 import type { NoSqlDb } from "@any-code/opencode/storage/nosql"
 import { SqlJsStorage } from "../src/storage-sqljs"
+import { InMemorySearchProvider } from "./fixtures/search-memory"
 
 /**
  * A persistent storage wrapper:
@@ -84,6 +85,7 @@ describe("Cross-agent DB recovery: close agent → reopen → verify data", () =
             directory: tmpDir,
             skipPlugins: true,
             fs: new InMemoryFS(),
+            search: new InMemorySearchProvider(new InMemoryFS()),
             paths: testPaths(),
             provider: {
                 id: "openai",

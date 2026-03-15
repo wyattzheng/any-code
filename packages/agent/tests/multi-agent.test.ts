@@ -9,7 +9,7 @@ import { testPaths } from "./_test-paths"
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest"
 import { http, HttpResponse } from "msw"
-import { CodeAgent, NodeFS } from "../src/index"
+import { CodeAgent, NodeFS, NodeSearchProvider } from "../src/index"
 import { createTempDir, cleanupTempDir, server } from "./setup"
 import { InMemoryFS } from "./fixtures/in-memory-fs"
 import { buildHelloworldFixtures } from "./fixtures/helloworld-html-stream"
@@ -31,6 +31,7 @@ describe("CodeAgent: multi-agent isolation", () => {
             directory: tmpDir,
             skipPlugins: true,
             fs: new NodeFS(),
+            search: new NodeSearchProvider(),
             paths: testPaths(),
             provider: { id: "openai", apiKey: "key1", model: "gpt-4o" },
         })
@@ -39,6 +40,7 @@ describe("CodeAgent: multi-agent isolation", () => {
             directory: tmpDir,
             skipPlugins: true,
             fs: new NodeFS(),
+            search: new NodeSearchProvider(),
             paths: testPaths(),
             provider: { id: "openai", apiKey: "key2", model: "gpt-4o" },
         })
@@ -79,6 +81,7 @@ describe("CodeAgent: multi-agent isolation", () => {
             directory: tmpDir,
             skipPlugins: true,
             fs: memFS1,
+            search: new NodeSearchProvider(),
             paths: testPaths(),
             provider: {
                 id: "openai",
@@ -93,6 +96,7 @@ describe("CodeAgent: multi-agent isolation", () => {
             directory: tmpDir,
             skipPlugins: true,
             fs: memFS2,
+            search: new NodeSearchProvider(),
             paths: testPaths(),
             provider: {
                 id: "openai",

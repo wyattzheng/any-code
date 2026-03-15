@@ -20,6 +20,7 @@ import {
 import { RESPONSES_API_BODY } from "./fixtures/text-stream"
 import { InMemoryFS } from "./fixtures/in-memory-fs"
 import { SqlJsStorage } from "../src/storage-sqljs"
+import { InMemorySearchProvider } from "./fixtures/search-memory"
 
 describe("CodeAgent: create hello world HTML page", () => {
     let agent: CodeAgent
@@ -35,6 +36,7 @@ describe("CodeAgent: create hello world HTML page", () => {
             directory: tmpDir,
             skipPlugins: true,
             fs: memFS,
+            search: new InMemorySearchProvider(new InMemoryFS()),
             paths: testPaths(),
             provider: {
                 id: "openai",

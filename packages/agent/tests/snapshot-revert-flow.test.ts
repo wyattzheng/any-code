@@ -17,7 +17,7 @@ import { http, HttpResponse } from "msw"
 import path from "path"
 import fs from "fs"
 import { execSync } from "child_process"
-import { CodeAgent, NodeFS } from "../src/index"
+import { CodeAgent, NodeFS, NodeSearchProvider } from "../src/index"
 import { createTempDir, cleanupTempDir, server } from "./setup"
 import { buildHelloworldFixtures } from "./fixtures/helloworld-html-stream"
 import { RESPONSES_API_BODY } from "./fixtures/text-stream"
@@ -168,6 +168,7 @@ describe("Snapshot: agent conversation → snapshot → revert", () => {
             worktree: tmpDir,
             skipPlugins: true,
             fs: new NodeFS(),
+            search: new NodeSearchProvider(),
             paths,
             provider: {
                 id: "openai",

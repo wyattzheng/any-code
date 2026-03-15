@@ -392,7 +392,7 @@ export namespace File {
       }
 
       const set = new Set<string>()
-      const filePaths = await context.search!.listFiles({ cwd: context.directory })
+      const filePaths = await context.search.listFiles({ cwd: context.directory })
       for (const file of filePaths) {
         result.files.push(file)
         let current = file

@@ -154,7 +154,7 @@ export interface CodeAgentOptions {
      * Search Provider implementation.
      * Abstracted from VFS to separate file I/O from complex CLI tasks (grep/list).
      */
-    search?: SearchProvider
+    search: SearchProvider
 
     /**
      * Pre-built instruction texts.
@@ -241,7 +241,7 @@ export class CodeAgent {
     private _git: GitProvider
     private _context!: AgentContext
 
-    // ── Service instances ──────────────────────────────────────────
+    // ── Phase 0: stateless services (no context dependency) ──────
     readonly env: EnvService
     readonly bus: BusService
     readonly scheduler: SchedulerService
@@ -251,7 +251,7 @@ export class CodeAgent {
         this.options = options
         this._git = options.git ?? new NodeGitProvider()
 
-        // Create service instances (no context dependency)
+        // Create stateless services
         this.env = new EnvService()
         this.bus = new BusService()
         this.scheduler = new SchedulerService()
@@ -270,41 +270,13 @@ export class CodeAgent {
      * Cached as a single instance after init().
      */
     get agentContext(): AgentContext {
-        if (this._context) return this._context
-        // Pre-init fallback (for registration calls before init completes)
-        return this.buildContext()
-    }
-
-    private buildContext(): AgentContext {
-        const worktree = this.options.worktree ?? this.options.directory
-        return {
-            directory: this.options.directory,
-            worktree,
-            project: (this.options.project ?? { id: "global", worktree }) as any,
-            fs: this.options.fs as any,
-            git: this._git as any,
-            search: this.options.search as any,
-            paths: this.options.paths as any,
-            config: this.options.config as any,
-            instructions: this.options.instructions,
-            db: this._dbClient,
-            state: this._state,
-            containsPath: (filepath: string) => {
-                const normalized = path.resolve(filepath)
-                return normalized.startsWith(path.resolve(worktree)) ||
-                       normalized.startsWith(path.resolve(this.options.paths.data))
-            },
-            // Service instances
-            env: this.env,
-            bus: this.bus,
-            scheduler: this.scheduler,
-            fileTime: this.fileTime,
-        }
+        return this._context
     }
 
     /**
      * Initialize the agent - must be called before createSession or chat.
-     * Boots up opencode subsystems: database, config, plugins, tool registry.
+     * Boots up opencode subsystems: database, config, plugins, tool registry,
+     * and constructs all service instances.
      */
     async init(): Promise<void> {
         if (this.initialized) return
@@ -336,9 +308,53 @@ export class CodeAgent {
             this._dbClient = await this._storageProvider!.connect(migrations)
         }
 
-        // Build and cache the context (now that db is ready)
-        this._context = this.buildContext()
+        // ── Build context with all services ──────────────────────────
+        const worktree = this.options.worktree ?? this.options.directory
+        const ctx = {
+            directory: this.options.directory,
+            worktree,
+            project: (this.options.project ?? { id: "global", worktree }) as any,
+            fs: this.options.fs as any,
+            git: this._git as any,
+            search: this.options.search as any,
+            paths: this.options.paths as any,
+            configOverrides: this.options.config as any,
+            instructions: this.options.instructions,
+            db: this._dbClient,
+            state: this._state,
+            containsPath: (filepath: string) => {
+                const normalized = path.resolve(filepath)
+                return normalized.startsWith(path.resolve(worktree)) ||
+                       normalized.startsWith(path.resolve(this.options.paths.data))
+            },
+            // Phase 0: stateless services
+            env: this.env,
+            bus: this.bus,
+            scheduler: this.scheduler,
+            fileTime: this.fileTime,
+        } as AgentContext
 
+        // Phase 1: context-dependent services
+        ctx.config = new Config.ConfigService(ctx)
+        ctx.question = new Question.QuestionService()
+        ctx.sessionStatus = new SessionStatus.SessionStatusService()
+        ctx.instruction = new InstructionPrompt.InstructionService()
+        ctx.sessionPrompt = new SessionPrompt.SessionPromptService()
+        ctx.permission = new Permission.PermissionService()
+        ctx.permissionNext = new PermissionNext.PermissionNextService(ctx)
+        ctx.command = new Command.CommandService(ctx)
+        ctx.agents = new Agent.AgentService(ctx)
+        ctx.provider = new Provider.ProviderService(ctx)
+        ctx.modelsDev = new ModelsDev.ModelsDevService(ctx)
+        ctx.toolRegistry = new ToolRegistry.ToolRegistryService(ctx)
+        ctx.skill = new Skill.SkillService(ctx)
+        ctx.fileWatcher = new FileWatcher.FileWatcherService(ctx)
+        ctx.file = new File.FileService(ctx)
+        ctx.vcs = new Vcs.VcsService()
+
+        this._context = ctx
+
+        // Register custom tools
         if (this.options.tools) {
             for (const [name, def] of Object.entries(this.options.tools)) {
                 ToolRegistry.register(this._context, {
@@ -346,8 +362,8 @@ export class CodeAgent {
                     init: async () => ({
                         parameters: z.object(def.args),
                         description: def.description,
-                        execute: async (args, ctx) => {
-                            const result = await def.execute(args as any, ctx as any)
+                        execute: async (args, toolCtx) => {
+                            const result = await def.execute(args as any, toolCtx as any)
                             return {
                                 title: "",
                                 output: typeof result === "string" ? result : JSON.stringify(result),
@@ -390,32 +406,6 @@ export class CodeAgent {
         if (!this.options.skipPlugins) {
             await Plugin.init()
         }
-
-        // ── Construct context-dependent services ──────────────────────
-        // These services are now owned by CodeAgent. Namespace wrappers
-        // with `if (context.xxx) return context.xxx` will find them here
-        // instead of creating new instances via getState().
-        const ctx = this._context
-        ctx.configService = new Config.ConfigService(ctx)
-        ctx.questionService = new Question.QuestionService()
-        ctx.sessionStatusService = new SessionStatus.SessionStatusService()
-        ctx.instructionService = new InstructionPrompt.InstructionService()
-        ctx.sessionPromptService = new SessionPrompt.SessionPromptService()
-        ctx.permissionService = new Permission.PermissionService()
-        ctx.permissionNextService = new PermissionNext.PermissionNextService(ctx)
-        ctx.commandService = new Command.CommandService(ctx)
-        ctx.agentService = new Agent.AgentService(ctx)
-        ctx.providerService = new Provider.ProviderService(ctx)
-        ctx.modelsDevService = new ModelsDev.ModelsDevService(ctx)
-        ctx.toolRegistryService = new ToolRegistry.ToolRegistryService(ctx)
-        ctx.skillService = new Skill.SkillService(ctx)
-        if (!this.options.skipPlugins) {
-            ctx.fileWatcherService = new FileWatcher.FileWatcherService(ctx)
-        }
-        if (ctx.search) {
-            ctx.fileService = new File.FileService(ctx)
-        }
-        ctx.vcsService = new Vcs.VcsService()
 
         this.initialized = true
     }

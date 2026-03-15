@@ -15,7 +15,7 @@ import { testPaths } from "./_test-paths"
  */
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest"
 import { http, HttpResponse } from "msw"
-import { CodeAgent, NodeFS } from "../src/index"
+import { CodeAgent, NodeFS, NodeSearchProvider } from "../src/index"
 import { createTempDir, cleanupTempDir, server } from "./setup"
 import {
     buildCompactionFixtures,
@@ -37,6 +37,7 @@ describe("CodeAgent: context compaction", () => {
             directory: tmpDir,
             skipPlugins: true,
             fs: new NodeFS(),
+            search: new NodeSearchProvider(),
             paths: testPaths(),
             provider: {
                 id: "openai",

@@ -7,7 +7,7 @@ import { testPaths } from "./_test-paths"
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest"
 import { http, HttpResponse } from "msw"
-import { CodeAgent } from "../src/index"
+import { CodeAgent, NodeSearchProvider } from "../src/index"
 import { createTempDir, cleanupTempDir, server } from "./setup"
 import { TOOL_CALL_BODY, TOOL_RESULT_TEXT_BODY } from "./fixtures/tool-call-stream"
 import { SqlJsStorage } from "../src/storage-sqljs"

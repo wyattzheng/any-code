@@ -12,7 +12,7 @@ import { testPaths } from "./_test-paths"
  * Uses real filesystem + git (Snapshot relies on git operations).
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest"
-import { CodeAgent, NodeFS } from "../src/index"
+import { CodeAgent, NodeFS, NodeSearchProvider } from "../src/index"
 import { createTempDir, cleanupTempDir } from "./setup"
 import path from "path"
 import fs from "fs"
@@ -47,6 +47,7 @@ describe("Snapshot: git-based tracking", () => {
             worktree: tmpDir,
             skipPlugins: true,
             fs: new NodeFS(),
+            search: new NodeSearchProvider(),
             paths,
             provider: {
                 id: "openai",

@@ -6,7 +6,7 @@ import { testPaths } from "./_test-paths"
  * when the LLM returns a simple text response.
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest"
-import { CodeAgent, NodeFS } from "../src/index"
+import { CodeAgent, NodeFS, NodeSearchProvider } from "../src/index"
 import { createTempDir, cleanupTempDir } from "./setup"
 import { SqlJsStorage } from "../src/storage-sqljs"
 
@@ -22,6 +22,7 @@ describe("CodeAgent text streaming", () => {
             directory: tmpDir,
             skipPlugins: true,
             fs: new NodeFS(),
+            search: new NodeSearchProvider(),
             paths: testPaths(),
             provider: {
                 // Use openai provider so ai-sdk makes calls to /v1/chat/completions

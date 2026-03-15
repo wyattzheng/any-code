@@ -8,7 +8,7 @@ import { testPaths } from "./_test-paths"
  *   3. Sessions persist in the database and can be retrieved
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest"
-import { CodeAgent, NodeFS } from "../src/index"
+import { CodeAgent, NodeFS, NodeSearchProvider } from "../src/index"
 import { createTempDir, cleanupTempDir } from "./setup"
 import { SqlJsStorage } from "../src/storage-sqljs"
 
@@ -25,6 +25,7 @@ describe("CodeAgent: session persistence", () => {
             directory: tmpDir,
             skipPlugins: true,
             fs: new NodeFS(),
+            search: new NodeSearchProvider(),
             paths,
             provider: {
                 id: "openai",

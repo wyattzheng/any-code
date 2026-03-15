@@ -104,7 +104,7 @@ export namespace Config {
   async function initConfig(context: AgentContext) {
     // Short-circuit: if config was injected via Instance context (e.g. from CodeAgent options),
     // skip all filesystem-based config loading.
-    const injected = context.config
+    const injected = context.configOverrides
     if (injected) {
       return {
         config: injected as Info,

@@ -45,6 +45,7 @@ describe("CodeAgent: permission handling", () => {
                 directory: tmpDir,
                 skipPlugins: true,
                 fs: new NodeFS(),
+            search: new NodeSearchProvider(),
                 paths: testPaths(),
                 provider: {
                     id: "openai",

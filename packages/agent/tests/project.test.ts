@@ -10,7 +10,7 @@ import { testPaths } from "./_test-paths"
  * Uses NodeFS + real git (project detection relies on git).
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest"
-import { CodeAgent, NodeFS } from "../src/index"
+import { CodeAgent, NodeFS, NodeSearchProvider } from "../src/index"
 import { createTempDir, cleanupTempDir } from "./setup"
 import path from "path"
 import fs from "fs"
@@ -48,6 +48,7 @@ describe("Project: discovery from directories", () => {
             directory: tmpDir,
             skipPlugins: true,
             fs: new NodeFS(),
+            search: new NodeSearchProvider(),
             paths,
             provider: {
                 id: "openai",
