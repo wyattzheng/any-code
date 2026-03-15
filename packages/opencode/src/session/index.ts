@@ -18,7 +18,7 @@ import { Log } from "../util/log"
 import { MessageV2 } from "./message-v2"
 
 import { fn } from "@/util/fn"
-import { Command } from "../command"
+import { Command } from "../agent/command"
 import { Snapshot } from "@/snapshot"
 import { ProjectID } from "../project/schema"
 import { SessionID, MessageID, PartID } from "./schema"

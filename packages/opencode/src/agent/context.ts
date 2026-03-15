@@ -13,7 +13,7 @@ import type { InstructionPrompt } from "../session/instruction"
 import type { SessionPrompt } from "../session/prompt"
 import type { Permission } from "../permission"
 import type { PermissionNext } from "../permission/next"
-import type { Command } from "../command"
+import type { Command } from "./command"
 import type { Agent } from "../agent/agent"
 import type { Provider } from "../provider/provider"
 import type { ModelsDev } from "../provider/models"
@@ -21,7 +21,7 @@ import type { ToolRegistry } from "../tool/registry"
 import type { Skill } from "../skill/skill"
 import type { FileWatcher } from "../file/watcher"
 import type { File } from "../file"
-import type { Vcs } from "../project/vcs"
+import type { Vcs } from "../project/project"
 
 export interface InstancePaths {
     data: string
