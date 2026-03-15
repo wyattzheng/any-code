@@ -1,5 +1,5 @@
 #!/usr/bin/env node
 
-import { startServer } from "./index.js"
+import { startServer } from "../src/index"
 
 startServer()
