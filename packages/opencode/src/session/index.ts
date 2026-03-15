@@ -331,7 +331,7 @@ export namespace Session {
           info: result,
         })
     }
-    const cfg = await Config.get(context)
+    const cfg = await context.config.get()
     if (!result.parentID && (Flag.OPENCODE_AUTO_SHARE || cfg.share === "auto"))
       share(result.id).catch(() => {
         // Silently ignore sharing errors during session creation

@@ -31,7 +31,7 @@ export namespace SessionCompaction {
   const COMPACTION_BUFFER = 20_000
 
   export async function isOverflow(input: { tokens: MessageV2.Assistant["tokens"]; model: Provider.Model; context: AgentContext }) {
-    const config = await Config.get(input.context)
+    const config = await input.context.config.get()
     if (config.compaction?.auto === false) return false
     const contextLimit = input.model.limit.context
     if (contextLimit === 0) return false
@@ -57,7 +57,7 @@ export namespace SessionCompaction {
   // calls. then erases output of previous tool calls. idea is to throw away old
   // tool calls that are no longer relevant.
   export async function prune(context: AgentContext, input: { sessionID: SessionID }) {
-    const config = await Config.get(context)
+    const config = await context.config.get()
     if (config.compaction?.prune === false) return
     log.info("pruning")
     const msgs = await Session.messages(context, { sessionID: input.sessionID })

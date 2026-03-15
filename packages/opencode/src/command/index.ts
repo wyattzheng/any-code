@@ -73,7 +73,7 @@ export namespace Command {
     return getState(context, STATE_KEY, () => new CommandService(context))._promise
   }
   async function initCommands(context: AgentContext) {
-    const cfg = await Config.get(context)
+    const cfg = await context.config.get()
 
     const result: Record<string, Info> = {
       [Default.INIT]: {

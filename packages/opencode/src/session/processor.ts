@@ -48,7 +48,7 @@ export namespace SessionProcessor {
       async process(streamInput: LLM.StreamInput) {
         log.info("process")
         needsCompaction = false
-        const shouldBreak = (await Config.get(input.context)).experimental?.continue_loop_on_deny !== true
+        const shouldBreak = (await input.context.config.get()).experimental?.continue_loop_on_deny !== true
         while (true) {
           try {
             let currentText: MessageV2.TextPart | undefined

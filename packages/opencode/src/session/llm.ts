@@ -59,7 +59,7 @@ export namespace LLM {
     })
     const [language, cfg, provider, auth] = await Promise.all([
       Provider.getLanguage(context, input.model),
-      Config.get(context),
+      context.config.get(),
       Provider.getProvider(context, input.model.providerID),
       Auth.get(input.model.providerID),
     ])

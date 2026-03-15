@@ -151,7 +151,7 @@ export namespace Skill {
     }
 
     // Scan additional skill paths from config
-    const config = await Config.get(context)
+    const config = await context.config.get()
     for (const skillPath of config.skills?.paths ?? []) {
       const expanded = skillPath.startsWith("~/") ? path.join(os.homedir(), skillPath.slice(2)) : skillPath
       const resolved = path.isAbsolute(expanded) ? expanded : path.join(context.directory, expanded)

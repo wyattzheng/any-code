@@ -76,7 +76,7 @@ export namespace InstructionPrompt {
   }
 
   export async function systemPaths(context: AgentContext) {
-    const config = await Config.get(context)
+    const config = await context.config.get()
     const paths = new Set<string>()
 
     if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
@@ -128,7 +128,7 @@ export namespace InstructionPrompt {
       return injected
     }
 
-    const config = await Config.get(context)
+    const config = await context.config.get()
     const paths = await systemPaths(context)
 
     const files = Array.from(paths).map(async (p) => {

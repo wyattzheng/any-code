@@ -29,7 +29,7 @@ export namespace Snapshot {
   export async function cleanup(context?: AgentContext) {
     if (!context) return
     if (context.project.vcs !== "git") return
-    const cfg = await Config.get(context)
+    const cfg = await context.config.get()
     if (cfg.snapshot === false) return
     const git = gitdir(context)
     const exists = await Filesystem.exists(context, git)
@@ -50,7 +50,7 @@ export namespace Snapshot {
 
   export async function track(context: AgentContext) {
     if (context.project.vcs !== "git") return
-    const cfg = await Config.get(context)
+    const cfg = await context.config.get()
     if (cfg.snapshot === false) return
     const git = gitdir(context)
     if (!(await Filesystem.exists(context, git))) {

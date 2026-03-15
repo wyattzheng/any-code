@@ -73,7 +73,7 @@ export namespace Agent {
     return getState(context, STATE_KEY, () => new AgentService(context))._promise
   }
   async function initAgents(context: AgentContext) {
-    const cfg = await Config.get(context)
+    const cfg = await context.config.get()
 
     const skillDirs = await Skill.dirs(context)
     const whitelistedDirs = [Truncate.glob(context), ...skillDirs.map((dir) => path.join(dir, "*"))]
@@ -279,7 +279,7 @@ export namespace Agent {
   }
 
   export async function list(context: AgentContext) {
-    const cfg = await Config.get(context)
+    const cfg = await context.config.get()
     return pipe(
       await state(context),
       values(),
@@ -288,7 +288,7 @@ export namespace Agent {
   }
 
   export async function defaultAgent(context: AgentContext) {
-    const cfg = await Config.get(context)
+    const cfg = await context.config.get()
     const agents = await state(context)
 
     if (cfg.default_agent) {
@@ -305,7 +305,7 @@ export namespace Agent {
   }
 
   export async function generate(context: AgentContext, input: { description: string; model?: { providerID: ProviderID; modelID: ModelID } }) {
-    const cfg = await Config.get(context)
+    const cfg = await context.config.get()
     const defaultModel = input.model ?? (await Provider.defaultModel(context))
     const model = await Provider.getModel(context, defaultModel.providerID, defaultModel.modelID)
     const language = await Provider.getLanguage(context, model)

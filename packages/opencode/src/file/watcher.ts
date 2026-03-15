@@ -60,7 +60,7 @@ export namespace FileWatcher {
   const STATE_KEY = Symbol("file.watcher")
   async function initWatcher(context: AgentContext) {
       log.info("init")
-      const cfg = await Config.get(context)
+      const cfg = await context.config.get()
       const backend = (() => {
         if (process.platform === "win32") return "windows"
         if (process.platform === "darwin") return "fs-events"

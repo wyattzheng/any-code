@@ -15,7 +15,7 @@ import { testPaths } from "./_test-paths"
  */
 import { describe, it, expect, afterAll } from "vitest"
 import { http, HttpResponse } from "msw"
-import { CodeAgent, NodeFS, type PermissionRequest } from "../src/index"
+import { CodeAgent, NodeFS, NodeSearchProvider, type PermissionRequest } from "../src/index"
 import { createTempDir, cleanupTempDir, server } from "./setup"
 import { buildHelloworldFixtures } from "./fixtures/helloworld-html-stream"
 import { RESPONSES_API_BODY } from "./fixtures/text-stream"
@@ -41,11 +41,11 @@ describe("CodeAgent: permission handling", () => {
 
         try {
             const agent = new CodeAgent({
-            storage: new SqlJsStorage(),
+                storage: new SqlJsStorage(),
                 directory: tmpDir,
                 skipPlugins: true,
                 fs: new NodeFS(),
-            search: new NodeSearchProvider(),
+                search: new NodeSearchProvider(),
                 paths: testPaths(),
                 provider: {
                     id: "openai",

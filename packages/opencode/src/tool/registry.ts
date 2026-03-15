@@ -112,7 +112,7 @@ export namespace ToolRegistry {
 
   async function all(context: AgentContext): Promise<Tool.Info[]> {
     const custom = await state(context).then((x) => x.custom)
-    const config = await Config.get(context)
+    const config = await context.config.get()
     const question = ["app", "cli", "desktop"].includes(Flag.OPENCODE_CLIENT) || Flag.OPENCODE_ENABLE_QUESTION_TOOL
 
     return [

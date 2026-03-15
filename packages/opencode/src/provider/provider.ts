@@ -153,7 +153,7 @@ export namespace Provider {
         const env = context.env.all()
         if (input.env.some((item) => env[item])) return true
         if (await Auth.get(input.id)) return true
-        const config = await Config.get(context)
+        const config = await context.config.get()
         if (config.provider?.["opencode"]?.options?.apiKey) return true
         return false
       })()
@@ -222,7 +222,7 @@ export namespace Provider {
       }
     },
     "amazon-bedrock": async (context) => {
-      const config = await Config.get(context)
+      const config = await context.config.get()
       const providerConfig = config.provider?.["amazon-bedrock"]
 
       const auth = await Auth.get("amazon-bedrock")
@@ -500,7 +500,7 @@ export namespace Provider {
         return context.env.get("GITLAB_TOKEN")
       })()
 
-      const config = await Config.get(context)
+      const config = await context.config.get()
       const providerConfig = config.provider?.["gitlab"]
 
       const aiGatewayHeaders = {
@@ -823,7 +823,7 @@ export namespace Provider {
   }
   async function initProvider(context: AgentContext) {
     using _ = log.time("state")
-    const config = await Config.get(context)
+    const config = await context.config.get()
     const modelsDev = await ModelsDev.get(context)
     const database = mapValues(modelsDev, fromModelsDevProvider)
 
@@ -1265,7 +1265,7 @@ export namespace Provider {
   }
 
   export async function getSmallModel(context: AgentContext, providerID: ProviderID) {
-    const cfg = await Config.get(context)
+    const cfg = await context.config.get()
 
     if (cfg.small_model) {
       const parsed = parseModel(cfg.small_model)
@@ -1331,7 +1331,7 @@ export namespace Provider {
   }
 
   export async function defaultModel(context: AgentContext) {
-    const cfg = await Config.get(context)
+    const cfg = await context.config.get()
     if (cfg.model) return parseModel(cfg.model)
 
     const providers = await list(context)
