@@ -2,7 +2,7 @@ import type { AgentContext } from "@/agent/context"
 import z from "zod"
 import { Filesystem } from "../util/filesystem"
 import path from "path"
-import { and, Database, eq } from "../storage/db"
+import { and, eq } from "../storage/db"
 import { ProjectTable } from "./project.sql"
 import { SessionTable } from "../session/session.sql"
 import { Log } from "../util/log"
@@ -218,7 +218,7 @@ export namespace Project {
       }
     })
 
-    const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, data.id)).get())
+    const row = context.db.select().from(ProjectTable).where(eq(ProjectTable.id, data.id)).get()
     const existing = row
       ? fromRow(row)
       : {
@@ -270,20 +270,17 @@ export namespace Project {
       sandboxes: result.sandboxes,
       commands: result.commands,
     }
-    Database.use((db) =>
-      db.insert(ProjectTable).values(insert).onConflictDoUpdate({ target: ProjectTable.id, set: updateSet }).run(),
-    )
+    context.db.insert(ProjectTable).values(insert).onConflictDoUpdate({ target: ProjectTable.id, set: updateSet }).run()
+    
     // Runs after upsert so the target project row exists (FK constraint).
     // Runs on every startup because sessions created before git init
     // accumulate under "global" and need migrating whenever they appear.
     if (data.id !== ProjectID.global) {
-      Database.use((db) =>
-        db
+      context.db
           .update(SessionTable)
           .set({ project_id: data.id })
           .where(and(eq(SessionTable.project_id, ProjectID.global), eq(SessionTable.directory, data.worktree)))
-          .run(),
-      )
+          .run()
     }
     GlobalBus.emit("event", {
       payload: {
@@ -309,7 +306,7 @@ export namespace Project {
     const base64 = Buffer.from(buffer).toString("base64")
     const mime = Filesystem.mimeType(shortest) || "image/png"
     const url = `data:${mime};base64,${base64}`
-    await update({
+    await update(context, {
       projectID: input.id,
       icon: {
         url,
@@ -318,30 +315,26 @@ export namespace Project {
     return
   }
 
-  export function setInitialized(id: ProjectID) {
-    Database.use((db) =>
-      db
+  export function setInitialized(context: AgentContext, id: ProjectID) {
+    context.db
         .update(ProjectTable)
         .set({
           time_initialized: Date.now(),
         })
         .where(eq(ProjectTable.id, id))
-        .run(),
-    )
+        .run()
   }
 
-  export function list() {
-    return Database.use((db) =>
-      db
+  export function list(context: AgentContext) {
+    return context.db
         .select()
         .from(ProjectTable)
         .all()
-        .map((row) => fromRow(row)),
-    )
+        .map((row: any) => fromRow(row))
   }
 
-  export function get(id: ProjectID): Info | undefined {
-    const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
+  export function get(context: AgentContext, id: ProjectID): Info | undefined {
+    const row = context.db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get()
     if (!row) return undefined
     return fromRow(row)
   }
@@ -361,17 +354,9 @@ export namespace Project {
     return (await fromDirectory(context, input.directory)).project
   }
 
-  export const update = fn(
-    z.object({
-      projectID: ProjectID.zod,
-      name: z.string().optional(),
-      icon: Info.shape.icon.optional(),
-      commands: Info.shape.commands.optional(),
-    }),
-    async (input) => {
+  export async function update(context: AgentContext, input: { projectID: any; name?: string; icon?: any; commands?: any }) {
       const id = ProjectID.make(input.projectID)
-      const result = Database.use((db) =>
-        db
+      const result = context.db
           .update(ProjectTable)
           .set({
             name: input.name,
@@ -382,8 +367,8 @@ export namespace Project {
           })
           .where(eq(ProjectTable.id, id))
           .returning()
-          .get(),
-      )
+          .get()
+      
       if (!result) throw new Error(`Project not found: ${input.projectID}`)
       const data = fromRow(result)
       GlobalBus.emit("event", {
@@ -393,11 +378,10 @@ export namespace Project {
         },
       })
       return data
-    },
-  )
+  }
 
   export async function sandboxes(context: AgentContext, id: ProjectID) {
-    const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
+    const row = context.db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get()
     if (!row) return []
     const data = fromRow(row)
     const valid: string[] = []
@@ -408,19 +392,18 @@ export namespace Project {
     return valid
   }
 
-  export async function addSandbox(id: ProjectID, directory: string) {
-    const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
+  export async function addSandbox(context: AgentContext, id: ProjectID, directory: string) {
+    const row = context.db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get()
     if (!row) throw new Error(`Project not found: ${id}`)
     const sandboxes = [...row.sandboxes]
     if (!sandboxes.includes(directory)) sandboxes.push(directory)
-    const result = Database.use((db) =>
-      db
+    const result = context.db
         .update(ProjectTable)
         .set({ sandboxes, time_updated: Date.now() })
         .where(eq(ProjectTable.id, id))
         .returning()
-        .get(),
-    )
+        .get()
+    
     if (!result) throw new Error(`Project not found: ${id}`)
     const data = fromRow(result)
     GlobalBus.emit("event", {
@@ -432,18 +415,17 @@ export namespace Project {
     return data
   }
 
-  export async function removeSandbox(id: ProjectID, directory: string) {
-    const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
+  export async function removeSandbox(context: AgentContext, id: ProjectID, directory: string) {
+    const row = context.db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get()
     if (!row) throw new Error(`Project not found: ${id}`)
-    const sandboxes = row.sandboxes.filter((s) => s !== directory)
-    const result = Database.use((db) =>
-      db
+    const sandboxes = row.sandboxes.filter((s: any) => s !== directory)
+    const result = context.db
         .update(ProjectTable)
         .set({ sandboxes, time_updated: Date.now() })
         .where(eq(ProjectTable.id, id))
         .returning()
-        .get(),
-    )
+        .get()
+    
     if (!result) throw new Error(`Project not found: ${id}`)
     const data = fromRow(result)
     GlobalBus.emit("event", {

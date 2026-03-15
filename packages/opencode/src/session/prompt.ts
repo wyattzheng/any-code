@@ -159,11 +159,11 @@ export namespace SessionPrompt {
   export type PromptInput = z.infer<typeof PromptInput> & { context: AgentContext }
 
   export const prompt = async (input: PromptInput) => {
-    const session = await Session.get(input.sessionID)
-    await SessionRevert.cleanup(session)
+    const session = await Session.get(input.context, input.sessionID)
+    await SessionRevert.cleanup(input.context, session)
 
     const message = await createUserMessage(input.context, input)
-    await Session.touch(input.sessionID)
+    await Session.touch(input.context, input.sessionID)
 
     // this is backwards compatibility for allowing `tools` to be specified when
     // prompting
@@ -177,7 +177,7 @@ export namespace SessionPrompt {
     }
     if (permissions.length > 0) {
       session.permission = permissions
-      await Session.setPermission({ sessionID: session.id, permission: permissions })
+      await Session.setPermission(input.context, { sessionID: session.id, permission: permissions })
     }
 
     if (input.noReply === true) {
@@ -295,12 +295,12 @@ export namespace SessionPrompt {
     let structuredOutput: unknown | undefined
 
     let step = 0
-    const session = await Session.get(sessionID)
+    const session = await Session.get(context, sessionID)
     while (true) {
       SessionStatus.set(context, sessionID, { type: "busy" })
       log.info("loop", { step, sessionID })
       if (abort.aborted) break
-      let msgs = await MessageV2.filterCompacted(MessageV2.stream(sessionID))
+      let msgs = await MessageV2.filterCompacted(MessageV2.stream(context, sessionID))
 
       let lastUser: MessageV2.User | undefined
       let lastAssistant: MessageV2.Assistant | undefined
@@ -358,7 +358,7 @@ export namespace SessionPrompt {
       if (task?.type === "subtask") {
         const taskTool = await TaskTool.init()
         const taskModel = task.model ? await Provider.getModel(context, task.model.providerID, task.model.modelID) : model
-        const assistantMessage = (await Session.updateMessage({
+        const assistantMessage = (await Session.updateMessage(context, {
           id: MessageID.ascending(),
           role: "assistant",
           parentID: lastUser.id,
@@ -383,7 +383,7 @@ export namespace SessionPrompt {
             created: Date.now(),
           },
         })) as MessageV2.Assistant
-        let part = (await Session.updatePart({
+        let part = (await Session.updatePart(context, {
           id: PartID.ascending(),
           messageID: assistantMessage.id,
           sessionID: assistantMessage.sessionID,
@@ -430,7 +430,7 @@ export namespace SessionPrompt {
           extra: { bypassAgentCheck: true },
           messages: msgs,
           async metadata(input) {
-            part = (await Session.updatePart({
+            part = (await Session.updatePart(context, {
               ...part,
               type: "tool",
               state: {
@@ -470,9 +470,9 @@ export namespace SessionPrompt {
         )
         assistantMessage.finish = "tool-calls"
         assistantMessage.time.completed = Date.now()
-        await Session.updateMessage(assistantMessage)
+        await Session.updateMessage(context, assistantMessage)
         if (result && part.state.status === "running") {
-          await Session.updatePart({
+          await Session.updatePart(context, {
             ...part,
             state: {
               status: "completed",
@@ -489,7 +489,7 @@ export namespace SessionPrompt {
           } satisfies MessageV2.ToolPart)
         }
         if (!result) {
-          await Session.updatePart({
+          await Session.updatePart(context, {
             ...part,
             state: {
               status: "error",
@@ -518,8 +518,8 @@ export namespace SessionPrompt {
             agent: lastUser.agent,
             model: lastUser.model,
           }
-          await Session.updateMessage(summaryUserMsg)
-          await Session.updatePart({
+          await Session.updateMessage(context, summaryUserMsg)
+          await Session.updatePart(context, {
             id: PartID.ascending(),
             messageID: summaryUserMsg.id,
             sessionID,
@@ -553,7 +553,7 @@ export namespace SessionPrompt {
         lastFinished.summary !== true &&
         (await SessionCompaction.isOverflow({ tokens: lastFinished.tokens, model, context }))
       ) {
-        await SessionCompaction.create({
+        await SessionCompaction.create(context, {
           sessionID,
           agent: lastUser.agent,
           model: lastUser.model,
@@ -574,7 +574,7 @@ export namespace SessionPrompt {
       })
 
       const processor = SessionProcessor.create({
-        assistantMessage: (await Session.updateMessage({
+        assistantMessage: (await Session.updateMessage(context, {
           id: MessageID.ascending(),
           parentID: lastUser.id,
           role: "assistant",
@@ -699,7 +699,7 @@ export namespace SessionPrompt {
       if (structuredOutput !== undefined) {
         processor.message.structured = structuredOutput
         processor.message.finish = processor.message.finish ?? "stop"
-        await Session.updateMessage(processor.message)
+        await Session.updateMessage(context, processor.message)
         break
       }
 
@@ -713,14 +713,14 @@ export namespace SessionPrompt {
             message: "Model did not produce structured output",
             retries: 0,
           }).toObject()
-          await Session.updateMessage(processor.message)
+          await Session.updateMessage(context, processor.message)
           break
         }
       }
 
       if (result === "stop") break
       if (result === "compact") {
-        await SessionCompaction.create({
+        await SessionCompaction.create(context, {
           sessionID,
           agent: lastUser.agent,
           model: lastUser.model,
@@ -731,7 +731,7 @@ export namespace SessionPrompt {
       continue
     }
     SessionCompaction.prune(context, { sessionID })
-    for await (const item of MessageV2.stream(sessionID)) {
+    for await (const item of MessageV2.stream(context, sessionID)) {
       if (item.info.role === "user") continue
       const queued = getState(context)[sessionID]?.callbacks ?? []
       for (const q of queued) {
@@ -743,7 +743,7 @@ export namespace SessionPrompt {
   }
 
   async function lastModel(context: AgentContext, sessionID: SessionID) {
-    for await (const item of MessageV2.stream(sessionID)) {
+    for await (const item of MessageV2.stream(context, sessionID)) {
       if (item.info.role === "user" && item.info.model) return item.info.model
     }
     return Provider.defaultModel(context)
@@ -776,7 +776,7 @@ export namespace SessionPrompt {
       metadata: async (val: { title?: string; metadata?: any }) => {
         const match = input.processor.partFromToolCall(options.toolCallId)
         if (match && match.state.status === "running") {
-          await Session.updatePart({
+          await Session.updatePart(input.agentContext, {
             ...match,
             state: {
               title: val.title,
@@ -1176,9 +1176,9 @@ export namespace SessionPrompt {
       },
     )
 
-    await Session.updateMessage(info)
+    await Session.updateMessage(context, info)
     for (const part of parts) {
-      await Session.updatePart(part)
+      await Session.updatePart(context, part)
     }
 
     return {
@@ -1225,7 +1225,7 @@ export namespace SessionPrompt {
       const plan = Session.plan(input.context, input.session)
       const exists = await Filesystem.exists(input.context, plan)
       if (exists) {
-        const part = await Session.updatePart({
+        const part = await Session.updatePart(input.context, {
           id: PartID.ascending(),
           messageID: userMessage.info.id,
           sessionID: userMessage.info.sessionID,
@@ -1244,7 +1244,7 @@ export namespace SessionPrompt {
       const plan = Session.plan(input.context, input.session)
       const exists = await Filesystem.exists(input.context, plan)
       if (!exists) await Filesystem.mkdir(input.context, path.dirname(plan))
-      const part = await Session.updatePart({
+      const part = await Session.updatePart(input.context, {
         id: PartID.ascending(),
         messageID: userMessage.info.id,
         sessionID: userMessage.info.sessionID,
@@ -1359,9 +1359,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       }
     })
 
-    const session = await Session.get(input.sessionID)
+    const session = await Session.get(context, input.sessionID)
     if (session.revert) {
-      await SessionRevert.cleanup(session)
+      await SessionRevert.cleanup(context, session)
     }
     const agent = await Agent.get(context, input.agent)
     const model = input.model ?? agent.model ?? (await lastModel(context, input.sessionID))
@@ -1378,7 +1378,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         modelID: model.modelID,
       },
     }
-    await Session.updateMessage(userMsg)
+    await Session.updateMessage(context, userMsg)
     const userPart: MessageV2.Part = {
       type: "text",
       id: PartID.ascending(),
@@ -1387,7 +1387,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       text: "The following tool was executed by the user",
       synthetic: true,
     }
-    await Session.updatePart(userPart)
+    await Session.updatePart(context, userPart)
 
     const msg: MessageV2.Assistant = {
       id: MessageID.ascending(),
@@ -1413,7 +1413,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       modelID: model.modelID,
       providerID: model.providerID,
     }
-    await Session.updateMessage(msg)
+    await Session.updateMessage(context, msg)
     const part: MessageV2.Part = {
       type: "tool",
       id: PartID.ascending(),
@@ -1431,7 +1431,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         },
       },
     }
-    await Session.updatePart(part)
+    await Session.updatePart(context, part)
     const shell = await Shell.preferred(context)
     const shellName = (
       process.platform === "win32" ? path.win32.basename(shell, ".exe") : path.basename(shell)
@@ -1514,7 +1514,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           output: output,
           description: "",
         }
-        Session.updatePart(part)
+        Session.updatePart(context, part)
       }
     })
 
@@ -1525,7 +1525,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           output: output,
           description: "",
         }
-        Session.updatePart(part)
+        Session.updatePart(context, part)
       }
     })
 
@@ -1558,7 +1558,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       output += "\n\n" + ["<metadata>", "User aborted the command", "</metadata>"].join("\n")
     }
     msg.time.completed = Date.now()
-    await Session.updateMessage(msg)
+    await Session.updateMessage(context, msg)
     if (part.state.status === "running") {
       part.state = {
         status: "completed",
@@ -1574,7 +1574,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         },
         output,
       }
-      await Session.updatePart(part)
+      await Session.updatePart(context, part)
     }
     return { info: msg, parts: [part] }
   }
@@ -1827,7 +1827,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       if (!cleaned) return
 
       const title = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
-      return Session.setTitle({ sessionID: input.session.id, title })
+      return Session.setTitle(input.context, { sessionID: input.session.id, title })
     }
   }
 }

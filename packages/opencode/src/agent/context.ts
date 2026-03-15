@@ -34,6 +34,8 @@ export interface AgentContext {
     config?: Record<string, unknown>
     /** Instructions overrides (optional) */
     instructions?: string[]
+    /** Database client (drizzle) — set during init, used for all DB operations */
+    db: any
 }
 
 /**

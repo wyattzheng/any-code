@@ -4,7 +4,7 @@ import { Snapshot } from "../snapshot"
 import { MessageV2 } from "./message-v2"
 import { Session } from "."
 import { Log } from "../util/log"
-import { Database, eq } from "../storage/db"
+import { eq } from "../storage/db"
 import { MessageTable, PartTable } from "./session.sql"
 import { Storage } from "@/storage/storage"
 import { Bus } from "../bus"
@@ -23,9 +23,9 @@ export namespace SessionRevert {
 
   export async function revert(input: RevertInput, context: import("../agent/context").AgentContext) {
     SessionPrompt.assertNotBusy(context, input.sessionID)
-    const all = await Session.messages({ sessionID: input.sessionID })
+    const all = await Session.messages(context, { sessionID: input.sessionID })
     let lastUser: MessageV2.User | undefined
-    const session = await Session.get(input.sessionID)
+    const session = await Session.get(context, input.sessionID)
 
     let revert: Session.Info["revert"]
     const patches: Snapshot.Patch[] = []
@@ -55,7 +55,7 @@ export namespace SessionRevert {
     }
 
     if (revert) {
-      const session = await Session.get(input.sessionID)
+      const session = await Session.get(context, input.sessionID)
       revert.snapshot = session.revert?.snapshot ?? (await Snapshot.track(context))
       await Snapshot.revert(context, patches)
       if (revert.snapshot) revert.diff = await Snapshot.diff(context, revert.snapshot)
@@ -66,7 +66,7 @@ export namespace SessionRevert {
         sessionID: input.sessionID,
         diff: diffs,
       })
-      return Session.setRevert({
+      return Session.setRevert(context, {
         sessionID: input.sessionID,
         revert,
         summary: {
@@ -82,16 +82,16 @@ export namespace SessionRevert {
   export async function unrevert(input: { sessionID: SessionID }, context: import("../agent/context").AgentContext) {
     log.info("unreverting", input)
     SessionPrompt.assertNotBusy(context, input.sessionID)
-    const session = await Session.get(input.sessionID)
+    const session = await Session.get(context, input.sessionID)
     if (!session.revert) return session
     if (session.revert.snapshot) await Snapshot.restore(context, session.revert.snapshot)
-    return Session.clearRevert(input.sessionID)
+    return Session.clearRevert(context, input.sessionID)
   }
 
-  export async function cleanup(session: Session.Info) {
+  export async function cleanup(context: import("../agent/context").AgentContext, session: Session.Info) {
     if (!session.revert) return
     const sessionID = session.id
-    const msgs = await Session.messages({ sessionID })
+    const msgs = await Session.messages(context, { sessionID })
     const messageID = session.revert.messageID
     const preserve = [] as MessageV2.WithParts[]
     const remove = [] as MessageV2.WithParts[]
@@ -113,7 +113,7 @@ export namespace SessionRevert {
       remove.push(msg)
     }
     for (const msg of remove) {
-      Database.use((db) => db.delete(MessageTable).where(eq(MessageTable.id, msg.info.id)).run())
+      context.db.delete(MessageTable).where(eq(MessageTable.id, msg.info.id)).run()
       await Bus.publish(undefined, MessageV2.Event.Removed, { sessionID: sessionID, messageID: msg.info.id })
     }
     if (session.revert.partID && target) {
@@ -124,7 +124,7 @@ export namespace SessionRevert {
         const removeParts = target.parts.slice(removeStart)
         target.parts = preserveParts
         for (const part of removeParts) {
-          Database.use((db) => db.delete(PartTable).where(eq(PartTable.id, part.id)).run())
+          context.db.delete(PartTable).where(eq(PartTable.id, part.id)).run()
           await Bus.publish(undefined, MessageV2.Event.PartRemoved, {
             sessionID: sessionID,
             messageID: target.info.id,
@@ -133,6 +133,6 @@ export namespace SessionRevert {
         }
       }
     }
-    await Session.clearRevert(sessionID)
+    await Session.clearRevert(context, sessionID)
   }
 }

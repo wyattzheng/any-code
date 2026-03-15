@@ -9,7 +9,7 @@ import { type SessionID, MessageID, PartID } from "../session/schema"
 import EXIT_DESCRIPTION from "./plan-exit.txt"
 
 async function getLastModel(context: import("../agent/context").AgentContext, sessionID: SessionID) {
-  for await (const item of MessageV2.stream(sessionID)) {
+  for await (const item of MessageV2.stream(context, sessionID)) {
     if (item.info.role === "user" && item.info.model) return item.info.model
   }
   return Provider.defaultModel(context)
@@ -19,7 +19,7 @@ export const PlanExitTool = Tool.define("plan_exit", {
   description: EXIT_DESCRIPTION,
   parameters: z.object({}),
   async execute(_params, ctx) {
-    const session = await Session.get(ctx.sessionID)
+    const session = await Session.get(ctx, ctx.sessionID)
     const plan = path.relative(ctx.worktree, Session.plan(ctx, session))
     const answers = await Question.ask(ctx, {
       sessionID: ctx.sessionID,
@@ -52,8 +52,8 @@ export const PlanExitTool = Tool.define("plan_exit", {
       agent: "build",
       model,
     }
-    await Session.updateMessage(userMsg)
-    await Session.updatePart({
+    await Session.updateMessage(ctx, userMsg)
+    await Session.updatePart(ctx, {
       id: PartID.ascending(),
       messageID: userMsg.id,
       sessionID: ctx.sessionID,
@@ -75,7 +75,7 @@ export const PlanEnterTool = Tool.define("plan_enter", {
   description: ENTER_DESCRIPTION,
   parameters: z.object({}),
   async execute(_params, ctx) {
-    const session = await Session.get(ctx.sessionID)
+    const session = await Session.get(context, ctx.sessionID)
     const plan = path.relative(ctx.worktree, Session.plan(session))
 
     const answers = await Question.ask({
@@ -110,8 +110,8 @@ export const PlanEnterTool = Tool.define("plan_enter", {
       agent: "plan",
       model,
     }
-    await Session.updateMessage(userMsg)
-    await Session.updatePart({
+    await Session.updateMessage(context, userMsg)
+    await Session.updatePart(context, {
       id: PartID.ascending(),
       messageID: userMsg.id,
       sessionID: ctx.sessionID,

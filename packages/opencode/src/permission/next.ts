@@ -5,7 +5,7 @@ import { BusEvent } from "@/bus/bus-event"
 import { Config } from "@/config/config"
 import { SessionID, MessageID } from "@/session/schema"
 import { PermissionID } from "./schema"
-import { Database, eq } from "@/storage/db"
+import { eq } from "@/storage/db"
 import { PermissionTable } from "@/session/session.sql"
 import { fn } from "@/util/fn"
 import { Log } from "@/util/log"
@@ -115,10 +115,8 @@ export namespace PermissionNext {
     reject: (e: any) => void
   }
 
-  const state = createScopedState(() => {
-    const row = Database.use((db) =>
-      db.select().from(PermissionTable).get(),
-    )
+  const state = createScopedState((context: AgentContext) => {
+    const row = context.db.select().from(PermissionTable).get()
     const stored = row?.data ?? ([] as Ruleset)
 
     return {

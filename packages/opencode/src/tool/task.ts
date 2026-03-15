@@ -67,7 +67,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
 
       const session = await iife(async () => {
         if (params.task_id) {
-          const found = await Session.get(SessionID.make(params.task_id)).catch(() => {})
+          const found = await Session.get(ctx, SessionID.make(params.task_id)).catch(() => {})
           if (found) return found
         }
 
@@ -102,7 +102,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           ],
         })
       })
-      const msg = await MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID })
+      const msg = await MessageV2.get(ctx, { sessionID: ctx.sessionID, messageID: ctx.messageID })
       if (msg.info.role !== "assistant") throw new Error("Not an assistant message")
 
       const model = agent.model ?? {

@@ -69,7 +69,7 @@ export namespace SessionSummary {
   }
 
   export async function summarize(context: AgentContext, input: { sessionID: SessionID; messageID: MessageID }) {
-    const all = await Session.messages({ sessionID: input.sessionID })
+    const all = await Session.messages(context, { sessionID: input.sessionID })
     await Promise.all([
       summarizeSession(context, { sessionID: input.sessionID, messages: all }),
       summarizeMessage(context, { messageID: input.messageID, messages: all }),
@@ -78,7 +78,7 @@ export namespace SessionSummary {
 
   async function summarizeSession(context: AgentContext, input: { sessionID: SessionID; messages: MessageV2.WithParts[] }) {
     const diffs = await computeDiff(context, { messages: input.messages })
-    await Session.setSummary({
+    await Session.setSummary(context, {
       sessionID: input.sessionID,
       summary: {
         additions: diffs.reduce((sum, x) => sum + x.additions, 0),
@@ -104,7 +104,7 @@ export namespace SessionSummary {
       ...userMsg.summary,
       diffs,
     }
-    await Session.updateMessage(userMsg)
+    await Session.updateMessage(context, userMsg)
   }
 
   export async function diff(context: AgentContext, input: { sessionID: SessionID; messageID?: MessageID }) {

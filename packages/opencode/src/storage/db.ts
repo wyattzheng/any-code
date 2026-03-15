@@ -1,14 +1,9 @@
-import { drizzle, type BetterSQLite3Database } from "drizzle-orm/better-sqlite3"
-import { type SQLiteTransaction } from "drizzle-orm/sqlite-core"
 export * from "drizzle-orm"
-import { Context } from "../util/context"
-
 import { Log } from "../util/log"
 import { NamedError } from "@/util/error"
 import z from "zod"
 import path from "path"
 import { readFileSync, readdirSync, existsSync } from "fs"
-import * as schema from "./schema"
 import { Flag } from "../util/flag"
 
 declare const OPENCODE_MIGRATIONS: { sql: string; timestamp: number; name: string }[] | undefined
@@ -23,9 +18,12 @@ export const NotFoundError = NamedError.create(
 const log = Log.create({ service: "db" })
 
 export namespace Database {
-  type Schema = typeof schema
-  export type Client = ReturnType<typeof drizzle<Schema>>
-  export type Transaction = Parameters<Parameters<Client["transaction"]>[0]>[0]
+  /**
+   * The db client type — any drizzle-compatible client.
+   * Actual typing depends on the StorageProvider implementation.
+   */
+  export type Client = any
+  export type TxOrDb = any
 
   type Journal = { sql: string; timestamp: number; name: string }[]
 
@@ -76,76 +74,5 @@ export namespace Database {
       }
     }
     return entries
-  }
-
-  /**
-   * Database client context — no module-level mutable state.
-   * The client is provided via `Database.provide()` which sets up
-   * an AsyncLocalStorage scope. All `Database.use()` calls within
-   * that scope can access the client.
-   */
-  const clientCtx = Context.create<{ client: Client }>("database-client")
-
-  /**
-   * Provide a database client for the duration of the callback.
-   * All Database.use() / Database.transaction() calls within scope
-   * will use this client.
-   */
-  export function provide<R>(client: Client, fn: () => R): R {
-    return clientCtx.provide({ client }, fn)
-  }
-
-  /**
-   * Get the current database client from context.
-   */
-  function getClient(): Client {
-    return clientCtx.use().client
-  }
-
-  export type TxOrDb = Transaction | Client
-
-  const txCtx = Context.create<{
-    tx: TxOrDb
-    effects: (() => void | Promise<void>)[]
-  }>("database-tx")
-
-  export function use<T>(callback: (trx: TxOrDb) => T): T {
-    try {
-      return callback(txCtx.use().tx)
-    } catch (err) {
-      if (err instanceof Context.NotFound) {
-        const client = getClient()
-        const effects: (() => void | Promise<void>)[] = []
-        const result = txCtx.provide({ effects, tx: client }, () => callback(client))
-        for (const effect of effects) effect()
-        return result
-      }
-      throw err
-    }
-  }
-
-  export function effect(fn: () => any | Promise<any>) {
-    try {
-      txCtx.use().effects.push(fn)
-    } catch {
-      fn()
-    }
-  }
-
-  export function transaction<T>(callback: (tx: TxOrDb) => T): T {
-    try {
-      return callback(txCtx.use().tx)
-    } catch (err) {
-      if (err instanceof Context.NotFound) {
-        const client = getClient()
-        const effects: (() => void | Promise<void>)[] = []
-        const result = (client.transaction as any)((tx: TxOrDb) => {
-          return txCtx.provide({ tx, effects }, () => callback(tx))
-        })
-        for (const effect of effects) effect()
-        return result
-      }
-      throw err
-    }
   }
 }

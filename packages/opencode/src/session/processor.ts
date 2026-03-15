@@ -78,7 +78,7 @@ export namespace SessionProcessor {
                     metadata: value.providerMetadata,
                   }
                   reasoningMap[value.id] = reasoningPart
-                  await Session.updatePart(reasoningPart)
+                  await Session.updatePart(input.context, reasoningPart)
                   break
 
                 case "reasoning-delta":
@@ -106,13 +106,13 @@ export namespace SessionProcessor {
                       end: Date.now(),
                     }
                     if (value.providerMetadata) part.metadata = value.providerMetadata
-                    await Session.updatePart(part)
+                    await Session.updatePart(input.context, part)
                     delete reasoningMap[value.id]
                   }
                   break
 
                 case "tool-input-start":
-                  const part = await Session.updatePart({
+                  const part = await Session.updatePart(input.context, {
                     id: toolcalls[value.id]?.id ?? PartID.ascending(),
                     messageID: input.assistantMessage.id,
                     sessionID: input.assistantMessage.sessionID,
@@ -137,7 +137,7 @@ export namespace SessionProcessor {
                 case "tool-call": {
                   const match = toolcalls[value.toolCallId]
                   if (match) {
-                    const part = await Session.updatePart({
+                    const part = await Session.updatePart(input.context, {
                       ...match,
                       tool: value.toolName,
                       state: {
@@ -151,8 +151,8 @@ export namespace SessionProcessor {
                     })
                     toolcalls[value.toolCallId] = part as MessageV2.ToolPart
 
-                    const parts = await MessageV2.parts(input.assistantMessage.id)
-                    const lastThree = parts.slice(-DOOM_LOOP_THRESHOLD)
+                    const parts = await MessageV2.parts(input.context, input.assistantMessage.id)
+                    const lastThree = (parts as any[]).slice(-DOOM_LOOP_THRESHOLD)
 
                     if (
                       lastThree.length === DOOM_LOOP_THRESHOLD &&
@@ -183,7 +183,7 @@ export namespace SessionProcessor {
                 case "tool-result": {
                   const match = toolcalls[value.toolCallId]
                   if (match && match.state.status === "running") {
-                    await Session.updatePart({
+                    await Session.updatePart(input.context, {
                       ...match,
                       state: {
                         status: "completed",
@@ -207,7 +207,7 @@ export namespace SessionProcessor {
                 case "tool-error": {
                   const match = toolcalls[value.toolCallId]
                   if (match && match.state.status === "running") {
-                    await Session.updatePart({
+                    await Session.updatePart(input.context, {
                       ...match,
                       state: {
                         status: "error",
@@ -235,7 +235,7 @@ export namespace SessionProcessor {
 
                 case "start-step":
                   snapshot = await Snapshot.track(input.context)
-                  await Session.updatePart({
+                  await Session.updatePart(input.context, {
                     id: PartID.ascending(),
                     messageID: input.assistantMessage.id,
                     sessionID: input.sessionID,
@@ -253,7 +253,7 @@ export namespace SessionProcessor {
                   input.assistantMessage.finish = value.finishReason
                   input.assistantMessage.cost += usage.cost
                   input.assistantMessage.tokens = usage.tokens
-                  await Session.updatePart({
+                  await Session.updatePart(input.context, {
                     id: PartID.ascending(),
                     reason: value.finishReason,
                     snapshot: await Snapshot.track(input.context),
@@ -263,11 +263,11 @@ export namespace SessionProcessor {
                     tokens: usage.tokens,
                     cost: usage.cost,
                   })
-                  await Session.updateMessage(input.assistantMessage)
+                  await Session.updateMessage(input.context, input.assistantMessage)
                   if (snapshot) {
                     const patch = await Snapshot.patch(input.context, snapshot)
                     if (patch.files.length) {
-                      await Session.updatePart({
+                      await Session.updatePart(input.context, {
                         id: PartID.ascending(),
                         messageID: input.assistantMessage.id,
                         sessionID: input.sessionID,
@@ -302,7 +302,7 @@ export namespace SessionProcessor {
                     },
                     metadata: value.providerMetadata,
                   }
-                  await Session.updatePart(currentText)
+                  await Session.updatePart(input.context, currentText)
                   break
 
                 case "text-delta":
@@ -337,7 +337,7 @@ export namespace SessionProcessor {
                       end: Date.now(),
                     }
                     if (value.providerMetadata) currentText.metadata = value.providerMetadata
-                    await Session.updatePart(currentText)
+                    await Session.updatePart(input.context, currentText)
                   }
                   currentText = undefined
                   break
@@ -390,7 +390,7 @@ export namespace SessionProcessor {
           if (snapshot) {
             const patch = await Snapshot.patch(input.context, snapshot)
             if (patch.files.length) {
-              await Session.updatePart({
+              await Session.updatePart(input.context, {
                 id: PartID.ascending(),
                 messageID: input.assistantMessage.id,
                 sessionID: input.sessionID,
@@ -401,10 +401,10 @@ export namespace SessionProcessor {
             }
             snapshot = undefined
           }
-          const p = await MessageV2.parts(input.assistantMessage.id)
+          const p = await MessageV2.parts(input.context, input.assistantMessage.id)
           for (const part of p) {
             if (part.type === "tool" && part.state.status !== "completed" && part.state.status !== "error") {
-              await Session.updatePart({
+              await Session.updatePart(input.context, {
                 ...part,
                 state: {
                   ...part.state,
@@ -419,7 +419,7 @@ export namespace SessionProcessor {
             }
           }
           input.assistantMessage.time.completed = Date.now()
-          await Session.updateMessage(input.assistantMessage)
+          await Session.updateMessage(input.context, input.assistantMessage)
           if (needsCompaction) return "compact"
           if (blocked) return "stop"
           if (input.assistantMessage.error) return "stop"

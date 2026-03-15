@@ -2,7 +2,7 @@ import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { SessionID } from "./schema"
 import z from "zod"
-import { Database, eq, asc } from "../storage/db"
+import { eq, asc } from "../storage/db"
 import { TodoTable } from "./session.sql"
 import type { AgentContext } from "@/agent/context"
 
@@ -27,12 +27,12 @@ export namespace Todo {
   }
 
   export function update(context: AgentContext, input: { sessionID: SessionID; todos: Info[] }) {
-    Database.transaction((db) => {
-      db.delete(TodoTable).where(eq(TodoTable.session_id, input.sessionID)).run()
+    context.db.transaction((tx: any) => {
+      tx.delete(TodoTable).where(eq(TodoTable.session_id, input.sessionID)).run()
       if (input.todos.length === 0) return
-      db.insert(TodoTable)
+      tx.insert(TodoTable)
         .values(
-          input.todos.map((todo, position) => ({
+          input.todos.map((todo: Info, position: number) => ({
             session_id: input.sessionID,
             content: todo.content,
             status: todo.status,
@@ -45,11 +45,9 @@ export namespace Todo {
     Bus.publish(context, Event.Updated, input)
   }
 
-  export function get(sessionID: SessionID) {
-    const rows = Database.use((db) =>
-      db.select().from(TodoTable).where(eq(TodoTable.session_id, sessionID)).orderBy(asc(TodoTable.position)).all(),
-    )
-    return rows.map((row) => ({
+  export function get(context: AgentContext, sessionID: SessionID) {
+    const rows = context.db.select().from(TodoTable).where(eq(TodoTable.session_id, sessionID)).orderBy(asc(TodoTable.position)).all()
+    return rows.map((row: any) => ({
       content: row.content,
       status: row.status,
       priority: row.priority,

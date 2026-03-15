@@ -6,7 +6,7 @@ import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessag
 import { LSP } from "../util/lsp"
 import { Snapshot } from "@/snapshot"
 import { fn } from "@/util/fn"
-import { Database, NotFoundError, and, desc, eq, inArray, lt, or } from "@/storage/db"
+import { NotFoundError, and, desc, eq, inArray, lt, or } from "@/storage/db"
 import { MessageTable, PartTable, SessionTable } from "./session.sql"
 import { ProviderTransform } from "@/provider/transform"
 import { STATUS_CODES } from "http"
@@ -530,18 +530,16 @@ export namespace MessageV2 {
       and(eq(MessageTable.time_created, row.time), lt(MessageTable.id, row.id)),
     )
 
-  async function hydrate(rows: (typeof MessageTable.$inferSelect)[]) {
+  async function hydrate(context: import("@any-code/opencode/agent/context").AgentContext, rows: (typeof MessageTable.$inferSelect)[]) {
     const ids = rows.map((row) => row.id)
     const partByMessage = new Map<string, MessageV2.Part[]>()
     if (ids.length > 0) {
-      const partRows = Database.use((db) =>
-        db
+      const partRows = context.db
           .select()
           .from(PartTable)
           .where(inArray(PartTable.message_id, ids))
           .orderBy(PartTable.message_id, PartTable.id)
-          .all(),
-      )
+          .all()
       for (const row of partRows) {
         const next = part(row)
         const list = partByMessage.get(row.message_id)
@@ -791,55 +789,44 @@ export namespace MessageV2 {
     )
   }
 
-  export const page = fn(
-    z.object({
-      sessionID: SessionID.zod,
-      limit: z.number().int().positive(),
-      before: z.string().optional(),
-    }),
-    async (input) => {
-      const before = input.before ? cursor.decode(input.before) : undefined
-      const where = before
-        ? and(eq(MessageTable.session_id, input.sessionID), older(before))
-        : eq(MessageTable.session_id, input.sessionID)
-      const rows = Database.use((db) =>
-        db
-          .select()
-          .from(MessageTable)
-          .where(where)
-          .orderBy(desc(MessageTable.time_created), desc(MessageTable.id))
-          .limit(input.limit + 1)
-          .all(),
-      )
-      if (rows.length === 0) {
-        const row = Database.use((db) =>
-          db.select({ id: SessionTable.id }).from(SessionTable).where(eq(SessionTable.id, input.sessionID)).get(),
-        )
-        if (!row) throw new NotFoundError({ message: `Session not found: ${input.sessionID}` })
-        return {
-          items: [] as MessageV2.WithParts[],
-          more: false,
-        }
-      }
-
-      const more = rows.length > input.limit
-      const page = more ? rows.slice(0, input.limit) : rows
-      const items = await hydrate(page)
-      items.reverse()
-      const tail = page.at(-1)
+  export async function page(context: import("@any-code/opencode/agent/context").AgentContext, input: { sessionID: any; limit: number; before?: string }) {
+    const before = input.before ? cursor.decode(input.before) : undefined
+    const where = before
+      ? and(eq(MessageTable.session_id, input.sessionID), older(before))
+      : eq(MessageTable.session_id, input.sessionID)
+    const rows = context.db
+        .select()
+        .from(MessageTable)
+        .where(where)
+        .orderBy(desc(MessageTable.time_created), desc(MessageTable.id))
+        .limit(input.limit + 1)
+        .all()
+    if (rows.length === 0) {
+      const row = context.db.select({ id: SessionTable.id }).from(SessionTable).where(eq(SessionTable.id, input.sessionID)).get()
+      if (!row) throw new NotFoundError({ message: `Session not found: ${input.sessionID}` })
       return {
-        items,
-        more,
-        cursor: more && tail ? cursor.encode({ id: tail.id, time: tail.time_created }) : undefined,
+        items: [] as MessageV2.WithParts[],
+        more: false,
       }
-    },
-  )
+    }
 
-  export const stream = fn(SessionID.zod, async function* (sessionID) {
+    const more = rows.length > input.limit
+    const pg = more ? rows.slice(0, input.limit) : rows
+    const items = await hydrate(context, pg)
+    items.reverse()
+    const tail = pg.at(-1)
+    return {
+      items,
+      more,
+      cursor: more && tail ? cursor.encode({ id: tail.id, time: tail.time_created }) : undefined,
+    }
+  }
+
+  export async function* stream(context: import("@any-code/opencode/agent/context").AgentContext, sessionID: any) {
     const size = 50
     let before: string | undefined
     while (true) {
-      const next = await page({ sessionID, limit: size, before })
+      const next = await page(context, { sessionID, limit: size, before })
       if (next.items.length === 0) break
       for (let i = next.items.length - 1; i >= 0; i--) {
         yield next.items[i]
@@ -847,37 +834,27 @@ export namespace MessageV2 {
       if (!next.more || !next.cursor) break
       before = next.cursor
     }
-  })
+  }
 
-  export const parts = fn(MessageID.zod, async (message_id) => {
-    const rows = Database.use((db) =>
-      db.select().from(PartTable).where(eq(PartTable.message_id, message_id)).orderBy(PartTable.id).all(),
-    )
+  export async function parts(context: import("@any-code/opencode/agent/context").AgentContext, message_id: any) {
+    const rows = context.db.select().from(PartTable).where(eq(PartTable.message_id, message_id)).orderBy(PartTable.id).all()
     return rows.map(
-      (row) => ({ ...row.data, id: row.id, sessionID: row.session_id, messageID: row.message_id }) as MessageV2.Part,
+      (row: any) => ({ ...row.data, id: row.id, sessionID: row.session_id, messageID: row.message_id }) as MessageV2.Part,
     )
-  })
+  }
 
-  export const get = fn(
-    z.object({
-      sessionID: SessionID.zod,
-      messageID: MessageID.zod,
-    }),
-    async (input): Promise<WithParts> => {
-      const row = Database.use((db) =>
-        db
-          .select()
-          .from(MessageTable)
-          .where(and(eq(MessageTable.id, input.messageID), eq(MessageTable.session_id, input.sessionID)))
-          .get(),
-      )
-      if (!row) throw new NotFoundError({ message: `Message not found: ${input.messageID}` })
-      return {
-        info: info(row),
-        parts: await parts(input.messageID),
-      }
-    },
-  )
+  export async function get(context: import("@any-code/opencode/agent/context").AgentContext, input: { sessionID: any; messageID: any }): Promise<WithParts> {
+    const row = context.db
+        .select()
+        .from(MessageTable)
+        .where(and(eq(MessageTable.id, input.messageID), eq(MessageTable.session_id, input.sessionID)))
+        .get()
+    if (!row) throw new NotFoundError({ message: `Message not found: ${input.messageID}` })
+    return {
+      info: info(row),
+      parts: await parts(context, input.messageID),
+    }
+  }
 
   export async function filterCompacted(stream: AsyncIterable<MessageV2.WithParts>) {
     const result = [] as MessageV2.WithParts[]
