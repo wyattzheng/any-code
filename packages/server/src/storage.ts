@@ -4,7 +4,7 @@
  * Provides a NoSqlDb interface for the application.
  * Implementations handle database creation, migration, and lifecycle.
  */
-import type { NoSqlDb } from "@any-code/opencode"
+import type { NoSqlDb } from "@any-code/agent"
 
 export interface Migration {
     sql: string

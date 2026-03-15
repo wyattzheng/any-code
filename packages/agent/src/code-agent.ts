@@ -6,7 +6,7 @@
  *
  * @example
  * ```ts
- * import { CodeAgent } from "@any-code/opencode/agent/code-agent"
+ * import { CodeAgent } from "@any-code/agent/agent/code-agent"
  *
  * const agent = new CodeAgent({
  *   directory: "/path/to/project",

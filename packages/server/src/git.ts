@@ -1,4 +1,4 @@
-import type { GitProvider, GitResult } from "@any-code/opencode"
+import type { GitProvider, GitResult } from "@any-code/agent"
 import { execFile } from "child_process"
 
 /**

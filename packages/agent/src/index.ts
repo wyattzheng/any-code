@@ -1,26 +1,77 @@
-/**
- * @any-code/agent — re-exports from @any-code/opencode
- *
- * CodeAgent now lives in the opencode package for direct access to all services.
- * This package re-exports everything for backward compatibility.
- */
+// OpenCode Core - Library Entry Point
+// Forked from https://github.com/anomalyco/opencode
+// Stripped of CLI/TUI, exposed as library for programmatic use
 
+// Core agent
 export {
-    CodeAgent,
-    type CodeAgentOptions,
-    type CodeAgentProvider,
-    type CodeAgentSession,
-    type CodeAgentEvent,
-    type CodeAgentEventType,
-    type StorageProvider,
-    type Migration,
-} from "@any-code/opencode"
+  CodeAgent,
+  type CodeAgentOptions,
+  type CodeAgentProvider,
+  type CodeAgentSession,
+  type CodeAgentEvent,
+  type CodeAgentEventType,
+  type StorageProvider,
+  type Migration,
+} from "./code-agent"
 
-// VFS stays here (Node-specific implementations)
-export type { VirtualFileSystem, VFSStat, VFSDirEntry } from "./vfs"
-export { NodeFS } from "./vfs-node"
-export { NodeSearchProvider } from "./search-node"
+// Session & schema
+export { Session } from "./session"
+export { SessionPrompt } from "./session/session"
+export { SessionID, MessageID, PartID } from "./session/schema"
 
-// Storage implementations (owned by this package)
-export { SqlJsStorage } from "./storage-sqljs"
+// LLM
+export { LLMRunner, LLM } from "./llm-runner"
 
+// Memory
+export { MessageV2 } from "./memory/message-v2"
+
+// Tools
+export { Tool } from "./tool/tool"
+export { ToolRegistry } from "./tool/registry"
+
+// Provider
+export { Provider } from "./provider/provider"
+export { ProviderID, ModelID } from "./provider/schema"
+
+// Agent
+export { Agent } from "./agent"
+
+// Bus & logging
+export { Bus } from "./bus"
+export { Log } from "./util/log"
+
+// Storage
+export {
+  Database,
+  type NoSqlDb,
+  type RawSqliteDb,
+  type Filter,
+  type FindManyOptions,
+  SqliteNoSqlDb,
+  NotFoundError,
+  Timestamps,
+  Storage,
+  ProjectTable,
+  SessionTable, MessageTable, PartTable, TodoTable,
+} from "./storage"
+
+// Project
+export {
+  Project,
+  File,
+  FileTimeService,
+  type ProjectID,
+  Protected,
+  FileIgnore,
+} from "./project"
+
+// Skill
+export { Skill, Discovery } from "./skill"
+
+// Util — search, git, markdown
+export type { SearchProvider, GrepMatch } from "./util/search"
+export type { GitProvider, GitResult } from "./util/git"
+export { ConfigMarkdown } from "./util/markdown"
+
+// Prompt
+export { SystemPrompt } from "./prompt"

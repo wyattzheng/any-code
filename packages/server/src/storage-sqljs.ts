@@ -5,7 +5,7 @@
  * Returns a NoSqlDb interface backed by sql.js.
  */
 import type { StorageProvider, Migration } from "./storage"
-import type { NoSqlDb, RawSqliteDb } from "@any-code/opencode"
+import type { NoSqlDb, RawSqliteDb } from "@any-code/agent"
 
 export class SqlJsStorage implements StorageProvider {
     private db: any = null
@@ -24,7 +24,7 @@ export class SqlJsStorage implements StorageProvider {
 
         // Wrap sql.js as RawSqliteDb
         const raw = this.createRawDb()
-        const { SqliteNoSqlDb } = await import("@any-code/opencode")
+        const { SqliteNoSqlDb } = await import("@any-code/agent")
         return new SqliteNoSqlDb(raw)
     }
 
