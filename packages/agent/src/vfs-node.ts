@@ -67,10 +67,6 @@ export class NodeFS implements VirtualFileSystem {
         await fs.unlink(p).catch(() => {})
     }
 
-    async realpath(p: string): Promise<string> {
-        return fs.realpath(p)
-    }
-
     async grep(pattern: string, searchPath: string, options?: GrepOptions): Promise<GrepMatch[]> {
         return new Promise((resolve) => {
             const args = [

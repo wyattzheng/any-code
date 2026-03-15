@@ -281,8 +281,6 @@ export namespace Project {
   }
 
   export async function fromDirectory(context: AgentContext, directory: string) {
-    // Resolve symlinks so paths from git commands (which return real paths) match
-    directory = await context.fs.realpath?.(directory) ?? directory
     log.info("fromDirectory", { directory })
 
     const data = await iife(async () => {
