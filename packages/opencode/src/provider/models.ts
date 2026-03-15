@@ -87,9 +87,24 @@ export namespace ModelsDev {
     return Flag.OPENCODE_MODELS_URL || "https://models.dev"
   }
 
+  /**
+   * ModelsDevService — caches the resolved model data.
+   */
+  export class Service {
+    readonly _promise: Promise<{ data: Record<string, unknown> }>
+
+    constructor(context: AgentContext) {
+      this._promise = initModels(context)
+    }
+
+    async get(): Promise<Record<string, Provider>> {
+      return (await this._promise).data as Record<string, Provider>
+    }
+  }
+
   const STATE_KEY = Symbol("models.dev")
   function state(context: AgentContext) {
-    return getState(context, STATE_KEY, () => initModels(context))
+    return getState(context, STATE_KEY, () => new Service(context))._promise
   }
   async function initModels(context: AgentContext) {
       let data: Record<string, unknown> | undefined

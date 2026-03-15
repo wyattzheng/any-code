@@ -49,9 +49,28 @@ export namespace Agent {
     })
   export type Info = z.infer<typeof Info>
 
+  /**
+   * AgentService — caches resolved agent definitions.
+   */
+  export class Service {
+    readonly _promise: ReturnType<typeof initAgents>
+
+    constructor(context: AgentContext) {
+      this._promise = initAgents(context)
+    }
+
+    async get(name: string): Promise<Info | undefined> {
+      return (await this._promise)[name]
+    }
+
+    async list(): Promise<Record<string, Info>> {
+      return this._promise
+    }
+  }
+
   const STATE_KEY = Symbol("agent")
   function state(context: AgentContext) {
-    return getState(context, STATE_KEY, () => initAgents(context))
+    return getState(context, STATE_KEY, () => new Service(context))._promise
   }
   async function initAgents(context: AgentContext) {
     const cfg = await Config.get(context)

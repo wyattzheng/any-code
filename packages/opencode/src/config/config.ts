@@ -73,9 +73,33 @@ export namespace Config {
     return merged
   }
 
+  /**
+   * ConfigService — caches the resolved configuration for this agent instance.
+   */
+  export class Service {
+    readonly _promise: Promise<{ config: Info; directories: string[]; deps: Promise<void>[] }>
+
+    constructor(context: AgentContext) {
+      this._promise = initConfig(context)
+    }
+
+    async get(): Promise<Info> {
+      return (await this._promise).config
+    }
+
+    async directories(): Promise<string[]> {
+      return (await this._promise).directories
+    }
+
+    async waitForDependencies(): Promise<void> {
+      const deps = (await this._promise).deps
+      await Promise.all(deps)
+    }
+  }
+
   const STATE_KEY = Symbol("config")
   export function state(context: AgentContext) {
-    return getState(context, STATE_KEY, () => initConfig(context))
+    return getState(context, STATE_KEY, () => new Service(context))._promise
   }
   async function initConfig(context: AgentContext) {
     // Short-circuit: if config was injected via Instance context (e.g. from CodeAgent options),

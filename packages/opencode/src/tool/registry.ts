@@ -35,9 +35,20 @@ import { pathToFileURL } from "url"
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
 
+  /**
+   * ToolRegistryService — caches resolved tool list.
+   */
+  export class Service {
+    readonly _promise: ReturnType<typeof initTools>
+
+    constructor(context: AgentContext) {
+      this._promise = initTools(context)
+    }
+  }
+
   const STATE_KEY = Symbol("tool.registry")
   export function state(context: AgentContext) {
-    return getState(context, STATE_KEY, () => initTools(context))
+    return getState(context, STATE_KEY, () => new Service(context))._promise
   }
   async function initTools(context: AgentContext) {
     const custom = [] as Tool.Info[]

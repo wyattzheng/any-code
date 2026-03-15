@@ -52,9 +52,20 @@ export namespace Skill {
   const OPENCODE_SKILL_PATTERN = "{skill,skills}/**/SKILL.md"
   const SKILL_PATTERN = "**/SKILL.md"
 
+  /**
+   * SkillService — caches discovered skills from filesystem and URLs.
+   */
+  export class Service {
+    readonly _promise: ReturnType<typeof initSkills>
+
+    constructor(context: AgentContext) {
+      this._promise = initSkills(context)
+    }
+  }
+
   const STATE_KEY = Symbol("skill")
   export function state(context: AgentContext) {
-    return getState(context, STATE_KEY, () => initSkills(context))
+    return getState(context, STATE_KEY, () => new Service(context))._promise
   }
   async function initSkills(context: AgentContext) {
     const skills: Record<string, Info> = {}

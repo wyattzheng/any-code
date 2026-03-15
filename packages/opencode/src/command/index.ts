@@ -57,9 +57,20 @@ export namespace Command {
     REVIEW: "review",
   } as const
 
+  /**
+   * CommandService — caches resolved command definitions.
+   */
+  export class Service {
+    readonly _promise: ReturnType<typeof initCommands>
+
+    constructor(context: AgentContext) {
+      this._promise = initCommands(context)
+    }
+  }
+
   const STATE_KEY = Symbol("command")
   function state(context: AgentContext) {
-    return getState(context, STATE_KEY, () => initCommands(context))
+    return getState(context, STATE_KEY, () => new Service(context))._promise
   }
   async function initCommands(context: AgentContext) {
     const cfg = await Config.get(context)
