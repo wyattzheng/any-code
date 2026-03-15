@@ -99,14 +99,14 @@ describe("Skill: auto-loading from designated directories", () => {
     }, 60_000)
 
     it("should auto-discover skills from .opencode/skills/ and load them", async () => {
-        const skills = await Skill.all(agent.agentContext)
+        const skills = await agent.agentContext.skill.all()
         const names = skills.map((s: any) => s.name).sort()
         expect(names).toContain("greet")
         expect(names).toContain("deploy")
     })
 
     it("should load the full skill content and resolve the SKILL.md location", async () => {
-        const skill = await Skill.get(agent.agentContext, "greet")
+        const skill = await agent.agentContext.skill.get("greet")
 
         expect(skill).toBeDefined()
         expect(skill!.name).toBe("greet")
@@ -117,7 +117,7 @@ describe("Skill: auto-loading from designated directories", () => {
     })
 
     it("should auto-discover skills from .agents/skills/ (external agent-compatible)", async () => {
-        const skill = await Skill.get(agent.agentContext, "lint")
+        const skill = await agent.agentContext.skill.get("lint")
 
         expect(skill).toBeDefined()
         expect(skill!.name).toBe("lint")
@@ -126,7 +126,7 @@ describe("Skill: auto-loading from designated directories", () => {
     })
 
     it("should auto-discover nested skill directories", async () => {
-        const skill = await Skill.get(agent.agentContext, "formatter")
+        const skill = await agent.agentContext.skill.get("formatter")
 
         expect(skill).toBeDefined()
         expect(skill!.name).toBe("formatter")
@@ -135,7 +135,7 @@ describe("Skill: auto-loading from designated directories", () => {
     })
 
     it("should make auto-loaded skills visible via available()", async () => {
-        const availableSkills = await Skill.available(agent.agentContext)
+        const availableSkills = await agent.agentContext.skill.available()
 
         const names = availableSkills.map((s: any) => s.name)
         expect(names).toContain("greet")
@@ -143,12 +143,12 @@ describe("Skill: auto-loading from designated directories", () => {
     })
 
     it("should return undefined for non-existent skill name", async () => {
-        const skill = await Skill.get(agent.agentContext, "nonexistent")
+        const skill = await agent.agentContext.skill.get("nonexistent")
         expect(skill).toBeUndefined()
     })
 
     it("should silently ignore malformed SKILL.md (no name field)", async () => {
-        const skills = await Skill.all(agent.agentContext)
+        const skills = await agent.agentContext.skill.all()
 
         const names = skills.map((s: any) => s.name)
         expect(names).not.toContain("broken")
@@ -156,7 +156,7 @@ describe("Skill: auto-loading from designated directories", () => {
     })
 
     it("should track skill directories for all loaded skills", async () => {
-        const dirs = await Skill.dirs(agent.agentContext)
+        const dirs = await agent.agentContext.skill.dirs()
         expect(dirs.length).toBeGreaterThanOrEqual(2)
     })
 })
