@@ -53,6 +53,10 @@ export namespace SessionProcessor {
           try {
             let currentText: MessageV2.TextPart | undefined
             let reasoningMap: Record<string, MessageV2.ReasoningPart> = {}
+            // Take snapshot BEFORE LLM.stream() because the AI SDK buffers
+            // fullStream events: tool execution completes before start-step
+            // is yielded, so snapshotting at start-step would miss pre-tool state.
+            snapshot = await Snapshot.track(input.context)
             const stream = await LLM.stream(input.context, streamInput)
 
             for await (const value of stream.fullStream) {
@@ -234,7 +238,6 @@ export namespace SessionProcessor {
                   throw value.error
 
                 case "start-step":
-                  snapshot = await Snapshot.track(input.context)
                   await Session.updatePart(input.context, {
                     id: PartID.ascending(),
                     messageID: input.assistantMessage.id,
