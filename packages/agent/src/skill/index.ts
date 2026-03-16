@@ -8,8 +8,8 @@ import { ConfigMarkdown } from "../util/markdown"
 import { Log } from "../util/log"
 import { Filesystem } from "../util/filesystem"
 import { Flag } from "../util/flag"
-import { Bus } from "../bus"
-import { Session } from "../session"
+
+
 import { Glob } from "../util/glob"
 import { pathToFileURL } from "url"
 import type { Agent } from "../agent"
@@ -183,10 +183,6 @@ export namespace Skill {
 
     const addSkill = async (match: string) => {
       const md = await ConfigMarkdown.parse(context, match).catch((err: Error | null): any => {
-        const message = ConfigMarkdown.FrontmatterError.isInstance(err)
-          ? err.data.message
-          : `Failed to parse skill ${match}`
-        Bus.publish(context, Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
         log.error("failed to load skill", { skill: match, err })
         return undefined
       })
