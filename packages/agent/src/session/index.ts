@@ -642,8 +642,6 @@ export namespace SessionStatus {
   export class SessionStatusService {
     private statuses: Record<string, Info> = {}
 
-    constructor(private context?: AgentContext) {}
-
     get(sessionID: SessionID): Info {
       return this.statuses[sessionID] ?? { type: "idle" }
     }
@@ -653,13 +651,7 @@ export namespace SessionStatus {
     }
 
     set(sessionID: SessionID, status: Info): void {
-      if (this.context) {
-        Bus.publish(this.context, Event.Status, { sessionID, status })
-      }
       if (status.type === "idle") {
-        if (this.context) {
-          Bus.publish(this.context, Event.Idle, { sessionID })
-        }
         delete this.statuses[sessionID]
         return
       }

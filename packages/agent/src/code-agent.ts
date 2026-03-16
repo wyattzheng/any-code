@@ -374,7 +374,7 @@ export class CodeAgent {
 
         // Phase 1: context-dependent services
         ctx.config = (this.options.config ?? {}) as Record<string, any>
-        ctx.sessionStatus = new SessionStatus.SessionStatusService(ctx)
+        ctx.sessionStatus = new SessionStatus.SessionStatusService()
 
         ctx.sessionPrompt = new SessionPrompt.SessionPromptService()
 
@@ -601,6 +601,7 @@ export class CodeAgent {
                         }
                     }
 
+
                     // ── Session status ──
                     if (type === SessionStatus.Event.Status.type) {
                         if (props?.sessionID !== sessionId) return
@@ -686,6 +687,7 @@ export class CodeAgent {
     async abort(sessionId: string): Promise<void> {
         this.assertInitialized()
         await SessionPrompt.cancel(this.agentContext, sessionId as any)
+        Bus.publish(this.agentContext, SessionStatus.Event.Status, { sessionID: sessionId as any, status: { type: "idle" as const } })
     }
 
     /**
@@ -848,7 +850,10 @@ export class CodeAgent {
             })
         }
 
-        using _ = defer(() => SessionPrompt.cancel(context, sessionID))
+        using _ = defer(() => {
+            SessionPrompt.cancel(context, sessionID)
+            Bus.publish(context, SessionStatus.Event.Status, { sessionID, status: { type: "idle" as const } })
+        })
 
         let structuredOutput: unknown | undefined
         let step = 0
@@ -856,6 +861,7 @@ export class CodeAgent {
 
         while (true) {
             context.sessionStatus.set(sessionID, { type: "busy" })
+            Bus.publish(context, SessionStatus.Event.Status, { sessionID, status: { type: "busy" as const } })
             if (abort.aborted) break
 
             let msgs = await MessageV2.filterCompacted(MessageV2.stream(context, sessionID))
@@ -968,6 +974,10 @@ export class CodeAgent {
                 time: { created: Date.now() }, sessionID,
             })) as MessageV2.Assistant,
             sessionID, model, abort, context,
+            onStatusChange: (sid, status) => {
+                context.sessionStatus.set(sid, status)
+                Bus.publish(context, SessionStatus.Event.Status, { sessionID: sid, status })
+            },
         })
 
 

@@ -12,6 +12,7 @@ import { Log } from "./util/log"
 import { MessageV2 } from "./memory/message-v2"
 import { Session } from "./session"
 import { PartID, SessionID } from "./session/schema"
+import { SessionStatus } from "./session"
 import { ContextCompaction } from "./memory/compaction"
 import { NamedError } from "./util/error"
 import { iife } from "./util/fn"
@@ -361,6 +362,7 @@ export namespace LLMRunner {
     model: Provider.Model
     abort: AbortSignal
     context: AgentContext
+    onStatusChange?: (sessionID: SessionID, status: SessionStatus.Info) => void
   }) {
     const toolcalls: Record<string, MessageV2.ToolPart> = {}
     let blocked = false
@@ -388,7 +390,7 @@ export namespace LLMRunner {
               input.abort.throwIfAborted()
               switch (value.type) {
                 case "start":
-                  input.context.sessionStatus.set(input.sessionID, { type: "busy" })
+                  input.onStatusChange?.(input.sessionID, { type: "busy" })
                   break
 
                 case "reasoning-start":
@@ -654,7 +656,7 @@ export namespace LLMRunner {
               if (retry !== undefined) {
                 attempt++
                 const delay = SessionRetry.delay(attempt, error.name === "APIError" ? error : undefined)
-                input.context.sessionStatus.set(input.sessionID, {
+                input.onStatusChange?.(input.sessionID, {
                   type: "retry",
                   attempt,
                   message: retry,
@@ -668,7 +670,7 @@ export namespace LLMRunner {
                 sessionID: input.assistantMessage.sessionID,
                 error: input.assistantMessage.error,
               })
-              input.context.sessionStatus.set(input.sessionID, { type: "idle" })
+              input.onStatusChange?.(input.sessionID, { type: "idle" })
             }
           }
 
