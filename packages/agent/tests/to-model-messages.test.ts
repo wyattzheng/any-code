@@ -288,7 +288,7 @@ describe("toModelMessages snapshot", () => {
                     path: { cwd: "/tmp", root: "/tmp" },
                     cost: 0,
                     tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-                    error: { name: "Unknown", message: "API timeout" },
+                    error: { name: "UnknownError" as const, data: { message: "API timeout" } },
                 },
                 parts: [], // No parts → should be skipped
             },

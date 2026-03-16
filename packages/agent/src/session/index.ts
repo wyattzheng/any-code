@@ -564,15 +564,45 @@ export namespace Session {
     }
   }
 
-  export const updateMessage = Memory.updateMessage
+  /** Update message in DB, then publish bus event */
+  export async function updateMessage(context: import("../context").AgentContext, msg: any) {
+    const result = await Memory.updateMessage(context, msg)
+    Bus.publish(context, MessageV2.Event.Updated, { info: msg })
+    return result
+  }
 
-  export const removeMessage = Memory.removeMessage
+  /** Remove message from DB, then publish bus event */
+  export async function removeMessage(context: import("../context").AgentContext, input: any) {
+    await Memory.removeMessage(context, input)
+    Bus.publish(context, MessageV2.Event.Removed, {
+      sessionID: input.sessionID,
+      messageID: input.messageID,
+    })
+  }
 
-  export const removePart = Memory.removePart
+  /** Remove part from DB, then publish bus event */
+  export async function removePart(context: import("../context").AgentContext, input: any) {
+    await Memory.removePart(context, input)
+    Bus.publish(context, MessageV2.Event.PartRemoved, {
+      sessionID: input.sessionID,
+      messageID: input.messageID,
+      partID: input.partID,
+    })
+  }
 
-  export const updatePart = Memory.updatePart
+  /** Update part in DB, then publish bus event */
+  export async function updatePart(context: import("../context").AgentContext, part: any) {
+    const result = await Memory.updatePart(context, part)
+    Bus.publish(context, MessageV2.Event.PartUpdated, {
+      part: structuredClone(part),
+    })
+    return result
+  }
 
-  export const updatePartDelta = Memory.updatePartDelta
+  /** Publish part delta event (no DB operation — deltas are transient) */
+  export async function updatePartDelta(context: import("../context").AgentContext, input: any) {
+    Bus.publish(context, MessageV2.Event.PartDelta, input)
+  }
 
   export const getUsage = Memory.getUsage
 
