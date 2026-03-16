@@ -6,6 +6,7 @@ import type { EnvService } from "./util/env"
 import type { BusService } from "./bus"
 import type { SchedulerService } from "./util/scheduler"
 import type { FileTimeService } from "./project"
+import type { MemoryService } from "./memory"
 
 import type { SessionStatus } from "./session"
 
@@ -76,6 +77,7 @@ export interface AgentContext {
     bus: BusService
     scheduler: SchedulerService
     fileTime: FileTimeService
+    memory: MemoryService
 
     // Phase 1+: context-dependent services (created in CodeAgent.init())
     config: Record<string, any>

@@ -81,7 +81,6 @@ describe("Real-time event emission during chat", () => {
         //    not just at the beginning or end.
         //    We check that bus events were received while chat events were being processed.
         const firstChatEvent = chatEvents[0]
-        const lastChatEvent = chatEvents[chatEvents.length - 1]
 
         // Bus events should have started by the time the first chat event arrived
         expect(firstBusEvent.time).toBeLessThanOrEqual(firstChatEvent.time)

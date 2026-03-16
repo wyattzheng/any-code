@@ -417,7 +417,9 @@ export namespace Session {
     }
   }
 
-  export const messages = Memory.messages
+  export async function messages(context: import("../context").AgentContext, input: { sessionID: any; limit?: number }) {
+    return context.memory.messages(input)
+  }
 
   export function* list(
     context: import("../context").AgentContext,
@@ -564,15 +566,25 @@ export namespace Session {
     }
   }
 
-  export const updateMessage = Memory.updateMessage
+  export async function updateMessage(context: import("../context").AgentContext, msg: any) {
+    return context.memory.updateMessage(msg)
+  }
 
-  export const removeMessage = Memory.removeMessage
+  export async function removeMessage(context: import("../context").AgentContext, input: any) {
+    return context.memory.removeMessage(input)
+  }
 
-  export const removePart = Memory.removePart
+  export async function removePart(context: import("../context").AgentContext, input: any) {
+    return context.memory.removePart(input)
+  }
 
-  export const updatePart = Memory.updatePart
+  export async function updatePart(context: import("../context").AgentContext, part: any) {
+    return context.memory.updatePart(part)
+  }
 
-  export const updatePartDelta = Memory.updatePartDelta
+  export async function updatePartDelta(context: import("../context").AgentContext, input: any) {
+    return context.memory.updatePartDelta(input)
+  }
 
   export const getUsage = Memory.getUsage
 

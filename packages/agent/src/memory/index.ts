@@ -13,71 +13,84 @@ import { fn } from "../util/fn"
 import { iife } from "../util/fn"
 import { NotFoundError } from "../storage"
 
-export namespace Memory {
-  export async function updateMessage(context: AgentContext, msg: any) {
+/**
+ * MemoryService — manages message & part persistence + real-time event emission.
+ *
+ * Each CodeAgent instance gets its own MemoryService via AgentContext.
+ * All write operations emit bus events immediately (required for streaming).
+ */
+export class MemoryService {
+  constructor(private context: AgentContext) {}
+
+  async updateMessage(msg: any) {
     const time_created = msg.time.created
     const { id, sessionID, ...data } = msg
-    context.db.upsert("message",
+    this.context.db.upsert("message",
       { id, session_id: sessionID, time_created, data },
       ["id"],
       { data },
     )
-    Bus.publish(context, MessageV2.Event.Updated, {
+    Bus.publish(this.context, MessageV2.Event.Updated, {
       info: msg,
     })
     return msg
   }
 
-  export async function removeMessage(context: AgentContext, input: any) {
+  async removeMessage(input: any) {
     // CASCADE delete handles parts automatically
-    context.db.remove("message",
+    this.context.db.remove("message",
       { op: "and", conditions: [{ op: "eq", field: "id", value: input.messageID }, { op: "eq", field: "session_id", value: input.sessionID }] },
     )
-    Bus.publish(context, MessageV2.Event.Removed, {
+    Bus.publish(this.context, MessageV2.Event.Removed, {
       sessionID: input.sessionID,
       messageID: input.messageID,
     })
   }
 
-  export async function removePart(context: AgentContext, input: any) {
-    context.db.remove("part",
+  async removePart(input: any) {
+    this.context.db.remove("part",
       { op: "and", conditions: [{ op: "eq", field: "id", value: input.partID }, { op: "eq", field: "session_id", value: input.sessionID }] },
     )
-    Bus.publish(context, MessageV2.Event.PartRemoved, {
+    Bus.publish(this.context, MessageV2.Event.PartRemoved, {
       sessionID: input.sessionID,
       messageID: input.messageID,
       partID: input.partID,
     })
   }
 
-  export async function updatePart(context: AgentContext, part: any) {
+  async updatePart(part: any) {
     const { id, messageID, sessionID, ...data } = part
     const time = Date.now()
-    context.db.upsert("part",
+    this.context.db.upsert("part",
       { id, message_id: messageID, session_id: sessionID, time_created: time, data },
       ["id"],
       { data },
     )
-    Bus.publish(context, MessageV2.Event.PartUpdated, {
+    Bus.publish(this.context, MessageV2.Event.PartUpdated, {
       part: structuredClone(part),
     })
     return part
   }
 
-  export async function updatePartDelta(context: AgentContext, input: any) {
-    Bus.publish(context, MessageV2.Event.PartDelta, input)
+  async updatePartDelta(input: any) {
+    Bus.publish(this.context, MessageV2.Event.PartDelta, input)
   }
 
-  export async function messages(context: AgentContext, input: { sessionID: any; limit?: number }) {
+  async messages(input: { sessionID: any; limit?: number }) {
     const result = [] as MessageV2.WithParts[]
-    for await (const msg of MessageV2.stream(context, input.sessionID)) {
+    for await (const msg of MessageV2.stream(this.context, input.sessionID)) {
       if (input.limit && result.length >= input.limit) break
       result.push(msg)
     }
     result.reverse()
     return result
   }
+}
 
+/**
+ * Static utility functions (no context dependency).
+ */
+export namespace Memory {
   export const getUsage = fn(
     z.object({
       model: z.custom<Provider.Model>(),

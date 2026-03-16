@@ -40,6 +40,7 @@ import { SessionPrompt } from "./session/session"
 import { Bus } from "./bus"
 
 import { MessageV2 } from "./memory/message-v2"
+import { MemoryService } from "./memory"
 
 import { Truncate } from "./tool/truncation"
 
@@ -358,7 +359,11 @@ export class CodeAgent {
             bus: this.bus,
             scheduler: this.scheduler,
             fileTime: this.fileTime,
+            memory: undefined as any, // will be set below after ctx is created
         } as AgentContext
+
+        // Create MemoryService (needs ctx reference)
+        ctx.memory = new MemoryService(ctx)
 
         // Phase 1: context-dependent services
         ctx.config = (this.options.config ?? {}) as Record<string, any>

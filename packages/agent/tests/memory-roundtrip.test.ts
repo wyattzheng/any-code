@@ -2,7 +2,7 @@ import { testPaths, testNodeDeps } from "./_test-paths"
 /**
  * Test: Memory roundtrip
  *
- * Verifies that messages + parts stored via Memory API
+ * Verifies that messages + parts stored via MemoryService
  * can be read back correctly via MessageV2.stream / MessageV2.page.
  * This is a safety net for refactoring memory/index.ts.
  */
@@ -10,7 +10,6 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest"
 import { CodeAgent, NodeFS, NodeSearchProvider, Session } from "../src/index"
 import { createTempDir, cleanupTempDir } from "./setup"
 import { SqlJsStorage } from "../src/storage-sqljs"
-import { Memory } from "../src/memory"
 import { MessageV2 } from "../src/memory/message-v2"
 import { SessionID, MessageID, PartID } from "../src/session/schema"
 
@@ -44,31 +43,32 @@ describe("Memory roundtrip", () => {
 
     afterAll(() => cleanupTempDir(tmpDir))
 
+    /** Shorthand for the memory service */
+    function memory() { return agent.agentContext.memory }
+
     it("should store and retrieve a user message with text part", async () => {
         const ctx = agent.agentContext
         const msgId = MessageID.ascending()
 
         // Store user message
-        const userMsg = {
+        await memory().updateMessage({
             id: msgId,
             sessionID: sessionId,
             role: "user" as const,
             time: { created: Date.now() },
             agent: "build",
             model: { providerID: "openai", modelID: "gpt-4o" },
-        }
-        await Memory.updateMessage(ctx, userMsg)
+        })
 
         // Store text part
         const partId = PartID.ascending()
-        const textPart = {
+        await memory().updatePart({
             id: partId,
             sessionID: sessionId,
             messageID: msgId,
             type: "text" as const,
             text: "Hello World",
-        }
-        await Memory.updatePart(ctx, textPart)
+        })
 
         // Read back via stream
         const messages: MessageV2.WithParts[] = []
@@ -91,7 +91,7 @@ describe("Memory roundtrip", () => {
         const now = Date.now()
 
         // Store user message first (parent)
-        await Memory.updateMessage(ctx, {
+        await memory().updateMessage({
             id: userMsgId,
             sessionID: sessionId,
             role: "user" as const,
@@ -100,7 +100,7 @@ describe("Memory roundtrip", () => {
             model: { providerID: "openai", modelID: "gpt-4o" },
         })
 
-        await Memory.updatePart(ctx, {
+        await memory().updatePart({
             id: PartID.ascending(),
             sessionID: sessionId,
             messageID: userMsgId,
@@ -109,7 +109,7 @@ describe("Memory roundtrip", () => {
         })
 
         // Store assistant message
-        await Memory.updateMessage(ctx, {
+        await memory().updateMessage({
             id: assistantMsgId,
             sessionID: sessionId,
             role: "assistant" as const,
@@ -125,9 +125,8 @@ describe("Memory roundtrip", () => {
         })
 
         // Add reasoning part
-        const reasoningPartId = PartID.ascending()
-        await Memory.updatePart(ctx, {
-            id: reasoningPartId,
+        await memory().updatePart({
+            id: PartID.ascending(),
             sessionID: sessionId,
             messageID: assistantMsgId,
             type: "reasoning" as const,
@@ -136,9 +135,8 @@ describe("Memory roundtrip", () => {
         })
 
         // Add text part
-        const textPartId = PartID.ascending()
-        await Memory.updatePart(ctx, {
-            id: textPartId,
+        await memory().updatePart({
+            id: PartID.ascending(),
             sessionID: sessionId,
             messageID: assistantMsgId,
             type: "text" as const,
@@ -147,7 +145,7 @@ describe("Memory roundtrip", () => {
 
         // Add tool part
         const toolPartId = PartID.ascending()
-        await Memory.updatePart(ctx, {
+        await memory().updatePart({
             id: toolPartId,
             sessionID: sessionId,
             messageID: assistantMsgId,
@@ -165,9 +163,8 @@ describe("Memory roundtrip", () => {
         })
 
         // Add step-finish part
-        const stepFinishPartId = PartID.ascending()
-        await Memory.updatePart(ctx, {
-            id: stepFinishPartId,
+        await memory().updatePart({
+            id: PartID.ascending(),
             sessionID: sessionId,
             messageID: assistantMsgId,
             type: "step-finish" as const,
@@ -210,10 +207,9 @@ describe("Memory roundtrip", () => {
     })
 
     it("should correctly remove a message and its parts", async () => {
-        const ctx = agent.agentContext
         const msgId = MessageID.ascending()
 
-        await Memory.updateMessage(ctx, {
+        await memory().updateMessage({
             id: msgId,
             sessionID: sessionId,
             role: "user" as const,
@@ -222,7 +218,7 @@ describe("Memory roundtrip", () => {
             model: { providerID: "openai", modelID: "gpt-4o" },
         })
 
-        await Memory.updatePart(ctx, {
+        await memory().updatePart({
             id: PartID.ascending(),
             sessionID: sessionId,
             messageID: msgId,
@@ -231,21 +227,20 @@ describe("Memory roundtrip", () => {
         })
 
         // Remove the message
-        await Memory.removeMessage(ctx, { sessionID: sessionId, messageID: msgId })
+        await memory().removeMessage({ sessionID: sessionId, messageID: msgId })
 
         // Verify it's gone
-        const result = await MessageV2.page(ctx, { sessionID: sessionId, limit: 50 })
+        const result = await MessageV2.page(agent.agentContext, { sessionID: sessionId, limit: 50 })
         const found = result.items.find(m => m.info.id === msgId)
         expect(found).toBeUndefined()
     })
 
     it("should correctly remove a part while keeping the message", async () => {
-        const ctx = agent.agentContext
         const msgId = MessageID.ascending()
         const partId1 = PartID.ascending()
         const partId2 = PartID.ascending()
 
-        await Memory.updateMessage(ctx, {
+        await memory().updateMessage({
             id: msgId,
             sessionID: sessionId,
             role: "user" as const,
@@ -254,7 +249,7 @@ describe("Memory roundtrip", () => {
             model: { providerID: "openai", modelID: "gpt-4o" },
         })
 
-        await Memory.updatePart(ctx, {
+        await memory().updatePart({
             id: partId1,
             sessionID: sessionId,
             messageID: msgId,
@@ -262,7 +257,7 @@ describe("Memory roundtrip", () => {
             text: "Keep this",
         })
 
-        await Memory.updatePart(ctx, {
+        await memory().updatePart({
             id: partId2,
             sessionID: sessionId,
             messageID: msgId,
@@ -271,10 +266,10 @@ describe("Memory roundtrip", () => {
         })
 
         // Remove only the second part
-        await Memory.removePart(ctx, { sessionID: sessionId, messageID: msgId, partID: partId2 })
+        await memory().removePart({ sessionID: sessionId, messageID: msgId, partID: partId2 })
 
         // Read back
-        const result = await MessageV2.page(ctx, { sessionID: sessionId, limit: 50 })
+        const result = await MessageV2.page(agent.agentContext, { sessionID: sessionId, limit: 50 })
         const msg = result.items.find(m => m.info.id === msgId)
         expect(msg).toBeDefined()
         expect(msg!.parts.length).toBe(1)

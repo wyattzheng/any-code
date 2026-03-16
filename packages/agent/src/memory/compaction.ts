@@ -9,7 +9,6 @@ import { BusEvent } from "../bus"
 import { Log } from "../util/log"
 import { Token } from "../util/fn"
 import { LLMRunner } from "../llm-runner"
-import { Memory } from "./"
 
 export namespace ContextCompaction {
   const log = Log.create({ service: "context.compaction" })
@@ -55,7 +54,7 @@ export namespace ContextCompaction {
     const config = context.config
     if (config.compaction?.prune === false) return
     log.info("pruning")
-    const msgs = await Memory.messages(context, { sessionID: input.sessionID })
+    const msgs = await context.memory.messages({ sessionID: input.sessionID })
     let total = 0
     let pruned = 0
     const toPrune = []
@@ -87,7 +86,7 @@ export namespace ContextCompaction {
       for (const part of toPrune) {
         if (part.state.status === "completed") {
           part.state.time.compacted = Date.now()
-          await Memory.updatePart(context, part)
+          await context.memory.updatePart(part)
         }
       }
       log.info("pruned", { count: toPrune.length })
@@ -129,7 +128,7 @@ export namespace ContextCompaction {
     const model = agent.model
       ? await context.provider.getModel(agent.model.providerID, agent.model.modelID)
       : await context.provider.getModel(userMessage.model.providerID, userMessage.model.modelID)
-    const msg = (await Memory.updateMessage(context, {
+    const msg = (await context.memory.updateMessage({
       id: MessageID.ascending(),
       role: "assistant",
       parentID: input.parentID,
@@ -223,14 +222,14 @@ When constructing the summary, try to stick to this template:
           : "Session too large to compact - context exceeds model limit even after stripping media",
       }).toObject()
       processor.message.finish = "error"
-      await Memory.updateMessage(context, processor.message)
+      await context.memory.updateMessage(processor.message)
       return "stop"
     }
 
     if (result === "continue" && input.auto) {
       if (replay) {
         const original = replay.info as MessageV2.User
-        const replayMsg = await Memory.updateMessage(context, {
+        const replayMsg = await context.memory.updateMessage({
           id: MessageID.ascending(),
           role: "user",
           sessionID: input.sessionID,
@@ -248,7 +247,7 @@ When constructing the summary, try to stick to this template:
             part.type === "file" && MessageV2.isMedia(part.mime)
               ? { type: "text" as const, text: `[Attached ${part.mime}: ${part.filename ?? "file"}]` }
               : part
-          await Memory.updatePart(context, {
+          await context.memory.updatePart({
             ...replayPart,
             id: PartID.ascending(),
             messageID: replayMsg.id,
@@ -256,7 +255,7 @@ When constructing the summary, try to stick to this template:
           })
         }
       } else {
-        const continueMsg = await Memory.updateMessage(context, {
+        const continueMsg = await context.memory.updateMessage({
           id: MessageID.ascending(),
           role: "user",
           sessionID: input.sessionID,
@@ -269,7 +268,7 @@ When constructing the summary, try to stick to this template:
             ? "The previous request exceeded the provider's size limit due to large media attachments. The conversation was compacted and media files were removed from context. If the user was asking about attached images or files, explain that the attachments were too large to process and suggest they try again with smaller or fewer files.\n\n"
             : "") +
           "Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed."
-        await Memory.updatePart(context, {
+        await context.memory.updatePart({
           id: PartID.ascending(),
           messageID: continueMsg.id,
           sessionID: input.sessionID,
@@ -289,7 +288,7 @@ When constructing the summary, try to stick to this template:
   }
 
   export async function create(context: AgentContext, input: any) {
-      const msg = await Memory.updateMessage(context, {
+      const msg = await context.memory.updateMessage({
         id: MessageID.ascending(),
         role: "user",
         model: input.model,
@@ -299,7 +298,7 @@ When constructing the summary, try to stick to this template:
           created: Date.now(),
         },
       })
-      await Memory.updatePart(context, {
+      await context.memory.updatePart({
         id: PartID.ascending(),
         messageID: msg.id,
         sessionID: msg.sessionID,
