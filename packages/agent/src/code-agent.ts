@@ -684,10 +684,10 @@ export class CodeAgent {
     /**
      * Cancel an ongoing chat in a session
      */
-    async abort(sessionId: string): Promise<void> {
+    async abort(): Promise<void> {
         this.assertInitialized()
-        await SessionPrompt.cancel(this.agentContext, sessionId as any)
-        Bus.publish(this.agentContext, SessionStatus.Event.Status, { sessionID: sessionId as any, status: { type: "idle" as const } })
+        await SessionPrompt.cancel(this.agentContext)
+        Bus.publish(this.agentContext, SessionStatus.Event.Status, { sessionID: this._currentSessionId as any, status: { type: "idle" as const } })
     }
 
     /**
@@ -815,7 +815,7 @@ export class CodeAgent {
      */
     getSessionStatus(): string {
         if (!this._currentSessionId) return "idle"
-        return this.agentContext.sessionStatus.get(this._currentSessionId as any).type
+        return this.agentContext.sessionStatus.get().type
     }
 
     // ── Core Loop ──────────────────────────────────────────────────
@@ -845,16 +845,16 @@ export class CodeAgent {
     async runLoop(sessionID: SessionID, opts?: { resume?: boolean }): Promise<MessageV2.WithParts> {
         const context = this.agentContext
         const abort = opts?.resume
-            ? SessionPrompt.resume(context, sessionID)
-            : SessionPrompt.start(context, sessionID)
+            ? SessionPrompt.resume(context)
+            : SessionPrompt.start(context)
         if (!abort) {
             return new Promise<MessageV2.WithParts>((resolve, reject) => {
-                context.sessionPrompt.sessions[sessionID].callbacks.push({ resolve, reject })
+                context.sessionPrompt.callbacks.push({ resolve, reject })
             })
         }
 
         using _ = defer(() => {
-            SessionPrompt.cancel(context, sessionID)
+            SessionPrompt.cancel(context)
             Bus.publish(context, SessionStatus.Event.Status, { sessionID, status: { type: "idle" as const } })
         })
 
@@ -863,7 +863,7 @@ export class CodeAgent {
         const session = await Session.get(context, sessionID)
 
         while (true) {
-            context.sessionStatus.set(sessionID, { type: "busy" })
+            context.sessionStatus.set({ type: "busy" })
             Bus.publish(context, SessionStatus.Event.Status, { sessionID, status: { type: "busy" as const } })
             if (abort.aborted) break
 
@@ -938,7 +938,7 @@ export class CodeAgent {
         ContextCompaction.prune(context, { sessionID })
         for await (const item of MessageV2.stream(context, sessionID)) {
             if (item.info.role === "user") continue
-            const queued = context.sessionPrompt.sessions[sessionID]?.callbacks ?? []
+            const queued = context.sessionPrompt.callbacks ?? []
             for (const q of queued) q.resolve(item)
             return item
         }
@@ -978,7 +978,7 @@ export class CodeAgent {
             })) as MessageV2.Assistant,
             sessionID, model, abort, context,
             onStatusChange: (sid, status) => {
-                context.sessionStatus.set(sid, status)
+                context.sessionStatus.set(status)
                 Bus.publish(context, SessionStatus.Event.Status, { sessionID: sid, status })
             },
             onError: (sid, error) => {

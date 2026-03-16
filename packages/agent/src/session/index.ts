@@ -474,25 +474,17 @@ export namespace SessionStatus {
   }
 
   /**
-   * SessionStatusService — tracks per-session busy/idle/retry status.
+   * SessionStatusService — tracks session busy/idle/retry status (single session).
    */
   export class SessionStatusService {
-    private statuses: Record<string, Info> = {}
+    private status: Info = { type: "idle" }
 
-    get(sessionID: SessionID): Info {
-      return this.statuses[sessionID] ?? { type: "idle" }
+    get(): Info {
+      return this.status
     }
 
-    list(): Record<string, Info> {
-      return this.statuses
-    }
-
-    set(sessionID: SessionID, status: Info): void {
-      if (status.type === "idle") {
-        delete this.statuses[sessionID]
-        return
-      }
-      this.statuses[sessionID] = status
+    set(status: Info): void {
+      this.status = status
     }
   }
 

@@ -67,25 +67,19 @@ export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
 
   /**
-   * SessionPromptService — manages active prompt sessions (abort + callbacks).
+   * SessionPromptService — manages active prompt session (single session).
    */
   export class SessionPromptService {
-    readonly sessions: Record<
-      string,
-      {
-        abort: AbortController
-        callbacks: {
-          resolve(input: MessageV2.WithParts): void
-          reject(reason?: any): void
-        }[]
-      }
-    > = {}
+    abort?: AbortController
+    callbacks: {
+      resolve(input: MessageV2.WithParts): void
+      reject(reason?: any): void
+    }[] = []
   }
 
 
-  export function assertNotBusy(context: AgentContext, sessionID: SessionID) {
-    const match = context.sessionPrompt.sessions[sessionID]
-    if (match) throw new Session.BusyError(sessionID)
+  export function assertNotBusy(context: AgentContext) {
+    if (context.sessionPrompt.abort) throw new Session.BusyError("session")
   }
 
   export const PromptInput = z.object({
@@ -205,35 +199,32 @@ export namespace SessionPrompt {
     return parts
   }
 
-  export function start(context: AgentContext, sessionID: SessionID) {
-    const s = context.sessionPrompt.sessions
-    if (s[sessionID]) return
+  export function start(context: AgentContext) {
+    const sp = context.sessionPrompt
+    if (sp.abort) return
     const controller = new AbortController()
-    s[sessionID] = {
-      abort: controller,
-      callbacks: [],
-    }
+    sp.abort = controller
+    sp.callbacks = []
     return controller.signal
   }
 
-  export function resume(context: AgentContext, sessionID: SessionID) {
-    const s = context.sessionPrompt.sessions
-    if (!s[sessionID]) return
-
-    return s[sessionID].abort.signal
+  export function resume(context: AgentContext) {
+    const sp = context.sessionPrompt
+    if (!sp.abort) return
+    return sp.abort.signal
   }
 
-  export function cancel(context: AgentContext, sessionID: SessionID) {
-    log.info("cancel", { sessionID })
-    const s = context.sessionPrompt.sessions
-    const match = s[sessionID]
-    if (!match) {
-      context.sessionStatus.set(sessionID, { type: "idle" })
+  export function cancel(context: AgentContext) {
+    log.info("cancel")
+    const sp = context.sessionPrompt
+    if (!sp.abort) {
+      context.sessionStatus.set({ type: "idle" })
       return
     }
-    match.abort.abort()
-    delete s[sessionID]
-    context.sessionStatus.set(sessionID, { type: "idle" })
+    sp.abort.abort()
+    sp.abort = undefined
+    sp.callbacks = []
+    context.sessionStatus.set({ type: "idle" })
     return
   }
 
