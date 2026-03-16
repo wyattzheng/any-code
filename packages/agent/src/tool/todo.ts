@@ -16,7 +16,7 @@ export const TodoWriteTool = Tool.define("todowrite", {
       metadata: {},
     })
 
-    await Todo.update(ctx, {
+    await ctx.session.updateTodo({
       sessionID: ctx.sessionID,
       todos: params.todos,
     })
@@ -41,7 +41,7 @@ export const TodoReadTool = Tool.define("todoread", {
       metadata: {},
     })
 
-    const todos = await Todo.get(ctx, ctx.sessionID)
+    const todos = ctx.session.getTodo(ctx.sessionID)
     return {
       title: `${todos.filter((x: any) => x.status !== "completed").length} todos`,
       metadata: {

@@ -50,7 +50,7 @@ describe("CodeAgent: session persistence", () => {
 
     it("should persist session in the database (retrieve via Session module)", async () => {
         const { Session } = await import("../src/index")
-        const sessions = [...Session.list(agent.agentContext)]
+        const sessions = [...agent.agentContext.session.list()]
         const found = sessions.find(s => s.id === agent.sessionId)
 
         expect(found).toBeDefined()
@@ -59,7 +59,7 @@ describe("CodeAgent: session persistence", () => {
 
     it("should list at least one session after chatting", async () => {
         const { Session } = await import("../src/index")
-        const sessions = [...Session.list(agent.agentContext)]
+        const sessions = [...agent.agentContext.session.list()]
 
         expect(sessions.length).toBeGreaterThanOrEqual(1)
     })

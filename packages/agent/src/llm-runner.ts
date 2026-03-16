@@ -10,7 +10,7 @@ import { Installation } from "./util/installation"
 import { Auth } from "./util/auth"
 import { Log } from "./util/log"
 import { MessageV2 } from "./memory/message-v2"
-import { Session } from "./session"
+import { Session, SessionService } from "./session"
 import { PartID, SessionID } from "./session/schema"
 import { SessionStatus } from "./session"
 
@@ -410,7 +410,7 @@ export namespace LLMRunner {
                     metadata: value.providerMetadata,
                   }
                   reasoningMap[value.id] = reasoningPart
-                  await Session.updatePart(input.context, reasoningPart)
+                  await input.context.session.updatePart(reasoningPart)
                   break
 
                 case "reasoning-delta":
@@ -418,7 +418,7 @@ export namespace LLMRunner {
                     const part = reasoningMap[value.id]
                     part.text += value.text
                     if (value.providerMetadata) part.metadata = value.providerMetadata
-                    await Session.updatePartDelta(input.context, {
+                    await input.context.session.updatePartDelta({
                       sessionID: part.sessionID,
                       messageID: part.messageID,
                       partID: part.id,
@@ -438,13 +438,13 @@ export namespace LLMRunner {
                       end: Date.now(),
                     }
                     if (value.providerMetadata) part.metadata = value.providerMetadata
-                    await Session.updatePart(input.context, part)
+                    await input.context.session.updatePart(part)
                     delete reasoningMap[value.id]
                   }
                   break
 
                 case "tool-input-start":
-                  const part = await Session.updatePart(input.context, {
+                  const part = await input.context.session.updatePart({
                     id: toolcalls[value.id]?.id ?? PartID.ascending(),
                     messageID: input.assistantMessage.id,
                     sessionID: input.assistantMessage.sessionID,
@@ -469,7 +469,7 @@ export namespace LLMRunner {
                 case "tool-call": {
                   const match = toolcalls[value.toolCallId]
                   if (match) {
-                    const part = await Session.updatePart(input.context, {
+                    const part = await input.context.session.updatePart({
                       ...match,
                       tool: value.toolName,
                       state: {
@@ -504,7 +504,7 @@ export namespace LLMRunner {
                 case "tool-result": {
                   const match = toolcalls[value.toolCallId]
                   if (match && match.state.status === "running") {
-                    await Session.updatePart(input.context, {
+                    await input.context.session.updatePart({
                       ...match,
                       state: {
                         status: "completed",
@@ -528,7 +528,7 @@ export namespace LLMRunner {
                 case "tool-error": {
                   const match = toolcalls[value.toolCallId]
                   if (match && match.state.status === "running") {
-                    await Session.updatePart(input.context, {
+                    await input.context.session.updatePart({
                       ...match,
                       state: {
                         status: "error",
@@ -549,7 +549,7 @@ export namespace LLMRunner {
                   throw value.error
 
                 case "start-step":
-                  await Session.updatePart(input.context, {
+                  await input.context.session.updatePart({
                     id: PartID.ascending(),
                     messageID: input.assistantMessage.id,
                     sessionID: input.sessionID,
@@ -558,7 +558,7 @@ export namespace LLMRunner {
                   break
 
                 case "finish-step":
-                  const usage = Session.getUsage({
+                  const usage = SessionService.getUsage({
                     model: input.model,
                     usage: value.usage,
                     metadata: value.providerMetadata,
@@ -566,7 +566,7 @@ export namespace LLMRunner {
                   input.assistantMessage.finish = value.finishReason
                   input.assistantMessage.cost += usage.cost
                   input.assistantMessage.tokens = usage.tokens
-                  await Session.updatePart(input.context, {
+                  await input.context.session.updatePart({
                     id: PartID.ascending(),
                     reason: value.finishReason,
                     messageID: input.assistantMessage.id,
@@ -575,7 +575,7 @@ export namespace LLMRunner {
                     tokens: usage.tokens,
                     cost: usage.cost,
                   })
-                  await Session.updateMessage(input.context, input.assistantMessage)
+                  await input.context.session.updateMessage(input.assistantMessage)
 
                   if (
                     !input.assistantMessage.summary &&
@@ -597,14 +597,14 @@ export namespace LLMRunner {
                     },
                     metadata: value.providerMetadata,
                   }
-                  await Session.updatePart(input.context, currentText)
+                  await input.context.session.updatePart(currentText)
                   break
 
                 case "text-delta":
                   if (currentText) {
                     currentText.text += value.text
                     if (value.providerMetadata) currentText.metadata = value.providerMetadata
-                    await Session.updatePartDelta(input.context, {
+                    await input.context.session.updatePartDelta({
                       sessionID: currentText.sessionID,
                       messageID: currentText.messageID,
                       partID: currentText.id,
@@ -624,7 +624,7 @@ export namespace LLMRunner {
                       end: Date.now(),
                     }
                     if (value.providerMetadata) currentText.metadata = value.providerMetadata
-                    await Session.updatePart(input.context, currentText)
+                    await input.context.session.updatePart(currentText)
                   }
                   currentText = undefined
                   break
@@ -672,7 +672,7 @@ export namespace LLMRunner {
           const p = await MessageV2.parts(input.context, input.assistantMessage.id)
           for (const part of p) {
             if (part.type === "tool" && part.state.status !== "completed" && part.state.status !== "error") {
-              await Session.updatePart(input.context, {
+              await input.context.session.updatePart({
                 ...part,
                 state: {
                   ...part.state,
@@ -687,7 +687,7 @@ export namespace LLMRunner {
             }
           }
           input.assistantMessage.time.completed = Date.now()
-          await Session.updateMessage(input.context, input.assistantMessage)
+          await input.context.session.updateMessage(input.assistantMessage)
           if (needsCompaction) return "compact"
           if (blocked) return "stop"
           if (input.assistantMessage.error) return "stop"

@@ -15,7 +15,7 @@ export {
 } from "./code-agent"
 
 // Session & schema
-export { Session } from "./session"
+export { Session, SessionService } from "./session"
 export { SessionPrompt } from "./session/session"
 export { SessionID, MessageID, PartID } from "./session/schema"
 

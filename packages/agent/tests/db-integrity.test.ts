@@ -114,7 +114,7 @@ describe("Cross-agent DB recovery: close agent → reopen → verify data", () =
         await agent2.init()
 
         const { Session } = await import("../src/index")
-        const recovered = await Session.get(agent2.agentContext, s1Id)
+        const recovered = await agent2.agentContext.session.get(s1Id)
         expect(recovered.id).toBe(s1Id)
     })
 
@@ -137,7 +137,7 @@ describe("Cross-agent DB recovery: close agent → reopen → verify data", () =
         // Record what agent1 sees
         const { Session } = await import("../src/index")
 
-        const originalMsgs = await Session.messages(agent1.agentContext, { sessionID: sessionId })
+        const originalMsgs = await agent1.agentContext.session.messages({ sessionID: sessionId })
         expect(originalMsgs.length).toBeGreaterThanOrEqual(2)
 
         const snapshot = originalMsgs.map((m: any) => ({
@@ -153,11 +153,11 @@ describe("Cross-agent DB recovery: close agent → reopen → verify data", () =
         await agent2.init()
 
         // Session should exist
-        const sess = await Session.get(agent2.agentContext, sessionId)
+        const sess = await agent2.agentContext.session.get(sessionId)
         expect(sess).toBeDefined()
 
         // All messages should be identical
-        const recoveredMsgs = await Session.messages(agent2.agentContext, { sessionID: sessionId })
+        const recoveredMsgs = await agent2.agentContext.session.messages({ sessionID: sessionId })
         expect(recoveredMsgs.length).toBe(originalMsgs.length)
 
         // Message-by-message comparison
@@ -193,7 +193,7 @@ describe("Cross-agent DB recovery: close agent → reopen → verify data", () =
         const sessionId1 = agent1.sessionId
 
         const { Session } = await import("../src/index")
-        const msgs1 = await Session.messages(agent1.agentContext, { sessionID: sessionId1 })
+        const msgs1 = await agent1.agentContext.session.messages({ sessionID: sessionId1 })
         const count1 = msgs1.length
         expect(count1).toBeGreaterThanOrEqual(2)
 
@@ -210,13 +210,13 @@ describe("Cross-agent DB recovery: close agent → reopen → verify data", () =
         // Chat on agent2's own session
         for await (const _ of agent2.chat("Now create continue-2.html")) {}
 
-        const msgs2 = await Session.messages(agent2.agentContext, { sessionID: sessionId2 })
+        const msgs2 = await agent2.agentContext.session.messages({ sessionID: sessionId2 })
 
         // Agent2 should have its own messages
         expect(msgs2.length).toBeGreaterThanOrEqual(2)
 
         // Agent1's old session data should still be readable
-        const oldMsgs = await Session.messages(agent2.agentContext, { sessionID: sessionId1 })
+        const oldMsgs = await agent2.agentContext.session.messages({ sessionID: sessionId1 })
         expect(oldMsgs.length).toBe(count1)
     })
 
@@ -225,7 +225,7 @@ describe("Cross-agent DB recovery: close agent → reopen → verify data", () =
         await agent.init()
 
         const { Session } = await import("../src/index")
-        const sessions = [...Session.list(agent.agentContext)]
+        const sessions = [...agent.agentContext.session.list()]
 
         // Should have sessions from previous tests
         expect(sessions.length).toBeGreaterThanOrEqual(1)

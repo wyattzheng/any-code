@@ -18,8 +18,8 @@ export const PlanExitTool = Tool.define("plan_exit", {
   description: EXIT_DESCRIPTION,
   parameters: z.object({}),
   async execute(_params, ctx) {
-    const session = await Session.get(ctx, ctx.sessionID)
-    const plan = path.relative(ctx.worktree, Session.plan(ctx, session))
+    const session = await ctx.session.get(ctx.sessionID)
+    const plan = path.relative(ctx.worktree, ctx.session.plan(session))
 
     const model = await getLastModel(ctx, ctx.sessionID)
 
@@ -33,8 +33,8 @@ export const PlanExitTool = Tool.define("plan_exit", {
       agent: "build",
       model,
     }
-    await Session.updateMessage(ctx, userMsg)
-    await Session.updatePart(ctx, {
+    await ctx.session.updateMessage(userMsg)
+    await ctx.session.updatePart({
       id: PartID.ascending(),
       messageID: userMsg.id,
       sessionID: ctx.sessionID,

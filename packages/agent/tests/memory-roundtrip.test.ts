@@ -37,7 +37,7 @@ describe("Memory roundtrip", () => {
         await agent.init()
 
         // Create a session for testing
-        const session = await Session.create(agent.agentContext)
+        const session = await agent.agentContext.session.create()
         sessionId = session.id
     }, 60_000)
 

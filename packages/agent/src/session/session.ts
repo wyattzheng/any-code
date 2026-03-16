@@ -7,7 +7,7 @@ import { SessionID, MessageID, PartID } from "./schema"
 import { MessageV2 } from "../memory/message-v2"
 import { Log } from "../util/log"
 
-import { Session } from "."
+import { Session, SessionService } from "."
 import { Agent } from "../agent"
 import { Provider } from "../provider/provider"
 import { ModelID, ProviderID } from "../provider/schema"
@@ -239,7 +239,7 @@ export namespace SessionPrompt {
       metadata: async (val: { title?: string; metadata?: any }) => {
         const match = input.processor.partFromToolCall(options.toolCallId)
         if (match && match.state.status === "running") {
-          await Session.updatePart(input.agentContext, {
+          await input.agentContext.session.updatePart({
             ...match,
             state: {
               title: val.title,
@@ -599,9 +599,9 @@ export namespace SessionPrompt {
     ).then((x) => x.flat().map(assign))
 
 
-    await Session.updateMessage(context, info)
+    await context.session.updateMessage(info)
     for (const part of parts) {
-      await Session.updatePart(context, part)
+      await context.session.updatePart(part)
     }
 
     return {
@@ -646,10 +646,10 @@ export namespace SessionPrompt {
 
     // Switching from plan mode to build mode
     if (input.agent.name !== "plan" && assistantMessage?.info.agent === "plan") {
-      const plan = Session.plan(input.context, input.session)
+      const plan = input.context.session.plan(input.session)
       const exists = await Filesystem.exists(input.context, plan)
       if (exists) {
-        const part = await Session.updatePart(input.context, {
+        const part = await input.context.session.updatePart({
           id: PartID.ascending(),
           messageID: userMessage.info.id,
           sessionID: userMessage.info.sessionID,
@@ -665,10 +665,10 @@ export namespace SessionPrompt {
 
     // Entering plan mode
     if (input.agent.name === "plan" && assistantMessage?.info.agent !== "plan") {
-      const plan = Session.plan(input.context, input.session)
+      const plan = input.context.session.plan(input.session)
       const exists = await Filesystem.exists(input.context, plan)
       if (!exists) await Filesystem.mkdir(input.context, path.dirname(plan))
-      const part = await Session.updatePart(input.context, {
+      const part = await input.context.session.updatePart({
         id: PartID.ascending(),
         messageID: userMessage.info.id,
         sessionID: userMessage.info.sessionID,
@@ -760,7 +760,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     context: AgentContext
   }) {
     if (input.session.parentID) return
-    if (!Session.isDefaultTitle(input.session.title)) return
+    if (!SessionService.isDefaultTitle(input.session.title)) return
 
     // Find first non-synthetic user message
     const firstRealUserIdx = input.history.findIndex(
@@ -822,7 +822,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       if (!cleaned) return
 
       const title = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
-      return Session.setTitle(input.context, { sessionID: input.session.id, title })
+      return input.context.session.setTitle({ sessionID: input.session.id, title })
     }
   }
 }

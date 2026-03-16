@@ -35,7 +35,7 @@ import { FileTimeService } from "./project"
 import { Database } from "./storage"
 import { ToolRegistry } from "./tool/registry"
 import { Tool } from "./tool/tool"
-import { Session } from "./session"
+import { Session, SessionService } from "./session"
 import { SessionPrompt } from "./session/session"
 
 
@@ -356,7 +356,7 @@ export class CodeAgent extends EventEmitter {
             },
             // Phase 0: stateless services
             env: this.env,
-            emit: (type: string, data: any) => this.emit(type, data),
+            session: undefined as any, // will be set below
             scheduler: this.scheduler,
             fileTime: this.fileTime,
             memory: undefined as any, // will be set below after ctx is created
@@ -364,6 +364,13 @@ export class CodeAgent extends EventEmitter {
 
         // Create MemoryService (needs ctx reference)
         ctx.memory = new MemoryService(ctx)
+
+        // Create SessionService and forward its events → CodeAgent
+        ctx.session = new SessionService(ctx)
+        const sessionEvents = ["session.updated", "session.created", "todo.updated"]
+        for (const evt of sessionEvents) {
+            ctx.session.on(evt, (data: any) => this.emit(evt, data))
+        }
 
         // Forward MemoryService events → CodeAgent EventEmitter
         ctx.memory.on("message.updated", (data: any) => this.emit("message.updated", data))
@@ -444,7 +451,7 @@ export class CodeAgent extends EventEmitter {
         this.initialized = true
 
         // Create the single session
-        const session = await Session.create(this._context)
+        const session = await this._context.session.create()
         this._currentSessionId = session.id
     }
 
@@ -824,7 +831,7 @@ export class CodeAgent extends EventEmitter {
             for (const error of message.errors) {
                 this.emit("session.error", { sessionID, error })
             }
-            await Session.touch(context, sessionID)
+            await context.session.touch(sessionID)
         }
 
         // ── Acquire abort signal ──
@@ -858,7 +865,7 @@ export class CodeAgent extends EventEmitter {
 
         let structuredOutput: unknown | undefined
         let step = 0
-        const session = await Session.get(context, sessionID)
+        const session = await context.session.get(sessionID)
 
         while (true) {
             context.sessionStatus = { type: "busy" }
@@ -967,7 +974,7 @@ export class CodeAgent extends EventEmitter {
         const msgs = await SessionPrompt.insertReminders({ context, messages: input.msgs, agent, session })
 
         const processor = LLMRunner.create({
-            assistantMessage: (await Session.updateMessage(context, {
+            assistantMessage: (await context.session.updateMessage({
                 id: MsgID.ascending(), parentID: lastUser.id, role: "assistant",
                 mode: agent.name, agent: agent.name, variant: lastUser.variant,
                 path: { cwd: context.directory, root: context.worktree },
@@ -1049,7 +1056,7 @@ export class CodeAgent extends EventEmitter {
 
         if (input.onStructuredOutput && processor.message.structured !== undefined) {
             processor.message.finish = processor.message.finish ?? "stop"
-            await Session.updateMessage(context, processor.message)
+            await context.session.updateMessage(processor.message)
             return "stop"
         }
 
@@ -1058,7 +1065,7 @@ export class CodeAgent extends EventEmitter {
             processor.message.error = new MessageV2.StructuredOutputError({
                 message: "Model did not produce structured output", retries: 0,
             }).toObject()
-            await Session.updateMessage(context, processor.message)
+            await context.session.updateMessage(processor.message)
             return "stop"
         }
 

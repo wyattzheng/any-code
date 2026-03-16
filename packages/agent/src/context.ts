@@ -9,6 +9,7 @@ import type { FileTimeService } from "./project"
 import type { MemoryService } from "./memory"
 
 import type { SessionStatus } from "./session"
+import type { SessionService } from "./session"
 
 import type { SessionPrompt } from "./session/session"
 
@@ -74,7 +75,7 @@ export interface AgentContext {
     // ── Service instances ──────────────────────────────────────────
     // Phase 0: stateless services (created in CodeAgent constructor)
     env: EnvService
-    emit: (type: string, data: any) => void
+    session: SessionService
     scheduler: SchedulerService
     fileTime: FileTimeService
     memory: MemoryService
