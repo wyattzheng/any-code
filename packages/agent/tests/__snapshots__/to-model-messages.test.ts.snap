@@ -1,0 +1,220 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`toModelMessages snapshot > assistant with error should be skipped 1`] = `
+[
+  {
+    "content": [
+      {
+        "text": "Do something",
+        "type": "text",
+      },
+    ],
+    "role": "user",
+  },
+  {
+    "content": [
+      {
+        "text": "Here's the result",
+        "type": "text",
+      },
+    ],
+    "role": "assistant",
+  },
+]
+`;
+
+exports[`toModelMessages snapshot > compaction message inserts 'What did we do so far?' 1`] = `
+[
+  {
+    "content": [
+      {
+        "text": "What did we do so far?",
+        "type": "text",
+      },
+    ],
+    "role": "user",
+  },
+]
+`;
+
+exports[`toModelMessages snapshot > conversation with reasoning (thinking) 1`] = `
+[
+  {
+    "content": [
+      {
+        "text": "Explain async/await",
+        "type": "text",
+      },
+    ],
+    "role": "user",
+  },
+  {
+    "content": [
+      {
+        "providerOptions": undefined,
+        "text": "The user wants to understand async/await...",
+        "type": "reasoning",
+      },
+      {
+        "text": "Async/await is a syntax for handling promises...",
+        "type": "text",
+      },
+    ],
+    "role": "assistant",
+  },
+]
+`;
+
+exports[`toModelMessages snapshot > conversation with tool call: user → assistant(tool) → user(result continuation) 1`] = `
+[
+  {
+    "content": [
+      {
+        "text": "Create hello.ts",
+        "type": "text",
+      },
+    ],
+    "role": "user",
+  },
+  {
+    "content": [
+      {
+        "text": "I'll create hello.ts for you.",
+        "type": "text",
+      },
+      {
+        "input": {
+          "content": "console.log("hello")",
+          "file_path": "hello.ts",
+        },
+        "providerExecuted": undefined,
+        "toolCallId": "call_001",
+        "toolName": "write",
+        "type": "tool-call",
+      },
+    ],
+    "role": "assistant",
+  },
+  {
+    "content": [
+      {
+        "output": {
+          "type": "text",
+          "value": "File written: hello.ts",
+        },
+        "toolCallId": "call_001",
+        "toolName": "write",
+        "type": "tool-result",
+      },
+    ],
+    "role": "tool",
+  },
+]
+`;
+
+exports[`toModelMessages snapshot > pending/running tool gets treated as interrupted 1`] = `
+[
+  {
+    "content": [
+      {
+        "text": "Do work",
+        "type": "text",
+      },
+    ],
+    "role": "user",
+  },
+  {
+    "content": [
+      {
+        "input": {
+          "command": "long-running-task",
+        },
+        "providerExecuted": undefined,
+        "toolCallId": "call_pending",
+        "toolName": "bash",
+        "type": "tool-call",
+      },
+    ],
+    "role": "assistant",
+  },
+  {
+    "content": [
+      {
+        "output": {
+          "type": "error-text",
+          "value": "[Tool execution was interrupted]",
+        },
+        "toolCallId": "call_pending",
+        "toolName": "bash",
+        "type": "tool-result",
+      },
+    ],
+    "role": "tool",
+  },
+]
+`;
+
+exports[`toModelMessages snapshot > pure text conversation: user → assistant 1`] = `
+[
+  {
+    "content": [
+      {
+        "text": "Hello, what can you do?",
+        "type": "text",
+      },
+    ],
+    "role": "user",
+  },
+  {
+    "content": [
+      {
+        "text": "I can help you write code!",
+        "type": "text",
+      },
+    ],
+    "role": "assistant",
+  },
+]
+`;
+
+exports[`toModelMessages snapshot > tool with error state 1`] = `
+[
+  {
+    "content": [
+      {
+        "text": "Run tests",
+        "type": "text",
+      },
+    ],
+    "role": "user",
+  },
+  {
+    "content": [
+      {
+        "input": {
+          "command": "npm test",
+        },
+        "providerExecuted": undefined,
+        "toolCallId": "call_err",
+        "toolName": "bash",
+        "type": "tool-call",
+      },
+    ],
+    "role": "assistant",
+  },
+  {
+    "content": [
+      {
+        "output": {
+          "type": "error-text",
+          "value": "Command failed with exit code 1",
+        },
+        "toolCallId": "call_err",
+        "toolName": "bash",
+        "type": "tool-result",
+      },
+    ],
+    "role": "tool",
+  },
+]
+`;
