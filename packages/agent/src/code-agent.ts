@@ -442,44 +442,28 @@ export class CodeAgent {
         }
 
         this.initialized = true
-    }
 
-    /**
-     * Current session ID (null if no session yet).
-     */
-    get sessionId(): string | null {
-        return this._currentSessionId
-    }
-
-    /**
-     * Create a new session (internal).
-     */
-    private async ensureSession(): Promise<CodeAgentSession> {
-        this.assertInitialized()
-        const session = await Session.create(this.agentContext)
+        // Create the single session
+        const session = await Session.create(this._context)
         this._currentSessionId = session.id
-        return {
-            id: session.id,
-            title: session.title,
-            createdAt: session.time.created,
-        }
+    }
+
+    /**
+     * Current session ID.
+     */
+    get sessionId(): string {
+        this.assertInitialized()
+        return this._currentSessionId!
     }
 
     /**
      * Send a message to the agent and receive streaming responses.
-     * If sessionId is omitted, a new session is created automatically.
      */
     async *chat(
         message: string,
-        sessionId?: string,
     ): AsyncGenerator<CodeAgentEvent> {
         this.assertInitialized()
-
-        // Auto-create session if not provided
-        if (!sessionId) {
-            const session = await this.ensureSession()
-            sessionId = session.id
-        }
+        const sessionId = this._currentSessionId!
 
         // Set up event stream
         const events: CodeAgentEvent[] = []
@@ -511,7 +495,6 @@ export class CodeAgent {
 
                     // ── PartDelta: route to thinking.delta or text.delta ──
                     if (type === MessageV2.Event.PartDelta.type) {
-                        if (props?.sessionID !== sessionId) return
                         const partType = partTypeMap.get(props.partID)
                         if (partType === "reasoning") {
                             push({
@@ -529,7 +512,7 @@ export class CodeAgent {
                     // ── PartUpdated: reasoning / text / tool / step-finish ──
                     if (type === MessageV2.Event.PartUpdated.type) {
                         const part = props?.part
-                        if (!part || part.sessionID !== sessionId) return
+                        if (!part) return
 
                         // Reasoning parts
                         if (part.type === "reasoning") {
@@ -604,7 +587,6 @@ export class CodeAgent {
 
                     // ── Session status ──
                     if (type === SessionStatus.Event.Status.type) {
-                        if (props?.sessionID !== sessionId) return
                         push({
                             type: "session.status",
                             status: props.status?.type ?? "idle",
@@ -613,7 +595,6 @@ export class CodeAgent {
 
                     // ── Session error ──
                     if (type === Session.Event.Error.type) {
-                        if (props?.sessionID !== sessionId) return
                         push({
                             type: "error",
                             error: props.error?.message ?? "Unknown error",

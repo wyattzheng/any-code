@@ -182,7 +182,7 @@ describe("Cross-agent DB recovery: close agent → reopen → verify data", () =
         }
     })
 
-    it("agent2 continues chatting on agent1's session", async () => {
+    it("agent2 creates its own session and chats independently", async () => {
         installMock("continue-1.html")
 
         // ───── Agent 1: create session + first chat ─────
@@ -190,35 +190,34 @@ describe("Cross-agent DB recovery: close agent → reopen → verify data", () =
         await agent1.init()
 
         for await (const _ of agent1.chat("Create continue-1.html")) {}
-        const sessionId = agent1.sessionId!
+        const sessionId1 = agent1.sessionId
 
         const { Session } = await import("../src/index")
-        const msgs1 = await Session.messages(agent1.agentContext, { sessionID: sessionId })
+        const msgs1 = await Session.messages(agent1.agentContext, { sessionID: sessionId1 })
         const count1 = msgs1.length
         expect(count1).toBeGreaterThanOrEqual(2)
 
-        // ───── Agent 2: continue the conversation ─────
+        // ───── Agent 2: fresh boot, own session ─────
         installMock("continue-2.html")
 
         const agent2 = makeAgent()
         await agent2.init()
+        const sessionId2 = agent2.sessionId
 
-        // Chat on the same session (pass sessionId explicitly)
-        for await (const _ of agent2.chat("Now create continue-2.html", sessionId)) {}
+        // Agent2 has its own session (different from agent1)
+        expect(sessionId2).not.toBe(sessionId1)
 
-        const msgs2 = await Session.messages(agent2.agentContext, { sessionID: sessionId })
+        // Chat on agent2's own session
+        for await (const _ of agent2.chat("Now create continue-2.html")) {}
 
-        // More messages than before — accumulated correctly
-        expect(msgs2.length).toBeGreaterThan(count1)
+        const msgs2 = await Session.messages(agent2.agentContext, { sessionID: sessionId2 })
 
-        // Both user prompts should be present
-        const userParts = msgs2
-            .filter((m: any) => m.info.role === "user")
-            .flatMap((m: any) => m.parts)
-            .filter((p: any) => p.type === "text")
-        const texts = userParts.map((p: any) => p.text)
-        expect(texts.some((t: any) => t.includes("continue-1"))).toBe(true)
-        expect(texts.some((t: any) => t.includes("continue-2"))).toBe(true)
+        // Agent2 should have its own messages
+        expect(msgs2.length).toBeGreaterThanOrEqual(2)
+
+        // Agent1's old session data should still be readable
+        const oldMsgs = await Session.messages(agent2.agentContext, { sessionID: sessionId1 })
+        expect(oldMsgs.length).toBe(count1)
     })
 
     it("session list accumulates across agent restarts", async () => {
