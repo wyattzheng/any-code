@@ -4,23 +4,12 @@ import { SessionID, MessageID, PartID } from "../session/schema"
 import { MessageV2 } from "./message-v2"
 import { Provider } from "../provider/provider"
 import { ProviderTransform } from "../provider/transform"
-import { Bus } from "../bus"
-import { BusEvent } from "../bus"
 import { Log } from "../util/log"
 import { Token } from "../util/fn"
 import { LLMRunner } from "../llm-runner"
 
 export namespace ContextCompaction {
   const log = Log.create({ service: "context.compaction" })
-
-  export const Event = {
-    Compacted: BusEvent.define(
-      "session.compacted",
-      z.object({
-        sessionID: SessionID.zod,
-      }),
-    ),
-  }
 
   const COMPACTION_BUFFER = 20_000
 
@@ -283,7 +272,6 @@ When constructing the summary, try to stick to this template:
       }
     }
     if (processor.message.error) return "stop"
-    Bus.publish(context, Event.Compacted, { sessionID: input.sessionID })
     return "continue"
   }
 

@@ -904,6 +904,7 @@ export class CodeAgent {
                     auto: task.auto, overflow: task.overflow, context,
                 })
                 if (result === "stop") break
+                this.bus.emitEvent("session.compacted", { sessionID })
                 continue
             }
 
