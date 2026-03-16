@@ -977,6 +977,9 @@ export class CodeAgent {
             onError: (sid, error) => {
                 this.bus.emitEvent("session.error", { sessionID: sid, error })
             },
+            emit: (event, data) => {
+                this.bus.emitEvent(event, data)
+            },
         })
 
 

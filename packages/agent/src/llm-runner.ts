@@ -13,12 +13,12 @@ import { MessageV2 } from "./memory/message-v2"
 import { Session } from "./session"
 import { PartID, SessionID } from "./session/schema"
 import { SessionStatus } from "./session"
+
 import { ContextCompaction } from "./memory/compaction"
 import { NamedError } from "./util/error"
 import { iife } from "./util/fn"
 
 
-import { Bus } from "./bus"
 
 
 export namespace SessionRetry {
@@ -364,6 +364,7 @@ export namespace LLMRunner {
     context: AgentContext
     onStatusChange?: (sessionID: SessionID, status: SessionStatus.Info) => void
     onError?: (sessionID: SessionID, error: any) => void
+    emit?: (event: string, data: any) => void
   }) {
     const toolcalls: Record<string, MessageV2.ToolPart> = {}
     let blocked = false
