@@ -977,9 +977,6 @@ export class CodeAgent {
             onError: (sid, error) => {
                 this.bus.emitEvent("session.error", { sessionID: sid, error })
             },
-            emit: (event, data) => {
-                this.bus.emitEvent(event, data)
-            },
         })
 
 
@@ -989,6 +986,7 @@ export class CodeAgent {
         const tools = await SessionPrompt.resolveTools({
             agent, session, model, tools: lastUser.tools,
             processor, bypassAgentCheck, messages: msgs, agentContext: context,
+            onToolEvent: (event, data) => this.bus.emitEvent(event, data),
         })
 
         if (lastUser.format?.type === "json_schema") {

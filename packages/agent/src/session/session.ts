@@ -13,7 +13,7 @@ import { Provider } from "../provider/provider"
 import { ModelID, ProviderID } from "../provider/schema"
 import { type Tool as AITool, tool, jsonSchema, type ToolCallOptions, asSchema, wrapLanguageModel, type ModelMessage, type StreamTextResult, type ToolSet, streamText } from "ai"
 import { mergeDeep, pipe } from "remeda"
-import { Bus } from "../bus"
+
 import { ProviderTransform } from "../provider/transform"
 import { SystemPrompt } from "../prompt"
 
@@ -47,7 +47,7 @@ import { decodeDataUrl } from "../util/data-url"
 
 
 import { Installation } from "../util/installation"
-import { BusEvent } from "../bus"
+
 import { Token } from "../util/fn"
 import { Auth } from "../util/auth"
 // @ts-ignore
@@ -221,6 +221,7 @@ export namespace SessionPrompt {
     bypassAgentCheck: boolean
     messages: MessageV2.WithParts[]
     agentContext: AgentContext
+    onToolEvent?: (event: string, data?: any) => void
   }) {
     using _ = log.time("resolveTools")
     const tools: Record<string, AITool> = {}
@@ -255,8 +256,8 @@ export namespace SessionPrompt {
       async ask(_req) {
         // no-op: permission system removed, all operations auto-allowed
       },
-      emit(event, data) {
-        Bus.publish(input.agentContext, event as any, data)
+      emit(event: string, data?: any) {
+        input.onToolEvent?.(event, data)
       },
     })
 

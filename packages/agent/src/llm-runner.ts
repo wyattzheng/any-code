@@ -364,7 +364,6 @@ export namespace LLMRunner {
     context: AgentContext
     onStatusChange?: (sessionID: SessionID, status: SessionStatus.Info) => void
     onError?: (sessionID: SessionID, error: any) => void
-    emit?: (event: string, data: any) => void
   }) {
     const toolcalls: Record<string, MessageV2.ToolPart> = {}
     let blocked = false
