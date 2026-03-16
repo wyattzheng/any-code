@@ -181,13 +181,6 @@ export namespace Session {
         info: Info,
       }),
     ),
-    Error: BusEvent.define(
-      "session.error",
-      z.object({
-        sessionID: SessionID.zod.optional(),
-        error: MessageV2.Assistant.shape.error,
-      }),
-    ),
   }
 
   export type CreateInput = {
@@ -455,25 +448,6 @@ export namespace SessionStatus {
       ref: "SessionStatus",
     })
   export type Info = z.infer<typeof Info>
-
-  export const Event = {
-    Status: BusEvent.define(
-      "session.status",
-      z.object({
-        sessionID: SessionID.zod,
-        status: Info,
-      }),
-    ),
-    // deprecated
-    Idle: BusEvent.define(
-      "session.idle",
-      z.object({
-        sessionID: SessionID.zod,
-      }),
-    ),
-  }
-
-
 }
 
 // Merged from session/todo.ts

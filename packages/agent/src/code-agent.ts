@@ -586,7 +586,7 @@ export class CodeAgent {
 
 
                     // ── Session status ──
-                    if (type === SessionStatus.Event.Status.type) {
+                    if (type === "session.status") {
                         push({
                             type: "session.status",
                             status: props.status?.type ?? "idle",
@@ -594,7 +594,7 @@ export class CodeAgent {
                     }
 
                     // ── Session error ──
-                    if (type === Session.Event.Error.type) {
+                    if (type === "session.error") {
                         push({
                             type: "error",
                             error: props.error?.message ?? "Unknown error",
@@ -672,7 +672,7 @@ export class CodeAgent {
             sp.callbacks = []
         }
         this.agentContext.sessionStatus = { type: "idle" }
-        Bus.publish(this.agentContext, SessionStatus.Event.Status, { sessionID: this._currentSessionId as any, status: { type: "idle" as const } })
+        this.bus.emitEvent("session.status", { sessionID: this._currentSessionId, status: { type: "idle" } })
     }
 
     /**
@@ -816,7 +816,7 @@ export class CodeAgent {
         if (!opts?.resume) {
             const message = await SessionPrompt.createUserMessage(context, input)
             for (const error of message.errors) {
-                Bus.publish(context, Session.Event.Error, { sessionID, error })
+                this.bus.emitEvent("session.error", { sessionID, error })
             }
             await Session.touch(context, sessionID)
         }
@@ -847,7 +847,7 @@ export class CodeAgent {
                 sp.callbacks = []
             }
             context.sessionStatus = { type: "idle" }
-            Bus.publish(context, SessionStatus.Event.Status, { sessionID, status: { type: "idle" as const } })
+            this.bus.emitEvent("session.status", { sessionID, status: { type: "idle" } })
         })
 
         let structuredOutput: unknown | undefined
@@ -856,7 +856,7 @@ export class CodeAgent {
 
         while (true) {
             context.sessionStatus = { type: "busy" }
-            Bus.publish(context, SessionStatus.Event.Status, { sessionID, status: { type: "busy" as const } })
+            this.bus.emitEvent("session.status", { sessionID, status: { type: "busy" } })
             if (abort.aborted) break
 
             let msgs = await MessageV2.filterCompacted(MessageV2.stream(context, sessionID))
@@ -887,7 +887,7 @@ export class CodeAgent {
             const model = await context.provider.getModel(lastUser.model.providerID, lastUser.model.modelID).catch((e) => {
                 if (Provider.ModelNotFoundError.isInstance(e)) {
                     const hint = e.data.suggestions?.length ? ` Did you mean: ${e.data.suggestions.join(", ")}?` : ""
-                    Bus.publish(context, Session.Event.Error, {
+                    this.bus.emitEvent("session.error", {
                         sessionID,
                         error: new NamedError.Unknown({ message: `Model not found: ${e.data.providerID}/${e.data.modelID}.${hint}` }).toObject(),
                     })
@@ -971,10 +971,10 @@ export class CodeAgent {
             sessionID, model, abort, context,
             onStatusChange: (sid, status) => {
                 context.sessionStatus = status
-                Bus.publish(context, SessionStatus.Event.Status, { sessionID: sid, status })
+                this.bus.emitEvent("session.status", { sessionID: sid, status })
             },
             onError: (sid, error) => {
-                Bus.publish(context, Session.Event.Error, { sessionID: sid, error })
+                this.bus.emitEvent("session.error", { sessionID: sid, error })
             },
         })
 

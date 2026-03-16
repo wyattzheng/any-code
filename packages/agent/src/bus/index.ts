@@ -81,6 +81,22 @@ export class BusService extends EventEmitter {
     return Promise.all(pending)
   }
 
+  /**
+   * Emit an event by string type — no BusEvent.Definition needed.
+   */
+  emitEvent(type: string, properties: any) {
+    this.log.info("publishing", { type })
+    const payload = { type, properties }
+    const pending: any[] = []
+    for (const listener of this.listeners(type) as ((event: any) => void)[]) {
+      pending.push(listener(payload))
+    }
+    for (const listener of this.listeners("*") as ((event: any) => void)[]) {
+      pending.push(listener(payload))
+    }
+    return Promise.all(pending)
+  }
+
   subscribe<Definition extends BusEvent.Definition>(
     def: Definition,
     callback: (event: { type: Definition["type"]; properties: z.infer<Definition["properties"]> }) => void,
