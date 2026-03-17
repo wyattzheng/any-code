@@ -356,8 +356,6 @@ export namespace Provider {
       variants: {},
     }
 
-    m.variants = mapValues(ProviderTransform.variants(m), (v) => v)
-
     return m
   }
 
@@ -730,11 +728,6 @@ export namespace Provider {
             release_date: model.release_date ?? existingModel?.release_date ?? "",
             variants: {},
           }
-          const merged = mergeDeep(ProviderTransform.variants(parsedModel), model.variants ?? {})
-          parsedModel.variants = mapValues(
-            pickBy(merged, (v: any) => !v.disabled),
-            (v) => omit(v, ["disabled"]),
-          )
           parsed.models[modelID] = parsedModel
         }
         database[providerID] = parsed
@@ -817,17 +810,6 @@ export namespace Provider {
           )
             delete provider.models[modelID]
 
-          model.variants = mapValues(ProviderTransform.variants(model), (v) => v)
-
-          // Filter out disabled variants from config
-          const configVariants = configProvider?.models?.[modelID]?.variants
-          if (configVariants && model.variants) {
-            const merged = mergeDeep(model.variants, configVariants)
-            model.variants = mapValues(
-              pickBy(merged, (v: any) => !v.disabled),
-              (v) => omit(v, ["disabled"]),
-            )
-          }
         }
 
         if (Object.keys(provider.models).length === 0) {

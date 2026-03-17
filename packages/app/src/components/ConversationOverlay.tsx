@@ -48,8 +48,8 @@ function compactPathLabel(value: string) {
     const parts = normalized.split("/").filter(Boolean);
     if (parts.length === 0) return normalized;
     if (parts.length === 1) return trailingSlash ? `${parts[0]}/` : parts[0];
-    const label = `${parts[parts.length - 2]}/${parts[parts.length - 1]}`;
-    return trailingSlash ? `${label}/` : label;
+    const last = parts[parts.length - 1];
+    return trailingSlash ? `${last}/` : last;
 }
 
 function firstString(args: ToolArgs | undefined, keys: string[]) {
@@ -95,7 +95,16 @@ function summarizeToolInfo(tool: ToolCard) {
         case "write":
         case "edit":
         case "multiedit":
-        case "read":
+        case "read": {
+            const path = compactPathLabel(tool.title || firstString(tool.args, ["filePath", "path"]));
+            const off = Number(tool.args?.offset) || 0;
+            const lim = Number(tool.args?.limit) || 0;
+            if (off || lim) {
+                const end = lim ? off + lim : "…";
+                return `${path} L${off + 1}–${end}`;
+            }
+            return path;
+        }
         case "ls":
         case "glob":
             return compactPathLabel(tool.title || firstString(tool.args, ["filePath", "path"]));

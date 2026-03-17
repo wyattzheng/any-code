@@ -218,70 +218,6 @@ export namespace ProviderTransform {
     return undefined
   }
 
-  export function variants(model: Provider.Model): Record<string, Record<string, any>> {
-    if (!model.capabilities.reasoning) return {}
-
-    const id = model.id.toLowerCase()
-    const isAnthropicAdaptive = ["opus-4-6", "opus-4.6", "sonnet-4-6", "sonnet-4.6"].some((v) =>
-      model.api.id.includes(v),
-    )
-    const adaptiveEfforts = ["low", "medium", "high", "max"]
-
-    switch (model.api.npm) {
-      case "@ai-sdk/openai-compatible":
-        return Object.fromEntries(["low", "medium", "high"].map((effort) => [effort, { reasoningEffort: effort }]))
-
-      case "@ai-sdk/openai": {
-        if (id === "gpt-5-pro") return {}
-        const efforts = ["low", "medium", "high"]
-        if (id.includes("gpt-5-") || id === "gpt-5") efforts.unshift("minimal")
-        if (model.release_date >= "2025-11-13") efforts.unshift("none")
-        if (model.release_date >= "2025-12-04") efforts.push("xhigh")
-        return Object.fromEntries(
-          efforts.map((effort) => [
-            effort,
-            { reasoningEffort: effort, reasoningSummary: "auto", include: ["reasoning.encrypted_content"] },
-          ]),
-        )
-      }
-
-      case "@ai-sdk/anthropic":
-        if (isAnthropicAdaptive) {
-          return Object.fromEntries(
-            adaptiveEfforts.map((effort) => [effort, { thinking: { type: "adaptive" }, effort }]),
-          )
-        }
-        return {
-          high: {
-            thinking: {
-              type: "enabled",
-              budgetTokens: Math.min(16_000, Math.floor(model.limit.output / 2 - 1)),
-            },
-          },
-          max: {
-            thinking: {
-              type: "enabled",
-              budgetTokens: Math.min(31_999, model.limit.output - 1),
-            },
-          },
-        }
-
-      case "@ai-sdk/google": {
-        if (id.includes("2.5")) {
-          return {
-            high: { thinkingConfig: { includeThoughts: true, thinkingBudget: 16000 } },
-            max: { thinkingConfig: { includeThoughts: true, thinkingBudget: 24576 } },
-          }
-        }
-        let levels = ["low", "high"]
-        if (id.includes("3.1")) levels = ["low", "medium", "high"]
-        return Object.fromEntries(
-          levels.map((effort) => [effort, { thinkingConfig: { includeThoughts: true, thinkingLevel: effort } }]),
-        )
-      }
-    }
-    return {}
-  }
 
   export function options(input: {
     model: Provider.Model
@@ -298,6 +234,21 @@ export namespace ProviderTransform {
 
     if (model.providerID === "openai" || input.providerOptions?.setCacheKey) {
       result["promptCacheKey"] = input.sessionID
+    }
+
+    // Anthropic/Claude: enable thinking by default (max budget)
+    if (model.api.npm === "@ai-sdk/anthropic") {
+      const isAdaptive = ["opus-4-6", "opus-4.6", "sonnet-4-6", "sonnet-4.6"].some((v) =>
+        model.api.id.includes(v),
+      )
+      if (isAdaptive) {
+        result["thinking"] = { type: "adaptive" }
+      } else {
+        result["thinking"] = {
+          type: "enabled",
+          budgetTokens: model.limit.output - 1,
+        }
+      }
     }
 
     // Google/Gemini: enable thinking

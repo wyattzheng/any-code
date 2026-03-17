@@ -184,8 +184,6 @@ export namespace LLM {
       system.push(header, rest.join("\n"))
     }
 
-    const variant =
-      !input.small && input.model.variants && input.user.variant ? input.model.variants[input.user.variant] : {}
     const base = input.small
       ? ProviderTransform.smallOptions(input.model)
       : ProviderTransform.options({
@@ -197,7 +195,6 @@ export namespace LLM {
       base,
       mergeDeep(input.model.options),
       mergeDeep(input.agent.options),
-      mergeDeep(variant),
     )
     if (isCodex) {
       options.instructions = SystemPrompt.instructions()
