@@ -19,31 +19,39 @@ export function TerminalTab({ sessionId }: TerminalTabProps) {
         if (!containerRef.current) return;
 
         const term = new Terminal({
-            fontSize: 13,
-            fontFamily: "var(--font-mono)",
+            fontSize: 11,
+            fontFamily: "'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace",
+            fontWeight: "400",
+            letterSpacing: 0,
+            lineHeight: 1.25,
             theme: {
                 background: "#1e1e1e",
-                foreground: "#d4d4d4",
-                cursor: "#d4d4d4",
-                selectionBackground: "rgba(255, 255, 255, 0.2)",
+                foreground: "#e0e0e0",
+                cursor: "rgba(255, 255, 255, 0.25)",
+                cursorAccent: "transparent",
+                selectionBackground: "rgba(255, 255, 255, 0.15)",
+                selectionForeground: "#ffffff",
                 black: "#1e1e1e",
-                red: "#f14c4c",
-                green: "#89d185",
-                yellow: "#cca700",
-                blue: "#0078d4",
-                magenta: "#c586c0",
-                cyan: "#4ec9b0",
-                white: "#d4d4d4",
-                brightBlack: "#858585",
-                brightRed: "#f14c4c",
-                brightGreen: "#89d185",
-                brightYellow: "#cca700",
-                brightBlue: "#0078d4",
-                brightMagenta: "#c586c0",
-                brightCyan: "#4ec9b0",
+                red: "#f47067",
+                green: "#8ddb8c",
+                yellow: "#e0af68",
+                blue: "#6cb6ff",
+                magenta: "#dcbdfb",
+                cyan: "#76e3ea",
+                white: "#e0e0e0",
+                brightBlack: "#6e7681",
+                brightRed: "#ff938a",
+                brightGreen: "#a8e4a0",
+                brightYellow: "#f0d399",
+                brightBlue: "#96d0ff",
+                brightMagenta: "#eedcff",
+                brightCyan: "#a5f0f5",
                 brightWhite: "#ffffff",
             },
-            cursorBlink: true,
+            cursorBlink: false,
+            cursorStyle: "bar",
+            cursorInactiveStyle: "none",
+            disableStdin: true,
             scrollback: 5000,
             allowProposedApi: true,
         });
@@ -116,12 +124,6 @@ export function TerminalTab({ sessionId }: TerminalTabProps) {
 
         connect();
 
-        const inputDisposable = term.onData((data) => {
-            if (ws?.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: "terminal.input", data }));
-            }
-        });
-
         const resizeObserver = new ResizeObserver(() => {
             fitAddon.fit();
             sendResize();
@@ -132,7 +134,6 @@ export function TerminalTab({ sessionId }: TerminalTabProps) {
             disposed = true;
             if (reconnectTimer) clearTimeout(reconnectTimer);
             resizeObserver.disconnect();
-            inputDisposable.dispose();
             if (ws) ws.close();
             term.dispose();
             termRef.current = null;

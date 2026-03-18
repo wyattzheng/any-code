@@ -92,19 +92,3 @@
     font-size: 13px;
     margin: 0;
 }
-
-.diff-empty {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
-    gap: 12px;
-    color: var(--color-text-dim);
-    opacity: 0.5;
-}
-
-.diff-empty p {
-    font-size: 13px;
-    margin: 0;
-}

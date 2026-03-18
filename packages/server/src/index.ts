@@ -508,11 +508,14 @@ class NodeTerminalProvider implements TerminalProvider {
     this.currentLine = ""
 
     // Filter out undefined env values (node-pty requires string values)
-    const env: Record<string, string> = { PROMPT_EOL_MARK: "" }
+    const env: Record<string, string> = {}
     for (const [k, v] of Object.entries(process.env)) {
       if (v !== undefined) env[k] = v
     }
     env.PROMPT_EOL_MARK = ""  // suppress zsh partial-line marker
+    env.CLICOLOR = "1"        // enable colored ls output on macOS
+    env.CLICOLOR_FORCE = "1"  // force colors even if not a tty
+    env.LSCOLORS = "GxFxCxDxBxegedabagaced"  // default macOS ls colors
 
     const proc = pty.spawn(shell, [], {
       name: "xterm-256color",
