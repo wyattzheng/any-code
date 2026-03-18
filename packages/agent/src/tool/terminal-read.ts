@@ -25,7 +25,8 @@ export const TerminalReadTool = Tool.define("terminal_read", async () => {
         throw new Error("No terminal exists. Use terminal_write with type \"create\" first.")
       }
 
-      const waitMs = params.waitBefore ?? 0
+      const MAX_WAIT = 5000
+      const waitMs = Math.min(params.waitBefore ?? 0, MAX_WAIT)
       if (waitMs > 0) {
         await new Promise((resolve) => setTimeout(resolve, waitMs))
       }
