@@ -2,38 +2,45 @@ import type { TabId, DirEntry, GitChange } from "../App";
 import { FileBrowser } from "./FileBrowser";
 import { ChangesView } from "./ChangesView";
 import { PreviewTab } from "./PreviewTab";
+
 import "./MainView.css";
 
 interface MainViewProps {
     activeTab: TabId;
     topLevel: DirEntry[];
     changes: GitChange[];
+    directory: string;
     requestLs: (path: string) => Promise<DirEntry[]>;
     requestFile: (path: string) => Promise<string | null>;
     requestDiff: (path: string) => Promise<{ added: number[]; removed: number[] }>;
 }
 
-export function MainView({ activeTab, topLevel, changes, requestLs, requestFile, requestDiff }: MainViewProps) {
+export function MainView({ activeTab, topLevel, changes, directory, requestLs, requestFile, requestDiff }: MainViewProps) {
     return (
         <div className="main-view">
-            <div className="main-tab-panel" style={{ display: activeTab === "files" ? "flex" : "none" }}>
-                <FileBrowser topLevel={topLevel} requestLs={requestLs} requestFile={requestFile} />
+            <div className="main-path-bar">
+                <span className="main-path-text">{directory}</span>
             </div>
-            <div className="main-tab-panel" style={{ display: activeTab === "changes" ? "flex" : "none" }}>
-                <ChangesView changes={changes} requestFile={requestFile} requestDiff={requestDiff} />
-            </div>
-            <div className="main-tab-panel" style={{ display: activeTab === "preview" ? "flex" : "none" }}>
-                <PreviewTab />
-            </div>
+            <div className="main-tab-area">
+                <div className="main-tab-panel" style={{ display: activeTab === "files" ? "flex" : "none" }}>
+                    <FileBrowser topLevel={topLevel} requestLs={requestLs} requestFile={requestFile} />
+                </div>
+                <div className="main-tab-panel" style={{ display: activeTab === "changes" ? "flex" : "none" }}>
+                    <ChangesView changes={changes} requestFile={requestFile} requestDiff={requestDiff} />
+                </div>
+                <div className="main-tab-panel" style={{ display: activeTab === "preview" ? "flex" : "none" }}>
+                    <PreviewTab />
+                </div>
 
-            {/* 动态 Tab：渲染 iframe 访问 agent web 项目路由 */}
-            {activeTab !== "files" && activeTab !== "changes" && activeTab !== "preview" && (
-                <iframe
-                    className="main-view-iframe"
-                    src={activeTab}
-                    title="Agent View"
-                />
-            )}
+                {/* 动态 Tab：渲染 iframe 访问 agent web 项目路由 */}
+                {activeTab !== "files" && activeTab !== "changes" && activeTab !== "preview" && (
+                    <iframe
+                        className="main-view-iframe"
+                        src={activeTab}
+                        title="Agent View"
+                    />
+                )}
+            </div>
         </div>
     );
 }

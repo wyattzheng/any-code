@@ -165,7 +165,7 @@ export function App() {
     return (
         <div className="app-root">
             <div className="app-main">
-                <MainView activeTab={activeTab} topLevel={topLevel} changes={changes} requestLs={requestLs} requestFile={requestFile} requestDiff={requestDiff} />
+                <MainView activeTab={activeTab} topLevel={topLevel} changes={changes} directory={directory} requestLs={requestLs} requestFile={requestFile} requestDiff={requestDiff} />
                 <TabBar
                     activeTab={activeTab}
                     onTabChange={setActiveTab}

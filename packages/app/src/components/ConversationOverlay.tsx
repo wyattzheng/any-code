@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { MicIcon, KeyboardIcon, SendIcon, CloseIcon, ChatIcon } from "./Icons";
+import { MicIcon, KeyboardIcon, SendIcon, CloseIcon, ChatIcon, StopIcon } from "./Icons";
 import "./ConversationOverlay.css";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -188,6 +188,7 @@ export function ConversationOverlay({ sessionId }: ConversationOverlayProps) {
     const [elapsed, setElapsed] = useState(0);
     const msgsRef = useRef<HTMLDivElement>(null);
     const toolMapRef = useRef<Map<string, number>>(new Map());
+    const abortRef = useRef<AbortController | null>(null);
 
     // Load history messages when session resumes
     useEffect(() => {
@@ -373,6 +374,9 @@ export function ConversationOverlay({ sessionId }: ConversationOverlayProps) {
         setBusy(true);
         toolMapRef.current.clear();
 
+        const ctl = new AbortController();
+        abortRef.current = ctl;
+
         // Start assistant response container
         setMessages(prev => [...prev, { role: "assistant", parts: [] }]);
 
@@ -381,6 +385,7 @@ export function ConversationOverlay({ sessionId }: ConversationOverlayProps) {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ message: text, sessionId }),
+                signal: ctl.signal,
             });
             const reader = res.body!.getReader();
             const decoder = new TextDecoder();
@@ -397,10 +402,17 @@ export function ConversationOverlay({ sessionId }: ConversationOverlayProps) {
                 }
             }
         } catch (e: any) {
-            appendPart({ kind: "error", message: e.message });
+            if (e.name !== "AbortError") {
+                appendPart({ kind: "error", message: e.message });
+            }
         }
+        abortRef.current = null;
         setBusy(false);
     }, [input, busy, handleEvent, appendPart]);
+
+    const handleStop = useCallback(() => {
+        abortRef.current?.abort();
+    }, []);
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
@@ -542,14 +554,18 @@ export function ConversationOverlay({ sessionId }: ConversationOverlayProps) {
                     <>
                         <input
                             type="text"
-                            value={input}
+                            value={busy ? "" : input}
                             onChange={(e) => setInput(e.target.value)}
                             onKeyDown={handleKeyDown}
-                            placeholder="输入消息..."
+                            placeholder={busy ? "正在处理中..." : "输入消息..."}
                             autoFocus
                             disabled={busy}
                         />
-                        <button className="text-send-btn" onClick={handleSend} disabled={busy}><SendIcon /></button>
+                        {busy ? (
+                            <button className="text-send-btn text-stop-btn" onClick={handleStop}><StopIcon size={18} /></button>
+                        ) : (
+                            <button className="text-send-btn" onClick={handleSend}><SendIcon /></button>
+                        )}
                         <button className="text-close-btn" onClick={() => setShowTextInput(false)}><CloseIcon /></button>
                     </>
                 ) : (

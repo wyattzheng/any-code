@@ -334,6 +334,10 @@
     color: white;
 }
 
+.text-stop-btn {
+    background: var(--color-danger);
+}
+
 .text-close-btn {
     background: var(--color-surface-hover);
     color: var(--color-text-dim);
