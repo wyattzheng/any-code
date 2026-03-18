@@ -8,5 +8,5 @@ export default defineConfig({
     format: ["esm"],
     dts: true,
     clean: true,
-    external: ["sql.js"],
+    external: ["sql.js", "node-pty"],
 });

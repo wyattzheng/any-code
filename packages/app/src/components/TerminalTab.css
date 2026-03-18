@@ -1,0 +1,32 @@
+.terminal-tab {
+    height: 100%;
+    width: 100%;
+    background: var(--color-bg);
+    padding: 4px;
+}
+
+.terminal-tab .xterm {
+    height: 100%;
+}
+
+.terminal-tab .xterm-viewport {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+
+.terminal-tab .xterm-viewport::-webkit-scrollbar {
+    width: 6px;
+}
+
+.terminal-tab .xterm-viewport::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.terminal-tab .xterm-viewport::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 3px;
+}
+
+.terminal-tab .xterm-viewport::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
+}

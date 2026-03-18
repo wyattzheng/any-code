@@ -25,6 +25,8 @@ import { Log } from "../util/log"
 import { Truncate } from "./truncation"
 
 import { ApplyPatchTool } from "./apply_patch"
+import { TerminalWriteTool } from "./terminal-write"
+import { TerminalReadTool } from "./terminal-read"
 import { Glob } from "../util/glob"
 import { pathToFileURL } from "url"
 
@@ -127,6 +129,8 @@ export namespace ToolRegistry {
       CodeSearchTool,
       SkillTool,
       ApplyPatchTool,
+      TerminalWriteTool,
+      TerminalReadTool,
       ...(config.experimental?.batch_tool === true ? [BatchTool] : []),
       ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [PlanExitTool] : []),
       ...custom,

@@ -20,8 +20,9 @@ import os from "os"
 import fs from "fs"
 import fsPromises from "fs/promises"
 import { execFile, spawn as cpSpawn } from "child_process"
-import { CodeAgent, Database, type NoSqlDb } from "@any-code/agent"
+import { CodeAgent, Database, type NoSqlDb, type TerminalProvider } from "@any-code/agent"
 import { WebSocketServer, WebSocket as WS } from "ws"
+import * as pty from "node-pty"
 import { SqlJsStorage } from "./storage-sqljs"
 import { NodeFS } from "./vfs-node"
 import { NodeSearchProvider } from "./search-node"
@@ -146,7 +147,7 @@ const PROVIDER_ID = PROVIDER
 let sharedStorage: SqlJsStorage
 let db: NoSqlDb
 
-function createAgentConfig(directory: string, sessionId?: string) {
+function createAgentConfig(directory: string, sessionId?: string, terminal?: TerminalProvider) {
   return {
     directory: directory,
     fs: new NodeFS(),
@@ -156,6 +157,7 @@ function createAgentConfig(directory: string, sessionId?: string) {
     git: new NodeGitProvider(),
     dataPath: makePaths(),
     ...(sessionId ? { sessionId } : {}),
+    ...(terminal ? { terminal } : {}),
     provider: {
       id: PROVIDER_ID,
       apiKey: API_KEY!,
@@ -238,7 +240,8 @@ async function getOrCreateSession(userId: string): Promise<SessionEntry> {
 
     // Spin up agent for persisted session
     const dir = (row.directory as string) || ""
-    const agent = new CodeAgent(createAgentConfig(dir, sessionId))
+    const tp = getOrCreateTerminalProvider(sessionId)
+    const agent = new CodeAgent(createAgentConfig(dir, sessionId, tp))
     await agent.init()
     const entry = registerSession(sessionId, agent, dir, row.time_created as number)
     if (dir) {
@@ -250,10 +253,17 @@ async function getOrCreateSession(userId: string): Promise<SessionEntry> {
   }
 
   // 2. No mapping — create new session
-  const agent = new CodeAgent(createAgentConfig(""))
+  // We need a temporary ID for the terminal provider; will update after init
+  const tempId = `temp-${Date.now()}`
+  const tp = getOrCreateTerminalProvider(tempId)
+  const agent = new CodeAgent(createAgentConfig("", undefined, tp))
   await agent.init()
   const sessionId = agent.sessionId
   const now = Date.now()
+  // Move terminal provider from temp ID to real session ID
+  terminalProviders.delete(tempId)
+  terminalProviders.set(sessionId, tp)
+  ;(tp as any).sessionId = sessionId
   const entry = registerSession(sessionId, agent, "", now)
 
   // Persist mapping
@@ -398,6 +408,222 @@ async function pushState(sessionId: string) {
   } catch (err) {
     console.error(`❌  pushState error:`, err)
   }
+}
+
+// ── Terminal PTY — shared between agent and user (WebSocket) ────────────────
+
+/** Strip ANSI escape sequences so the agent sees clean text */
+function stripAnsi(s: string): string {
+  // eslint-disable-next-line no-control-regex
+  return s.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]|\][^\x07]*\x07)/g, "")
+}
+
+const MAX_BUFFER_LINES = 5000
+
+/**
+ * NodeTerminalProvider — per-session shared terminal.
+ *
+ * Manages a single PTY process, a scrollback buffer (for agent reads),
+ * and a set of WebSocket clients (for user UI).
+ */
+class NodeTerminalProvider implements TerminalProvider {
+  private proc: pty.IPty | null = null
+  private lines: string[] = []
+  private currentLine = ""
+  private wsClients = new Set<WS>()
+  private sessionId: string
+
+  constructor(sessionId: string) {
+    this.sessionId = sessionId
+  }
+
+  exists(): boolean {
+    return this.proc !== null
+  }
+
+  create(): void {
+    if (this.proc) throw new Error("Terminal already exists. Destroy it first.")
+    const session = getSession(this.sessionId)
+    const cwd = session?.directory || os.homedir()
+    const shell = process.env.SHELL || (process.platform === "win32" ? "powershell.exe" : "/bin/bash")
+
+    // Validate cwd exists
+    if (!fs.existsSync(cwd)) {
+      throw new Error(`Terminal cwd does not exist: ${cwd}`)
+    }
+
+    console.log(`🖥  Terminal creating: shell=${shell}, cwd=${cwd}, sessionId=${this.sessionId}`)
+
+    this.lines = []
+    this.currentLine = ""
+
+    // Filter out undefined env values (node-pty requires string values)
+    const env: Record<string, string> = { PROMPT_EOL_MARK: "" }
+    for (const [k, v] of Object.entries(process.env)) {
+      if (v !== undefined) env[k] = v
+    }
+    env.PROMPT_EOL_MARK = ""  // suppress zsh partial-line marker
+
+    const proc = pty.spawn(shell, [], {
+      name: "xterm-256color",
+      cols: 80,
+      rows: 24,
+      cwd,
+      env,
+    })
+
+    console.log(`🖥  Terminal created for session ${this.sessionId} (pid ${proc.pid}, cwd ${cwd})`)
+
+    proc.onData((data: string) => {
+      // DEBUG: log raw PTY output
+      console.log(`🔍  PTY raw (${data.length} chars):`, JSON.stringify(data))
+      // 1. Append to line buffer (strip ANSI for agent reads)
+      this.appendToBuffer(data)
+      // 2. Forward raw data to all connected WS clients (keep ANSI for xterm.js)
+      for (const ws of this.wsClients) {
+        if (ws.readyState === WS.OPEN) {
+          ws.send(JSON.stringify({ type: "terminal.output", data }))
+        }
+      }
+    })
+
+    proc.onExit(({ exitCode }: { exitCode: number }) => {
+      console.log(`🖥  Terminal exited for session ${this.sessionId} (code ${exitCode})`)
+      this.proc = null
+      // Notify WS clients that terminal is gone
+      for (const ws of this.wsClients) {
+        if (ws.readyState === WS.OPEN) {
+          ws.send(JSON.stringify({ type: "terminal.exited", exitCode }))
+        }
+      }
+    })
+
+    this.proc = proc
+  }
+
+  destroy(): void {
+    if (!this.proc) throw new Error("No terminal exists.")
+    console.log(`🖥  Terminal destroyed for session ${this.sessionId}`)
+    this.proc.kill()
+    this.proc = null
+    this.lines = []
+    this.currentLine = ""
+  }
+
+  write(data: string): void {
+    if (!this.proc) throw new Error("No terminal exists.")
+    this.proc.write(data)
+  }
+
+  read(lineCount: number): string {
+    if (!this.proc) throw new Error("No terminal exists.")
+    // Include the current partial line if non-empty
+    const allLines = this.currentLine
+      ? [...this.lines, this.currentLine]
+      : [...this.lines]
+    const start = Math.max(0, allLines.length - lineCount)
+    return allLines.slice(start).join("\n")
+  }
+
+  /** Resize the PTY (called from WS client) */
+  resize(cols: number, rows: number): void {
+    if (this.proc && cols > 0 && rows > 0) {
+      this.proc.resize(cols, rows)
+    }
+  }
+
+  /** Register a WebSocket client for live output */
+  addClient(ws: WS): void {
+    this.wsClients.add(ws)
+  }
+
+  /** Unregister a WebSocket client */
+  removeClient(ws: WS): void {
+    this.wsClients.delete(ws)
+  }
+
+  /** Handle input from a WebSocket client */
+  handleWsMessage(raw: Buffer | string): void {
+    try {
+      const msg = JSON.parse(raw.toString())
+      if (msg.type === "terminal.input" && this.proc) {
+        this.proc.write(msg.data)
+      } else if (msg.type === "terminal.resize") {
+        this.resize(msg.cols, msg.rows)
+      }
+    } catch { /* ignore malformed */ }
+  }
+
+  private appendToBuffer(data: string) {
+    const clean = stripAnsi(data)
+    // Split on \n only (real newlines)
+    const lines = clean.split("\n")
+    for (let i = 0; i < lines.length; i++) {
+      const segment = lines[i]
+      if (i === 0) {
+        // First segment appends to current partial line
+        this.handleCR(segment)
+      } else {
+        // \n means the previous line is complete
+        this.lines.push(this.currentLine)
+        this.currentLine = ""
+        this.handleCR(segment)
+        // Trim buffer
+        if (this.lines.length > MAX_BUFFER_LINES) {
+          this.lines.splice(0, this.lines.length - MAX_BUFFER_LINES)
+        }
+      }
+    }
+  }
+
+  /** Handle \r within a segment: text after the last \r overwrites from column 0 */
+  private handleCR(segment: string) {
+    const crParts = segment.split("\r")
+    if (crParts.length === 1) {
+      // No \r — just append
+      this.currentLine += segment
+    } else {
+      // Each \r resets to column 0; last part wins (overwrites)
+      for (const part of crParts) {
+        if (part === "") continue
+        // Overwrite from column 0, keep trailing content if new part is shorter
+        if (part.length >= this.currentLine.length) {
+          this.currentLine = part
+        } else {
+          this.currentLine = part + this.currentLine.slice(part.length)
+        }
+      }
+    }
+  }
+}
+
+// Per-session terminal providers
+const terminalProviders = new Map<string, NodeTerminalProvider>()
+
+function getOrCreateTerminalProvider(sessionId: string): NodeTerminalProvider {
+  let tp = terminalProviders.get(sessionId)
+  if (!tp) {
+    tp = new NodeTerminalProvider(sessionId)
+    terminalProviders.set(sessionId, tp)
+  }
+  return tp
+}
+
+function handleTerminalWs(ws: WS, sessionId: string) {
+  const tp = getOrCreateTerminalProvider(sessionId)
+  tp.addClient(ws)
+
+  // If terminal already exists, notify client it's ready
+  if (tp.exists()) {
+    ws.send(JSON.stringify({ type: "terminal.ready" }))
+  }
+
+  ws.on("message", (raw: Buffer | string) => tp.handleWsMessage(raw))
+
+  ws.on("close", () => {
+    tp.removeClient(ws)
+    console.log(`🖥  Terminal WS closed for session ${sessionId}`)
+  })
 }
 
 // ── HTTP Server ────────────────────────────────────────────────────────────
@@ -834,6 +1060,12 @@ export async function startServer() {
     const sessionId = url.searchParams.get("sessionId")
     if (!sessionId || !getSession(sessionId)) {
       ws.close(4001, "Invalid session")
+      return
+    }
+
+    // Terminal WebSocket — separate lifecycle from state clients
+    if (url.pathname === "/terminal") {
+      handleTerminalWs(ws, sessionId)
       return
     }
 

@@ -1,5 +1,5 @@
 import type { TabId } from "../App";
-import { MonitorIcon, FolderIcon, DiffIcon } from "./Icons";
+import { MonitorIcon, TerminalIcon, FolderIcon, DiffIcon } from "./Icons";
 import "./TabBar.css";
 
 interface TabBarProps {
@@ -21,6 +21,14 @@ export function TabBar({ activeTab, onTabChange, changeCount }: TabBarProps) {
             >
                 <span className="tab-icon"><MonitorIcon /></span>
                 <span className="tab-label">预览</span>
+            </button>
+
+            <button
+                className={`tab-item ${activeTab === "terminal" ? "active" : ""}`}
+                onClick={() => onTabChange("terminal")}
+            >
+                <span className="tab-icon"><TerminalIcon /></span>
+                <span className="tab-label">终端</span>
             </button>
 
             <button

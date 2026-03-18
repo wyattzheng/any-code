@@ -8,6 +8,9 @@
     "build": "pnpm -r build",
     "start": "pnpm --filter @any-code/agent build && pnpm --filter app build && pnpm --filter any-code-server build && pnpm --filter any-code-server start"
   },
+  "pnpm": {
+    "onlyBuiltDependencies": ["node-pty"]
+  },
   "devDependencies": {
     "msw": "^2.12.10",
     "vitest": "^4.1.0"

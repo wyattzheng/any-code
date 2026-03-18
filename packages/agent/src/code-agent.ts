@@ -23,7 +23,7 @@
  */
 
 import * as path from "./util/path"
-import type { AgentContext, ShellProvider } from "./context"
+import type { AgentContext, ShellProvider, TerminalProvider } from "./context"
 import type { Project } from "./project"
 import type { VFS } from "./util/vfs"
 import type { SearchProvider } from "./util/search"
@@ -178,6 +178,12 @@ export interface CodeAgentOptions {
      * Loaded by the host and injected here. Contains hooks, env, etc.
      */
     settings?: Settings.Info
+
+    /**
+     * Terminal provider for agent ↔ user shared PTY.
+     * Optional — when not provided, terminal tools will throw errors.
+     */
+    terminal?: TerminalProvider
 }
 
 export interface CodeAgentSession {
@@ -355,6 +361,13 @@ export class CodeAgent extends EventEmitter {
             fs: this.options.fs as any,
             git: this._git as any,
             shell: this.options.shell,
+            terminal: this.options.terminal ?? {
+                create() { throw new Error("Terminal not available in this environment.") },
+                destroy() { throw new Error("Terminal not available in this environment.") },
+                write() { throw new Error("Terminal not available in this environment.") },
+                read() { throw new Error("Terminal not available in this environment.") },
+                exists() { return false },
+            },
             search: this.options.search as any,
             dataPath: this.options.dataPath,
             configOverrides: this.options.config as any,

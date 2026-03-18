@@ -134,6 +134,16 @@ export function ChatIcon({ size = 14, color = "currentColor" }: IconProps) {
     );
 }
 
+export function TerminalIcon({ size = 18, color = "currentColor" }: IconProps) {
+    return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="2" y="2" width="20" height="20" rx="3" />
+            <polyline points="7 9 10 12 7 15" />
+            <line x1="13" y1="15" x2="17" y2="15" />
+        </svg>
+    );
+}
+
 export function StopIcon({ size = 14, color = "currentColor" }: IconProps) {
     return (
         <svg width={size} height={size} viewBox="0 0 24 24" fill={color} stroke="none">

@@ -68,6 +68,9 @@ export {
 // Skill
 export { Skill, Discovery } from "./skill"
 
+// Context interfaces
+export type { TerminalProvider, ShellProvider } from "./context"
+
 // Util — search, git, markdown
 export type { SearchProvider, GrepMatch } from "./util/search"
 export type { GitProvider, GitResult } from "./util/git"

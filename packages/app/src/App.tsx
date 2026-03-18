@@ -3,7 +3,7 @@ import { TabBar } from "./components/TabBar";
 import { MainView } from "./components/MainView";
 import { ConversationOverlay } from "./components/ConversationOverlay";
 
-export type TabId = "files" | "changes" | string;
+export type TabId = "files" | "changes" | "terminal" | "preview" | string;
 
 export interface DirEntry {
     name: string;
@@ -171,7 +171,7 @@ export function App() {
     return (
         <div className="app-root">
             <div className="app-main">
-                <MainView activeTab={activeTab} topLevel={topLevel} changes={changes} directory={directory} requestLs={requestLs} requestFile={requestFile} requestDiff={requestDiff} onFileContext={setFileContext} />
+                <MainView activeTab={activeTab} topLevel={topLevel} changes={changes} directory={directory} sessionId={sessionId} requestLs={requestLs} requestFile={requestFile} requestDiff={requestDiff} onFileContext={setFileContext} />
                 <TabBar
                     activeTab={activeTab}
                     onTabChange={setActiveTab}

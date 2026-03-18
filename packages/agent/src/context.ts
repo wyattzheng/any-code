@@ -22,6 +22,20 @@ import type { Skill } from "./skill"
 import type { Settings } from "./settings"
 
 
+/** Abstraction over the shared user terminal (PTY) for agent tools */
+export interface TerminalProvider {
+  /** Create a new terminal. Throws if one already exists. */
+  create(): void
+  /** Destroy the current terminal. Throws if none exists. */
+  destroy(): void
+  /** Write input to the terminal. Throws if no terminal exists. */
+  write(data: string): void
+  /** Read the last `lines` lines from the terminal buffer. Throws if no terminal exists. */
+  read(lines: number): string
+  /** Whether a terminal currently exists */
+  exists(): boolean
+}
+
 
 /** Abstraction over child_process for bash tool execution */
 export interface ShellProcess {
@@ -58,8 +72,10 @@ export interface AgentContext {
     fs: VFS
     /** Git command executor */
     git: GitProvider
-    /** Shell execution (spawn/kill) */
-    shell: ShellProvider
+  /** Shell execution (spawn/kill) */
+  shell: ShellProvider
+  /** Shared terminal (PTY) for agent ↔ user interaction */
+  terminal: TerminalProvider
     /** Search Provider implementation */
     search: SearchProvider
     /** Base data directory for this agent instance */
