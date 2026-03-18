@@ -19,6 +19,7 @@ import type { Provider } from "./provider/provider"
 import type { ModelsDev } from "./provider/models"
 import type { ToolRegistry } from "./tool/registry"
 import type { Skill } from "./skill"
+import type { Settings } from "./settings"
 
 
 
@@ -93,5 +94,7 @@ export interface AgentContext {
     toolRegistry: ToolRegistry.ToolRegistryService
     skill: Skill.SkillService
 
+    /** User settings loaded from ~/.anycode/settings.json */
+    settings: Settings.Info
 
 }

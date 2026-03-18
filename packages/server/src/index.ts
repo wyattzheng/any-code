@@ -44,6 +44,13 @@ if (!API_KEY) {
 
 const ANYCODE_DIR = path.join(os.homedir(), ".anycode")
 const DB_PATH = path.join(ANYCODE_DIR, "data.db")
+const userSettings = (() => {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(ANYCODE_DIR, "settings.json"), "utf-8"))
+  } catch {
+    return {}
+  }
+})()
 
 function makePaths() {
   const dataPath = path.join(ANYCODE_DIR, "data")
@@ -155,6 +162,7 @@ function createAgentConfig(directory: string, sessionId?: string) {
       model: MODEL,
       ...(BASE_URL ? { baseUrl: BASE_URL } : {}),
     },
+    settings: userSettings,
     config: {
       model: `${PROVIDER_ID}/${MODEL}`,
       small_model: `${PROVIDER_ID}/${MODEL}`,

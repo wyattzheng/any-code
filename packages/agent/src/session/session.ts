@@ -28,6 +28,7 @@ import { LSP } from "../util/lsp"
 import { ReadTool } from "../tool/read"
 import { FileTime } from "../project"
 import { Flag } from "../util/flag"
+import { Hooks } from "../hooks"
 import { ulid } from "ulid"
 
 import { pathToFileURL, fileURLToPath } from "url"
@@ -273,6 +274,17 @@ export namespace SessionPrompt {
         async execute(args, options) {
           const ctx = context(args, options)
           const result = await item.execute(args, ctx)
+
+          // ── PostToolUse Hook (fire-and-forget) ──
+          Hooks.runPostToolUse(
+            input.agentContext.settings.hooks ?? {},
+            item.id,
+            args,
+            result,
+            input.session.id,
+            input.agentContext.directory,
+          )
+
           const output = {
             ...result,
             attachments: result.attachments?.map((attachment) => ({

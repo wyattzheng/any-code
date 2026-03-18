@@ -47,6 +47,7 @@ import { Truncate } from "./tool/truncation"
 
 
 import { SessionStatus } from "./session"
+import type { Settings } from "./settings"
 
 
 import { Agent } from "./agent"
@@ -171,6 +172,12 @@ export interface CodeAgentOptions {
      * Required — provides process execution for the bash tool.
      */
     shell: ShellProvider
+
+    /**
+     * User settings (from ~/.anycode/settings.json or equivalent).
+     * Loaded by the host and injected here. Contains hooks, env, etc.
+     */
+    settings?: Settings.Info
 }
 
 export interface CodeAgentSession {
@@ -384,6 +391,7 @@ export class CodeAgent extends EventEmitter {
 
         // Phase 1: context-dependent services
         ctx.config = (this.options.config ?? {}) as Record<string, any>
+        ctx.settings = this.options.settings ?? {}
         ctx.sessionStatus = { type: "idle" }
 
         ctx.sessionPrompt = new SessionPrompt.SessionPromptService()
