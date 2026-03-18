@@ -95,11 +95,6 @@
     padding-left: 46px;
 }
 
-/* 根级文件：跳过 chevron 宽度对齐文件夹图标 */
-.file-tree-item.file:not(.indent) {
-    padding-left: 30px;
-}
-
 .file-content {
     padding: 10px 12px;
     font-family: var(--font-mono);

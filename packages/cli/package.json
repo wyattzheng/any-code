@@ -1,0 +1,20 @@
+{
+    "name": "anycodex",
+    "version": "0.0.1",
+    "type": "module",
+    "bin": {
+        "anycode": "dist/bin.js",
+        "anycodex": "dist/bin.js"
+    },
+    "scripts": {
+        "build": "tsup"
+    },
+    "dependencies": {
+        "any-code-server": "workspace:*"
+    },
+    "devDependencies": {
+        "@types/node": "^25.5.0",
+        "tsup": "^8.4.0",
+        "typescript": "^5.7.0"
+    }
+}

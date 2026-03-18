@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { createChannel, type Channel } from "./channel";
 import { TabBar } from "./components/TabBar";
 import { MainView } from "./components/MainView";
 import { ConversationOverlay } from "./components/ConversationOverlay";
@@ -49,36 +50,60 @@ function WindowView({ sessionId, visible, onWindowsChanged }: WindowViewProps) {
     const [changes, setChanges] = useState<GitChange[]>([]);
     const [fileContext, setFileContext] = useState<FileContext | null>(null);
     const [previewPort, setPreviewPort] = useState<number | null>(null);
+    const chatHandlerRef = useRef<((data: any) => void) | undefined>(undefined);
+    const channelRef = useRef<Channel | null>(null);
 
-    // Poll state — only when visible
-    const pollRef = useRef<ReturnType<typeof setInterval>>(undefined);
+    const sendMessage = useCallback((data: any) => {
+        channelRef.current?.send(data);
+    }, []);
+
+    // Real-time sync via Channel (WebSocket or HTTP polling)
     useEffect(() => {
-        if (!visible) {
-            if (pollRef.current) clearInterval(pollRef.current);
-            pollRef.current = undefined;
-            return;
+        let disposed = false;
+        let retryDelay = 1000;
+        let retryTimer: ReturnType<typeof setTimeout> | undefined;
+
+        function connect() {
+            if (disposed) return;
+            const ch = createChannel(sessionId);
+            channelRef.current = ch;
+
+            ch.onopen = () => {
+                retryDelay = 1000;
+                onWindowsChanged();
+            };
+
+            ch.onmessage = (data) => {
+                if (data.type === "state") {
+                    if (data.directory) setDirectory(data.directory);
+                    setTopLevel(data.topLevel || []);
+                    setChanges(data.changes || []);
+                    if (data.previewPort !== undefined) setPreviewPort(data.previewPort);
+                } else if (data.type?.startsWith("chat.")) {
+                    chatHandlerRef.current?.(data);
+                }
+            };
+
+            ch.onclose = () => {
+                channelRef.current = null;
+                if (!disposed) {
+                    retryTimer = setTimeout(() => {
+                        retryDelay = Math.min(retryDelay * 1.5, 10000);
+                        connect();
+                    }, retryDelay);
+                }
+            };
         }
 
-        const pollState = async () => {
-            try {
-                const res = await fetch(`${API_BASE}/api/sessions/${sessionId}/state`);
-                if (!res.ok) return;
-                const data = await res.json();
-                if (data.directory) setDirectory(data.directory);
-                setTopLevel(data.topLevel);
-                setChanges(data.changes);
-                if (data.previewPort !== undefined) setPreviewPort(data.previewPort);
-            } catch { /* ignore */ }
-            onWindowsChanged();
-        };
-
-        pollState();
-        pollRef.current = setInterval(pollState, 3000);
+        connect();
 
         return () => {
-            if (pollRef.current) clearInterval(pollRef.current);
+            disposed = true;
+            clearTimeout(retryTimer);
+            channelRef.current?.close();
+            channelRef.current = null;
         };
-    }, [sessionId, visible, onWindowsChanged]);
+    }, [sessionId, onWindowsChanged]);
 
     const requestLs = useCallback(async (subPath: string): Promise<DirEntry[]> => {
         try {
@@ -146,7 +171,7 @@ function WindowView({ sessionId, visible, onWindowsChanged }: WindowViewProps) {
                 )}
                 <TabBar activeTab={activeTab} onTabChange={setActiveTab} changeCount={changes.length} />
             </div>
-            <ConversationOverlay sessionId={sessionId} fileContext={fileContext} />
+            <ConversationOverlay sessionId={sessionId} fileContext={fileContext} chatHandlerRef={chatHandlerRef} sendMessage={sendMessage} />
         </div>
     );
 }

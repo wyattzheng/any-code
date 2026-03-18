@@ -2,7 +2,7 @@
  * any-code-server — API server for CodeAgent
  *
  * Starts a lightweight HTTP server that:
- *   1. Exposes POST /api/chat (SSE) to stream agent responses
+ *   1. Chat is handled via WebSocket (broadcast to all clients)
  *   2. Frontend is served separately by the app package
  *
  * Environment variables:
@@ -27,29 +27,6 @@ import { SqlJsStorage } from "./storage-sqljs"
 import { NodeFS } from "./vfs-node"
 import { NodeSearchProvider } from "./search-node"
 
-// ── Config ─────────────────────────────────────────────────────────────────
-
-const PROVIDER = process.env.PROVIDER ?? "anthropic"
-const MODEL = process.env.MODEL ?? "claude-sonnet-4-20250514"
-const API_KEY = process.env.API_KEY
-const BASE_URL = process.env.BASE_URL
-const PORT = parseInt(process.env.PORT ?? "3210", 10)
-const PREVIEW_PORT = parseInt(process.env.PREVIEW_PORT ?? String(PORT + 1), 10)
-
-if (!API_KEY) {
-  console.error("❌  Missing API_KEY environment variable")
-  console.error("Usage: API_KEY=sk-xxx any-code-server [project-dir]")
-  process.exit(1)
-}
-
-// ── Global error handlers — prevent crashes from unhandled rejections ──
-process.on("uncaughtException", (err) => {
-  console.error("⚠  Uncaught exception:", err.message)
-})
-process.on("unhandledRejection", (reason) => {
-  console.error("⚠  Unhandled rejection:", reason instanceof Error ? reason.message : reason)
-})
-
 // ── Paths ──────────────────────────────────────────────────────────────────
 
 const ANYCODE_DIR = path.join(os.homedir(), ".anycode")
@@ -61,6 +38,29 @@ const userSettings = (() => {
     return {}
   }
 })()
+
+// ── Config (env vars > settings.json > defaults) ──────────────────────────
+
+const PROVIDER = process.env.PROVIDER ?? "anthropic"
+const MODEL = process.env.MODEL ?? userSettings.MODEL ?? "claude-sonnet-4-20250514"
+const API_KEY = process.env.API_KEY ?? userSettings.API_KEY
+const BASE_URL = process.env.BASE_URL ?? userSettings.BASE_URL
+const PORT = parseInt(process.env.PORT ?? "3210", 10)
+const PREVIEW_PORT = parseInt(process.env.PREVIEW_PORT ?? String(PORT + 1), 10)
+
+if (!API_KEY) {
+  console.error("❌  Missing API_KEY")
+  console.error("Run 'anycode start' to configure, or set API_KEY env var.")
+  process.exit(1)
+}
+
+// ── Global error handlers — prevent crashes from unhandled rejections ──
+process.on("uncaughtException", (err) => {
+  console.error("⚠  Uncaught exception:", err.message)
+})
+process.on("unhandledRejection", (reason) => {
+  console.error("⚠  Unhandled rejection:", reason instanceof Error ? reason.message : reason)
+})
 
 function makePaths() {
   const dataPath = path.join(ANYCODE_DIR, "data")
@@ -402,12 +402,24 @@ async function getGitChanges(dir: string): Promise<GitChange[]> {
   }
 }
 
-// ── WebSocket ──────────────────────────────────────────────────────────────
+// ── Channel abstraction ───────────────────────────────────────────────────
 
-// Track WebSocket clients per session
-const sessionClients = new Map<string, Set<WS>>()
+/** Minimal interface shared by WebSocket and PollingClient */
+interface ClientLike {
+  readyState: number
+  send(data: string): void
+}
 
-function getSessionClients(sessionId: string): Set<WS> {
+// Track clients per session (WebSocket or PollingClient)
+const sessionClients = new Map<string, Set<ClientLike>>()
+
+// Track active chat abort functions per session
+const sessionChatAbort = new Map<string, () => void>()
+
+// Cached last-pushed state JSON per session — used for diffing + replay to new clients
+const lastStateJson = new Map<string, string>()
+
+function getSessionClients(sessionId: string): Set<ClientLike> {
   let set = sessionClients.get(sessionId)
   if (!set) {
     set = new Set()
@@ -416,12 +428,163 @@ function getSessionClients(sessionId: string): Set<WS> {
   return set
 }
 
+function removeClient(sessionId: string, client: ClientLike) {
+  const clients = sessionClients.get(sessionId)
+  if (clients) {
+    clients.delete(client)
+    if (clients.size === 0) sessionClients.delete(sessionId)
+  }
+}
+
 function broadcast(sessionId: string, data: Record<string, unknown>) {
   const clients = sessionClients.get(sessionId)
   if (!clients) return
   const json = JSON.stringify(data)
-  for (const ws of clients) {
-    if (ws.readyState === WS.OPEN) ws.send(json)
+  for (const c of clients) {
+    if (c.readyState === WS.OPEN) c.send(json)
+  }
+}
+
+// ── HTTP Long-Polling server-side client ──────────────────────────────────
+
+class PollingClient implements ClientLike {
+  readyState = 1 // OPEN
+  readonly id: string
+  readonly sessionId: string
+  lastActivity: number
+
+  private queue: string[] = []
+  private pendingRes: http.ServerResponse | null = null
+  private pollTimer: ReturnType<typeof setTimeout> | null = null
+
+  constructor(id: string, sessionId: string) {
+    this.id = id
+    this.sessionId = sessionId
+    this.lastActivity = Date.now()
+  }
+
+  /** Called by broadcast — queues a JSON string for the next poll */
+  send(data: string) {
+    this.queue.push(data)
+    this.tryFlush()
+  }
+
+  /** Attach a long-poll response. Flushes immediately if messages are queued. */
+  hold(res: http.ServerResponse, timeoutMs = 30000) {
+    this.lastActivity = Date.now()
+    this.abortPoll()
+    this.pendingRes = res
+    this.pollTimer = setTimeout(() => {
+      this.pollTimer = null
+      this.flush()
+    }, timeoutMs)
+    // Handle client disconnect mid-poll
+    res.on("close", () => {
+      if (this.pendingRes === res) {
+        if (this.pollTimer) { clearTimeout(this.pollTimer); this.pollTimer = null }
+        this.pendingRes = null
+      }
+    })
+    this.tryFlush()
+  }
+
+  close() {
+    this.readyState = 3 // CLOSED
+    this.abortPoll()
+    this.queue = []
+  }
+
+  private tryFlush() {
+    if (!this.pendingRes || this.queue.length === 0) return
+    this.flush()
+  }
+
+  private flush() {
+    if (!this.pendingRes) return
+    if (this.pollTimer) { clearTimeout(this.pollTimer); this.pollTimer = null }
+    const messages = this.queue.splice(0)
+    this.pendingRes.writeHead(200, { "Content-Type": "application/json" })
+    // Each item is already a JSON string — construct array without re-serializing
+    this.pendingRes.end(`[${messages.join(",")}]`)
+    this.pendingRes = null
+  }
+
+  private abortPoll() {
+    if (this.pollTimer) { clearTimeout(this.pollTimer); this.pollTimer = null }
+    if (this.pendingRes) {
+      this.pendingRes.writeHead(200, { "Content-Type": "application/json" })
+      this.pendingRes.end("[]")
+      this.pendingRes = null
+    }
+  }
+}
+
+const pollingClients = new Map<string, PollingClient>() // channelId → PollingClient
+
+/** Shared message handler — used by both WebSocket and HTTP polling */
+async function handleClientMessage(sessionId: string, client: ClientLike, msg: any) {
+  if (msg.type === "ls") {
+    const session = getSession(sessionId)!
+    const dir = session.directory
+    if (!dir) return
+    const target = path.resolve(dir, msg.path || "")
+    if (!target.startsWith(path.resolve(dir))) return
+    const entries = await listDir(target)
+    client.send(JSON.stringify({ type: "ls", path: msg.path || "", entries }))
+  }
+
+  if (msg.type === "readFile") {
+    const session = getSession(sessionId)!
+    const dir = session.directory
+    if (!dir) return
+    const target = path.resolve(dir, msg.path || "")
+    if (!target.startsWith(path.resolve(dir))) return
+    try {
+      const content = await fsPromises.readFile(target, "utf-8")
+      client.send(JSON.stringify({ type: "fileContent", path: msg.path || "", content }))
+    } catch {
+      client.send(JSON.stringify({ type: "fileContent", path: msg.path || "", content: null, error: "读取失败" }))
+    }
+  }
+
+  if (msg.type === "chat.send") {
+    const session = getSession(sessionId)
+    if (!session) return
+    const { message, fileContext } = msg
+
+    let effectiveMessage = message
+    if (fileContext?.file && Array.isArray(fileContext.lines) && fileContext.lines.length > 0) {
+      const lines = fileContext.lines as number[]
+      const start = lines[0]
+      const end = lines[lines.length - 1]
+      const range = start === end ? `L${start}` : `L${start}–${end}`
+      effectiveMessage = `[用户选中了文件 ${fileContext.file} 的 ${range} 行]\n\n${message}`
+    }
+
+    const contextLabel = fileContext
+      ? `[${fileContext.file} L${fileContext.lines[0]}–${fileContext.lines[fileContext.lines.length - 1]}]\n${message}`
+      : message
+
+    broadcast(sessionId, { type: "chat.userMessage", text: contextLabel })
+
+    let aborted = false
+    sessionChatAbort.set(sessionId, () => { aborted = true })
+
+    try {
+      for await (const event of session.agent.chat(effectiveMessage)) {
+        if (aborted) break
+        broadcast(sessionId, { type: "chat.event", event })
+      }
+    } catch (err: any) {
+      broadcast(sessionId, { type: "chat.event", event: { type: "error", error: err.message } })
+    }
+
+    sessionChatAbort.delete(sessionId)
+    broadcast(sessionId, { type: "chat.done" })
+  }
+
+  if (msg.type === "chat.stop") {
+    sessionChatAbort.get(sessionId)?.()
   }
 }
 
@@ -454,25 +617,57 @@ function watchDirectory(sessionId: string, dir: string) {
   }
 }
 
-/** Push current state (directory + changes) to all clients of a session */
+/** Build current state payload for a session */
+async function buildState(sessionId: string): Promise<Record<string, unknown> | null> {
+  const session = getSession(sessionId)
+  if (!session) return null
+  const dir = session.directory
+  const changes = dir ? await getGitChanges(dir) : []
+  const topLevel = dir ? await listDir(dir) : []
+  return {
+    type: "state",
+    directory: dir,
+    changes,
+    topLevel,
+    previewPort: (previewSessionId === sessionId && previewTarget) ? PREVIEW_PORT : null,
+  }
+}
+
+/** Push current state to all clients — only if data actually changed */
 async function pushState(sessionId: string) {
   try {
-    const session = getSession(sessionId)
-    if (!session) return
-    const dir = session.directory
-    const changes = dir ? await getGitChanges(dir) : []
-    const topLevel = dir ? await listDir(dir) : []
+    const payload = await buildState(sessionId)
+    if (!payload) return
+    const json = JSON.stringify(payload)
+    const prev = lastStateJson.get(sessionId)
+    if (prev === json) return // nothing changed — skip
+    lastStateJson.set(sessionId, json)
     const clientCount = sessionClients.get(sessionId)?.size ?? 0
-    console.log(`📤  pushState(${sessionId}): dir="${dir}", topLevel=${topLevel.length} entries, changes=${changes.length}, clients=${clientCount}`)
-    broadcast(sessionId, {
-      type: "state",
-      directory: dir,
-      changes,
-      topLevel,
-      previewPort: (previewSessionId === sessionId && previewTarget) ? PREVIEW_PORT : null,
-    })
+    console.log(`📤  pushState(${sessionId}): dir="${payload.directory}", topLevel=${(payload.topLevel as any[]).length} entries, changes=${(payload.changes as any[]).length}, clients=${clientCount}`)
+    // Broadcast pre-serialised JSON directly
+    const clients = sessionClients.get(sessionId)
+    if (!clients) return
+    for (const c of clients) {
+      if (c.readyState === WS.OPEN) c.send(json)
+    }
   } catch (err) {
     console.error(`❌  pushState error:`, err)
+  }
+}
+
+/** Send cached state to a single client (for initial connect). If no cache, compute fresh. */
+async function sendStateTo(sessionId: string, client: ClientLike) {
+  try {
+    let json = lastStateJson.get(sessionId)
+    if (!json) {
+      const payload = await buildState(sessionId)
+      if (!payload) return
+      json = JSON.stringify(payload)
+      lastStateJson.set(sessionId, json)
+    }
+    if (client.readyState === WS.OPEN) client.send(json)
+  } catch (err) {
+    console.error(`❌  sendStateTo error:`, err)
   }
 }
 
@@ -853,44 +1048,6 @@ previewServer.on("upgrade", (req, socket, head) => {
 
 // ── HTTP Server ────────────────────────────────────────────────────────────
 
-async function handleChat(req: http.IncomingMessage, res: http.ServerResponse) {
-  let body = ""
-  for await (const chunk of req) body += chunk
-  const { message, sessionId, fileContext } = JSON.parse(body)
-
-  const session = sessionId ? getSession(sessionId) : undefined
-  if (!session) {
-    res.writeHead(404, { "Content-Type": "application/json" })
-    res.end(JSON.stringify({ error: "Session not found" }))
-    return
-  }
-
-  // Build the effective message — prepend file context if present
-  let effectiveMessage = message
-  if (fileContext && fileContext.file && Array.isArray(fileContext.lines) && fileContext.lines.length > 0) {
-    const lines = fileContext.lines as number[]
-    const start = lines[0]
-    const end = lines[lines.length - 1]
-    const range = start === end ? `L${start}` : `L${start}–${end}`
-    effectiveMessage = `[用户选中了文件 ${fileContext.file} 的 ${range} 行]\n\n${message}`
-  }
-
-  res.writeHead(200, {
-    "Content-Type": "text/event-stream",
-    "Cache-Control": "no-cache",
-    Connection: "keep-alive",
-  })
-
-  try {
-    for await (const event of session.agent.chat(effectiveMessage)) {
-      res.write(`data: ${JSON.stringify(event)}\n\n`)
-    }
-  } catch (err: any) {
-    res.write(`data: ${JSON.stringify({ type: "error", error: err.message })}\n\n`)
-  }
-  res.end()
-}
-
 // ── Admin UI ───────────────────────────────────────────────────────────────
 
 function adminHTML() {
@@ -1016,8 +1173,12 @@ function serveStatic(req: http.IncomingMessage, res: http.ServerResponse): boole
 function serveAppIndex(res: http.ServerResponse): boolean {
   const indexPath = path.join(APP_DIST, "index.html")
   if (fs.existsSync(indexPath)) {
+    const webSocket = userSettings.webSocket === true // default false → polling
+    const configScript = `<script>window.__ANYCODE_CONFIG__=${JSON.stringify({ webSocket })}</script>`
+    let html = fs.readFileSync(indexPath, "utf-8")
+    html = html.replace("</head>", `${configScript}</head>`)
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" })
-    fs.createReadStream(indexPath).pipe(res)
+    res.end(html)
     return true
   }
   return false
@@ -1031,13 +1192,77 @@ const server = http.createServer(async (req, res) => {
   res.setHeader("Access-Control-Allow-Headers", "Content-Type")
   if (req.method === "OPTIONS") { res.writeHead(204); res.end(); return }
 
-  // ── API routes ──
-  if (req.method === "POST" && req.url === "/api/chat") {
-    handleChat(req, res).catch((err) => {
-      console.error(err)
-      if (!res.headersSent) res.writeHead(500)
-      res.end(JSON.stringify({ error: err.message }))
-    })
+  // ── HTTP Long-Polling endpoints ──
+
+  // POST /api/poll/connect — create a polling channel
+  if (req.method === "POST" && req.url === "/api/poll/connect") {
+    let body = ""
+    for await (const chunk of req) body += chunk
+    const { sessionId } = body ? JSON.parse(body) : {} as any
+    const session = sessionId ? getSession(sessionId) : undefined
+    if (!session) {
+      res.writeHead(404, { "Content-Type": "application/json" })
+      res.end(JSON.stringify({ error: "Session not found" }))
+      return
+    }
+    const channelId = Math.random().toString(36).slice(2) + Date.now().toString(36)
+    const client = new PollingClient(channelId, sessionId)
+    pollingClients.set(channelId, client)
+    getSessionClients(sessionId).add(client)
+    console.log(`🔌  Poll client connected to session ${sessionId} (channel=${channelId})`)
+    sendStateTo(sessionId, client)
+    res.writeHead(200, { "Content-Type": "application/json" })
+    res.end(JSON.stringify({ channelId }))
+    return
+  }
+
+  // GET /api/poll?channelId=xxx — long poll for messages
+  if (req.method === "GET" && req.url?.startsWith("/api/poll?")) {
+    const url = new URL(req.url, `http://localhost:${PORT}`)
+    const channelId = url.searchParams.get("channelId")
+    const client = channelId ? pollingClients.get(channelId) : undefined
+    if (!client || client.readyState !== 1) {
+      res.writeHead(404, { "Content-Type": "application/json" })
+      res.end(JSON.stringify({ error: "Channel not found" }))
+      return
+    }
+    client.hold(res)
+    return
+  }
+
+  // POST /api/poll/send — send a message from client to server
+  if (req.method === "POST" && req.url === "/api/poll/send") {
+    let body = ""
+    for await (const chunk of req) body += chunk
+    const { channelId, data } = body ? JSON.parse(body) : {} as any
+    const client = channelId ? pollingClients.get(channelId) : undefined
+    if (!client || client.readyState !== 1) {
+      res.writeHead(404, { "Content-Type": "application/json" })
+      res.end(JSON.stringify({ error: "Channel not found" }))
+      return
+    }
+    client.lastActivity = Date.now()
+    // Fire-and-forget — response goes through poll, not this request
+    handleClientMessage(client.sessionId, client, data).catch(() => {})
+    res.writeHead(200, { "Content-Type": "application/json" })
+    res.end(JSON.stringify({ ok: true }))
+    return
+  }
+
+  // POST /api/poll/close — close a polling channel
+  if (req.method === "POST" && req.url === "/api/poll/close") {
+    let body = ""
+    for await (const chunk of req) body += chunk
+    const { channelId } = body ? JSON.parse(body) : {} as any
+    const client = channelId ? pollingClients.get(channelId) : undefined
+    if (client) {
+      client.close()
+      removeClient(client.sessionId, client)
+      pollingClients.delete(channelId!)
+      console.log(`🔌  Poll client disconnected (channel=${channelId})`)
+    }
+    res.writeHead(200, { "Content-Type": "application/json" })
+    res.end(JSON.stringify({ ok: true }))
     return
   }
 
@@ -1379,6 +1604,19 @@ export async function startServer() {
 
   const appDistExists = fs.existsSync(APP_DIST)
 
+  // ── Stale polling client cleanup (every 30s) ──
+  setInterval(() => {
+    const now = Date.now()
+    for (const [id, client] of pollingClients) {
+      if (now - client.lastActivity > 60000) {
+        console.log(`🧹  Cleaning up stale poll client (channel=${id})`)
+        client.close()
+        removeClient(client.sessionId, client)
+        pollingClients.delete(id)
+      }
+    }
+  }, 30000)
+
   // ── WebSocket server on same HTTP server ──
   const wss = new WebSocketServer({ server })
   wss.on("connection", (ws, req) => {
@@ -1396,47 +1634,21 @@ export async function startServer() {
     }
 
     const clients = getSessionClients(sessionId)
-    clients.add(ws)
+    clients.add(ws as ClientLike)
     console.log(`🔌  WS client connected to session ${sessionId} (${clients.size} total)`)
 
-    // Push current state immediately on connect
-    pushState(sessionId)
+    // Send current state to this client only (no broadcast)
+    sendStateTo(sessionId, ws as ClientLike)
 
-    // Handle client messages (e.g. ls requests)
     ws.on("message", async (raw) => {
       try {
         const msg = JSON.parse(raw.toString())
-        if (msg.type === "ls") {
-          // Lazy load: list one directory level
-          const session = getSession(sessionId)!
-          const dir = session.directory
-          if (!dir) return
-          const target = path.resolve(dir, msg.path || "")
-          // Security: must be under project directory
-          if (!target.startsWith(path.resolve(dir))) return
-          const entries = await listDir(target)
-          ws.send(JSON.stringify({ type: "ls", path: msg.path || "", entries }))
-        }
-
-        if (msg.type === "readFile") {
-          const session = getSession(sessionId)!
-          const dir = session.directory
-          if (!dir) return
-          const target = path.resolve(dir, msg.path || "")
-          if (!target.startsWith(path.resolve(dir))) return
-          try {
-            const content = await fsPromises.readFile(target, "utf-8")
-            ws.send(JSON.stringify({ type: "fileContent", path: msg.path || "", content }))
-          } catch {
-            ws.send(JSON.stringify({ type: "fileContent", path: msg.path || "", content: null, error: "读取失败" }))
-          }
-        }
+        handleClientMessage(sessionId, ws as ClientLike, msg).catch(() => {})
       } catch { /* ignore malformed */ }
     })
 
     ws.on("close", () => {
-      clients.delete(ws)
-      if (clients.size === 0) sessionClients.delete(sessionId)
+      removeClient(sessionId, ws as ClientLike)
     })
   })
 

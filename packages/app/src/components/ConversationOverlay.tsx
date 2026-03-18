@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, type MutableRefObject } from "react";
 import type { FileContext } from "../App";
 import { MicIcon, KeyboardIcon, SendIcon, CloseIcon, ChatIcon, StopIcon } from "./Icons";
 import "./ConversationOverlay.css";
@@ -131,6 +131,8 @@ function summarizeToolInfo(tool: ToolCard) {
 interface ConversationOverlayProps {
     sessionId: string;
     fileContext?: FileContext | null;
+    chatHandlerRef?: MutableRefObject<((data: any) => void) | undefined>;
+    sendMessage: (data: any) => void;
 }
 
 const SIDEBAR_BREAKPOINT = 768;
@@ -161,7 +163,7 @@ function useIsSidebar() {
     return isSidebar;
 }
 
-export function ConversationOverlay({ sessionId, fileContext }: ConversationOverlayProps) {
+export function ConversationOverlay({ sessionId, fileContext, chatHandlerRef, sendMessage }: ConversationOverlayProps) {
     const isSidebar = useIsSidebar();
 
     const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -190,7 +192,6 @@ export function ConversationOverlay({ sessionId, fileContext }: ConversationOver
     const [elapsed, setElapsed] = useState(0);
     const msgsRef = useRef<HTMLDivElement>(null);
     const toolMapRef = useRef<Map<string, number>>(new Map());
-    const abortRef = useRef<AbortController | null>(null);
 
     // Load history messages when session changes (including window switch)
     useEffect(() => {
@@ -199,8 +200,6 @@ export function ConversationOverlay({ sessionId, fileContext }: ConversationOver
         setMessages([]);
         setBusy(false);
         toolMapRef.current.clear();
-        abortRef.current?.abort();
-        abortRef.current = null;
 
         (async () => {
             try {
@@ -374,65 +373,45 @@ export function ConversationOverlay({ sessionId, fileContext }: ConversationOver
         }
     }, [appendPart, updateLastPartOfKind, updateToolById]);
 
+    // Register WebSocket chat event handler — all clients receive the same events
+    useEffect(() => {
+        if (!chatHandlerRef) return;
+        chatHandlerRef.current = (data: any) => {
+            switch (data.type) {
+                case "chat.userMessage":
+                    toolMapRef.current.clear();
+                    setMessages(prev => [...prev,
+                        { role: "user", text: data.text },
+                        { role: "assistant", parts: [] },
+                    ]);
+                    setBusy(true);
+                    break;
+                case "chat.event":
+                    if (data.event) handleEvent(data.event);
+                    break;
+                case "chat.done":
+                    setBusy(false);
+                    break;
+            }
+        };
+        return () => { chatHandlerRef.current = undefined; };
+    }, [handleEvent, chatHandlerRef]);
+
     // ── Send message ──
-    const handleSend = useCallback(async () => {
+    const handleSend = useCallback(() => {
         const text = input.trim();
         if (!text || busy) return;
         setInput("");
+        setBusy(true); // Prevent double-send; server will broadcast chat.userMessage back
 
-        // Build display text with context info
-        const contextLabel = fileContext
-            ? `[${fileContext.file} L${fileContext.lines[0]}–${fileContext.lines[fileContext.lines.length - 1]}]\n${text}`
-            : text;
-        setMessages(prev => [...prev, { role: "user", text: contextLabel }]);
-        setBusy(true);
-        toolMapRef.current.clear();
-
-        const ctl = new AbortController();
-        abortRef.current = ctl;
-
-        // Start assistant response container
-        setMessages(prev => [...prev, { role: "assistant", parts: [] }]);
-
-        // Build payload — include file context if available
-        const payload: Record<string, unknown> = { message: text, sessionId };
-        if (fileContext) {
-            payload.fileContext = fileContext;
-        }
-
-        try {
-            const res = await fetch("/api/chat", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload),
-                signal: ctl.signal,
-            });
-            const reader = res.body!.getReader();
-            const decoder = new TextDecoder();
-            let buf = "";
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                buf += decoder.decode(value, { stream: true });
-                const lines = buf.split("\n");
-                buf = lines.pop()!;
-                for (const line of lines) {
-                    if (!line.startsWith("data: ")) continue;
-                    try { handleEvent(JSON.parse(line.slice(6))); } catch { /* skip */ }
-                }
-            }
-        } catch (e: any) {
-            if (e.name !== "AbortError") {
-                appendPart({ kind: "error", message: e.message });
-            }
-        }
-        abortRef.current = null;
-        setBusy(false);
-    }, [input, busy, handleEvent, appendPart, fileContext]);
+        const payload: Record<string, unknown> = { type: "chat.send", message: text };
+        if (fileContext) payload.fileContext = fileContext;
+        sendMessage(payload);
+    }, [input, busy, fileContext, sendMessage]);
 
     const handleStop = useCallback(() => {
-        abortRef.current?.abort();
-    }, []);
+        sendMessage({ type: "chat.stop" });
+    }, [sendMessage]);
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); handleSend(); }
