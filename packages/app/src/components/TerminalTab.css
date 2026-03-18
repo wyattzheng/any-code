@@ -20,8 +20,12 @@
     justify-content: center;
     gap: 12px;
     color: var(--color-text-dim);
-    font-size: 13px;
     opacity: 0.5;
+}
+
+.terminal-empty p {
+    font-size: 13px;
+    margin: 0;
 }
 
 .terminal-tab .xterm {

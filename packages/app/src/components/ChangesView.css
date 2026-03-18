@@ -83,13 +83,13 @@
     align-items: center;
     justify-content: center;
     height: 100%;
-    gap: 10px;
+    gap: 12px;
     color: var(--color-text-dim);
     opacity: 0.5;
 }
 
 .changes-empty p {
-    font-size: 12px;
+    font-size: 13px;
     margin: 0;
 }
 
@@ -99,12 +99,12 @@
     align-items: center;
     justify-content: center;
     height: 100%;
-    gap: 10px;
+    gap: 12px;
     color: var(--color-text-dim);
     opacity: 0.5;
 }
 
 .diff-empty p {
-    font-size: 12px;
+    font-size: 13px;
     margin: 0;
 }

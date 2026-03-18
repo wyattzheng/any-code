@@ -160,7 +160,7 @@ export function ChangesView({ changes, requestFile, requestDiff, onFileContext }
                     </>
                 ) : (
                     <div className="diff-empty">
-                        <DiffIcon size={28} />
+                        <DiffIcon size={36} />
                         <p>{isEmpty ? "没有未提交的变更" : "选择文件查看内容"}</p>
                     </div>
                 )}

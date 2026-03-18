@@ -8,9 +8,9 @@ export function PreviewTab() {
     if (!previewUrl) {
         return (
             <div className="preview-tab">
-                <div className="preview-placeholder">
-                    <span className="preview-placeholder-icon"><MonitorIcon size={36} /></span>
-                    <p className="preview-placeholder-text">通过对话让 AI 生成界面，结果将展示在这里</p>
+                <div className="preview-empty">
+                    <MonitorIcon size={36} />
+                    <p>通过对话让 AI 生成界面，结果将展示在这里</p>
                 </div>
             </div>
         );

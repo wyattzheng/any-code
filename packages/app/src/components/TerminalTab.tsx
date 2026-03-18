@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
+import { TerminalIcon } from "./Icons";
 import "@xterm/xterm/css/xterm.css";
 import "./TerminalTab.css";
 
@@ -148,10 +149,7 @@ export function TerminalTab({ sessionId }: TerminalTabProps) {
             />
             {alive === false && (
                 <div className="terminal-empty">
-                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-dim)" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.3 }}>
-                        <polyline points="4 17 10 11 4 5" />
-                        <line x1="12" y1="19" x2="20" y2="19" />
-                    </svg>
+                    <TerminalIcon size={36} />
                     <p>终端未启动</p>
                 </div>
             )}

@@ -42,13 +42,13 @@
     align-items: center;
     justify-content: center;
     height: 100%;
-    gap: 10px;
+    gap: 12px;
     color: var(--color-text-dim);
     opacity: 0.5;
 }
 
 .file-tree-empty p {
-    font-size: 12px;
+    font-size: 13px;
     margin: 0;
 }
 
@@ -177,12 +177,12 @@
     align-items: center;
     justify-content: center;
     height: 100%;
-    gap: 10px;
+    gap: 12px;
     color: var(--color-text-dim);
     opacity: 0.5;
 }
 
 .file-empty p {
-    font-size: 12px;
+    font-size: 13px;
     margin: 0;
 }

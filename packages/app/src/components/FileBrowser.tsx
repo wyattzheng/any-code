@@ -169,7 +169,7 @@ export function FileBrowser({ topLevel, requestLs, requestFile, onFileContext }:
                     </>
                 ) : (
                     <div className="file-empty">
-                        <FileDocIcon size={28} />
+                        <FileDocIcon size={36} />
                         <p>选择文件查看内容</p>
                     </div>
                 )}
