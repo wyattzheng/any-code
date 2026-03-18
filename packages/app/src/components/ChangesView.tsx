@@ -45,9 +45,12 @@ export function ChangesView({ changes, requestFile, requestDiff }: ChangesViewPr
         if (scrollToLine === null || !contentBodyRef.current) return;
         // Wait a tick for Shiki to render
         const timer = setTimeout(() => {
-            const el = contentBodyRef.current?.querySelector(`[data-line="${scrollToLine}"]`);
-            if (el) {
-                el.scrollIntoView({ block: "center", behavior: "instant" });
+            const el = contentBodyRef.current?.querySelector(`[data-line="${scrollToLine}"]`) as HTMLElement | null;
+            if (el && contentBodyRef.current) {
+                // Scroll so the changed line sits ~3 lines from the top
+                const container = contentBodyRef.current;
+                const offset = el.offsetTop - container.offsetTop - 3 * 19.2; // ~3 lines padding
+                container.scrollTop = Math.max(0, offset);
             }
             setScrollToLine(null);
         }, 100);

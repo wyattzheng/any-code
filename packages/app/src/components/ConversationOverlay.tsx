@@ -515,12 +515,10 @@ export function ConversationOverlay({ sessionId }: ConversationOverlayProps) {
 
     return (
         <div className={panelClass} style={panelStyle}>
-            {!isSidebar && (
-                <div className="conversation-header" onMouseDown={handleMouseDown} onTouchStart={handleTouchStart}>
-                    <div className="drag-grip" />
-                    <div className="conversation-header-content"><ChatIcon /> 对话</div>
-                </div>
-            )}
+            <div className="conversation-header" {...(!isSidebar ? { onMouseDown: handleMouseDown, onTouchStart: handleTouchStart } : {})}>
+                {!isSidebar && <div className="drag-grip" />}
+                <div className="conversation-header-content"><ChatIcon /> 对话</div>
+            </div>
 
             <div className="conversation-messages" ref={msgsRef}>
                 {messages.length === 0 && (
