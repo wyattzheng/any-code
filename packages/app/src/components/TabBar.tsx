@@ -11,8 +11,6 @@ interface TabBarProps {
 export function TabBar({ activeTab, onTabChange, changeCount }: TabBarProps) {
     return (
         <nav className="tab-bar">
-            {/* 动态 Tab 区域：未来从 agent tablist JSON 读取 */}
-
             <div className="tab-spacer" />
 
             <button

@@ -192,9 +192,16 @@ export function ConversationOverlay({ sessionId, fileContext }: ConversationOver
     const toolMapRef = useRef<Map<string, number>>(new Map());
     const abortRef = useRef<AbortController | null>(null);
 
-    // Load history messages when session resumes
+    // Load history messages when session changes (including window switch)
     useEffect(() => {
         if (!sessionId) return;
+        // Clear previous session's state immediately
+        setMessages([]);
+        setBusy(false);
+        toolMapRef.current.clear();
+        abortRef.current?.abort();
+        abortRef.current = null;
+
         (async () => {
             try {
                 const res = await fetch(`/api/messages?sessionId=${encodeURIComponent(sessionId)}`);

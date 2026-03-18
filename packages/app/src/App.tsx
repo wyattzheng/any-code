@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { TabBar } from "./components/TabBar";
 import { MainView } from "./components/MainView";
 import { ConversationOverlay } from "./components/ConversationOverlay";
+import { WindowSwitcher } from "./components/WindowSwitcher";
+import type { WindowInfo } from "./components/WindowSwitcher";
 
 export type TabId = "files" | "changes" | "terminal" | "preview" | string;
 
@@ -40,25 +42,91 @@ export function App() {
     const [changes, setChanges] = useState<GitChange[]>([]);
     const [fileContext, setFileContext] = useState<FileContext | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [windows, setWindows] = useState<WindowInfo[]>([]);
 
-    // Get or create session for this user
+    const userId = useRef(getUserId());
+
+    // Fetch windows list
+    const fetchWindows = useCallback(async () => {
+        try {
+            const res = await fetch(`${API_BASE}/api/windows?userId=${userId.current}`);
+            if (res.ok) {
+                const list = await res.json();
+                setWindows(list);
+            }
+        } catch { /* ignore */ }
+    }, []);
+
+    // Get or create default session, then load windows
     useEffect(() => {
         (async () => {
             try {
                 const res = await fetch(`${API_BASE}/api/sessions`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ userId: getUserId() }),
+                    body: JSON.stringify({ userId: userId.current }),
                 });
                 const data = await res.json();
                 if (data.error) throw new Error(data.error);
                 setSessionId(data.id);
                 if (data.directory) setDirectory(data.directory);
+                fetchWindows();
             } catch (e: any) {
                 setError(e.message);
             }
         })();
-    }, []);
+    }, [fetchWindows]);
+
+    // Switch window
+    const handleWindowSwitch = useCallback((id: string) => {
+        if (id === sessionId) return;
+        const win = windows.find((w) => w.id === id);
+        setSessionId(id);
+        setDirectory(win?.directory || "");
+        setTopLevel([]);
+        setChanges([]);
+        setFileContext(null);
+    }, [sessionId, windows]);
+
+    // Create window
+    const handleWindowCreate = useCallback(async () => {
+        try {
+            const res = await fetch(`${API_BASE}/api/windows`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ userId: userId.current }),
+            });
+            const data = await res.json();
+            if (data.error) return;
+            // Switch to the new window
+            setSessionId(data.id);
+            setDirectory("");
+            setTopLevel([]);
+            setChanges([]);
+            setFileContext(null);
+            fetchWindows();
+        } catch { /* ignore */ }
+    }, [fetchWindows]);
+
+    // Delete window
+    const handleWindowDelete = useCallback(async (id: string) => {
+        try {
+            const res = await fetch(`${API_BASE}/api/windows/${id}`, { method: "DELETE" });
+            if (!res.ok) return;
+            // If we deleted the active window, switch to default
+            if (id === sessionId) {
+                const remaining = windows.filter((w) => w.id !== id);
+                const fallback = remaining.find((w) => w.isDefault) || remaining[0];
+                if (fallback) {
+                    setSessionId(fallback.id);
+                    setDirectory(fallback.directory || "");
+                    setTopLevel([]);
+                    setChanges([]);
+                }
+            }
+            fetchWindows();
+        } catch { /* ignore */ }
+    }, [sessionId, windows, fetchWindows]);
 
     // Poll state (directory, topLevel, changes) via HTTP
     // TODO: 目前只轮询根目录（topLevel），已展开的子目录不会自动刷新。
@@ -76,6 +144,8 @@ export function App() {
                 setTopLevel(data.topLevel);
                 setChanges(data.changes);
             } catch { /* ignore */ }
+            // Also refresh windows list (picks up directory changes in other windows)
+            fetchWindows();
         };
 
         // Immediate first poll
@@ -85,7 +155,7 @@ export function App() {
         return () => {
             if (pollRef.current) clearInterval(pollRef.current);
         };
-    }, [sessionId]);
+    }, [sessionId, fetchWindows]);
 
     /** Request directory listing for a sub-path (lazy tree expand) via HTTP */
     const requestLs = useCallback(async (subPath: string): Promise<DirEntry[]> => {
@@ -151,18 +221,27 @@ export function App() {
     if (!directory) {
         return (
             <div className="app-root">
-                <div className="app-main">
-                    <div className="main-view" style={{ display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: "16px" }}>
-                        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-dim)" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.3 }}>
-                            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-                        </svg>
-                        <p style={{ color: "var(--color-text-dim)", fontSize: "13px", opacity: 0.5, textAlign: "center", lineHeight: 1.6, maxWidth: "220px" }}>
-                            通过对话面板<br />打开一个项目开始编辑
-                        </p>
+                <div className="app-content">
+                    <div className="app-main">
+                        <div className="main-view" style={{ display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: "16px" }}>
+                            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-dim)" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.3 }}>
+                                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                            </svg>
+                            <p style={{ color: "var(--color-text-dim)", fontSize: "13px", opacity: 0.5, textAlign: "center", lineHeight: 1.6, maxWidth: "220px" }}>
+                                通过对话面板<br />打开一个项目开始编辑
+                            </p>
+                        </div>
+                        <TabBar activeTab={activeTab} onTabChange={setActiveTab} />
                     </div>
-                    <TabBar activeTab={activeTab} onTabChange={setActiveTab} />
+                    <ConversationOverlay sessionId={sessionId} />
                 </div>
-                <ConversationOverlay sessionId={sessionId} />
+                <WindowSwitcher
+                    windows={windows}
+                    activeWindowId={sessionId}
+                    onSwitch={handleWindowSwitch}
+                    onCreate={handleWindowCreate}
+                    onDelete={handleWindowDelete}
+                />
             </div>
         );
     }
@@ -170,15 +249,20 @@ export function App() {
     // Directory set — full UI
     return (
         <div className="app-root">
-            <div className="app-main">
-                <MainView activeTab={activeTab} topLevel={topLevel} changes={changes} directory={directory} sessionId={sessionId} requestLs={requestLs} requestFile={requestFile} requestDiff={requestDiff} onFileContext={setFileContext} />
-                <TabBar
-                    activeTab={activeTab}
-                    onTabChange={setActiveTab}
-                    changeCount={changes.length}
-                />
+            <div className="app-content">
+                <div className="app-main">
+                    <MainView activeTab={activeTab} topLevel={topLevel} changes={changes} directory={directory} sessionId={sessionId} requestLs={requestLs} requestFile={requestFile} requestDiff={requestDiff} onFileContext={setFileContext} />
+                    <TabBar activeTab={activeTab} onTabChange={setActiveTab} changeCount={changes.length} />
+                </div>
+                <ConversationOverlay sessionId={sessionId} fileContext={fileContext} />
             </div>
-            <ConversationOverlay sessionId={sessionId} fileContext={fileContext} />
+            <WindowSwitcher
+                windows={windows}
+                activeWindowId={sessionId}
+                onSwitch={handleWindowSwitch}
+                onCreate={handleWindowCreate}
+                onDelete={handleWindowDelete}
+            />
         </div>
     );
 }

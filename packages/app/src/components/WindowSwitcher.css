@@ -1,0 +1,121 @@
+/* ── Taskbar: full-width bottom bar ── */
+.taskbar {
+    display: flex;
+    align-items: stretch;
+    width: 100%;
+    height: 30px;
+    background: var(--color-surface);
+    border-top: 1px solid var(--color-border);
+    padding: 0;
+    gap: 0;
+    flex-shrink: 0;
+    z-index: 200;
+}
+
+.taskbar-items {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    flex: 1;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
+.taskbar-items::-webkit-scrollbar {
+    display: none;
+}
+
+/* ── Each window button ── */
+.taskbar-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 12px;
+    border-radius: 0;
+    font-size: 11px;
+    color: var(--color-text-dim);
+    background: transparent;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: background 0.12s, color 0.12s;
+    border-right: 1px solid var(--color-border);
+    position: relative;
+}
+
+.taskbar-item:active {
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.taskbar-item.active {
+    color: var(--color-text);
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.taskbar-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 120px;
+}
+
+/* ── Popover bubble ── */
+.taskbar-popover {
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+    z-index: 300;
+    overflow: hidden;
+}
+
+/* Small arrow pointing down */
+.taskbar-popover::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 5px solid transparent;
+    border-top-color: var(--color-border);
+}
+
+.taskbar-popover-btn {
+    display: block;
+    width: 100%;
+    padding: 6px 16px;
+    font-size: 11px;
+    color: var(--color-text-dim);
+    white-space: nowrap;
+    text-align: center;
+    transition: background 0.1s, color 0.1s;
+}
+
+.taskbar-popover-btn:active {
+    background: rgba(241, 76, 76, 0.12);
+    color: var(--color-danger);
+}
+
+/* ── Add button ── */
+.taskbar-add {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 14px;
+    flex-shrink: 0;
+    font-size: 14px;
+    font-weight: 300;
+    line-height: 1;
+    color: var(--color-text);
+    opacity: 0.6;
+    transition: opacity 0.12s, background 0.12s;
+}
+
+.taskbar-add:active {
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.06);
+}

@@ -224,58 +224,108 @@ function registerSession(id: string, agent: InstanceType<typeof CodeAgent>, dire
 }
 
 /**
- * Get or create a session for the given user ID.
- * If the user already has a persisted session it is resumed;
- * otherwise a brand-new session is created and the mapping stored.
+ * Resume a persisted session row into memory.
  */
-async function getOrCreateSession(userId: string): Promise<SessionEntry> {
-  // 1. Look up persisted mapping
-  const row = db.findOne("user_session", { op: "eq", field: "user_id", value: userId })
+async function resumeSession(row: Record<string, unknown>): Promise<SessionEntry> {
+  const sessionId = row.session_id as string
+  const cached = sessions.get(sessionId)
+  if (cached) return cached
 
-  if (row) {
-    const sessionId = row.session_id as string
-    // Already in memory?
-    const cached = sessions.get(sessionId)
-    if (cached) return cached
-
-    // Spin up agent for persisted session
-    const dir = (row.directory as string) || ""
-    const tp = getOrCreateTerminalProvider(sessionId)
-    const agent = new CodeAgent(createAgentConfig(dir, sessionId, tp))
-    await agent.init()
-    const entry = registerSession(sessionId, agent, dir, row.time_created as number)
-    if (dir) {
-      try { agent.setWorkingDirectory(dir) } catch { /* already set */ }
-      watchDirectory(sessionId, dir)
-    }
-    console.log(`♻️  Session ${sessionId} resumed for user ${userId}`)
-    return entry
+  const dir = (row.directory as string) || ""
+  const tp = getOrCreateTerminalProvider(sessionId)
+  const agent = new CodeAgent(createAgentConfig(dir, sessionId, tp))
+  await agent.init()
+  const entry = registerSession(sessionId, agent, dir, row.time_created as number)
+  if (dir) {
+    try { agent.setWorkingDirectory(dir) } catch { /* already set */ }
+    watchDirectory(sessionId, dir)
   }
+  console.log(`♻️  Session ${sessionId} resumed`)
+  return entry
+}
 
-  // 2. No mapping — create new session
-  // We need a temporary ID for the terminal provider; will update after init
+/**
+ * Create a brand new session/window for a user.
+ */
+async function createNewWindow(userId: string, isDefault = false): Promise<SessionEntry> {
   const tempId = `temp-${Date.now()}`
   const tp = getOrCreateTerminalProvider(tempId)
   const agent = new CodeAgent(createAgentConfig("", undefined, tp))
   await agent.init()
   const sessionId = agent.sessionId
   const now = Date.now()
-  // Move terminal provider from temp ID to real session ID
   terminalProviders.delete(tempId)
   terminalProviders.set(sessionId, tp)
-  ;(tp as any).sessionId = sessionId
+    ; (tp as any).sessionId = sessionId
   const entry = registerSession(sessionId, agent, "", now)
 
-  // Persist mapping
   db.insert("user_session", {
     user_id: userId,
     session_id: sessionId,
     directory: "",
     time_created: now,
+    is_default: isDefault ? 1 : 0,
   })
 
-  console.log(`✅  Session ${sessionId} created for user ${userId}`)
+  console.log(`✅  Window ${sessionId} created for user ${userId}${isDefault ? " (default)" : ""}`)
   return entry
+}
+
+/**
+ * Get or create the default window for a user.
+ * Returns the default session; creates one if none exists.
+ */
+async function getOrCreateSession(userId: string): Promise<SessionEntry> {
+  // Find default window
+  const rows = db.findMany("user_session", { filter: { op: "eq", field: "user_id", value: userId } })
+  const defaultRow = rows.find((r: any) => r.is_default === 1) || rows[0]
+
+  if (defaultRow) {
+    // Ensure is_default is set on the row if it was a legacy row without it
+    if (defaultRow.is_default !== 1) {
+      db.update("user_session", { op: "eq", field: "session_id", value: defaultRow.session_id }, { is_default: 1 })
+    }
+    return resumeSession(defaultRow)
+  }
+
+  return createNewWindow(userId, true)
+}
+
+/**
+ * Get all windows for a user. Resumes any that aren't in memory.
+ */
+async function getAllWindows(userId: string): Promise<SessionEntry[]> {
+  const rows = db.findMany("user_session", { filter: { op: "eq", field: "user_id", value: userId } })
+  const entries: SessionEntry[] = []
+  for (const row of rows) {
+    entries.push(await resumeSession(row))
+  }
+  return entries
+}
+
+/**
+ * Delete a non-default window.
+ */
+function deleteWindow(sessionId: string): boolean {
+  const row = db.findOne("user_session", { op: "eq", field: "session_id", value: sessionId })
+  if (!row) return false
+  if ((row as any).is_default === 1) return false // cannot delete default
+
+  // Clean up in-memory state
+  const session = sessions.get(sessionId)
+  if (session) {
+    sessions.delete(sessionId)
+  }
+  const tp = terminalProviders.get(sessionId)
+  if (tp && tp.exists()) {
+    try { tp.destroy() } catch { /* ignore */ }
+  }
+  terminalProviders.delete(sessionId)
+
+  // Remove from DB
+  db.remove("user_session", { op: "eq", field: "session_id", value: sessionId })
+  console.log(`🗑  Window ${sessionId} deleted`)
+  return true
 }
 
 function getSession(id: string): SessionEntry | undefined {
@@ -847,6 +897,70 @@ const server = http.createServer(async (req, res) => {
     return
   }
 
+  // ── Window management APIs ───────────────────────────────────────────
+  // GET /api/windows?userId=xxx — list all windows
+  if (req.method === "GET" && req.url?.startsWith("/api/windows")) {
+    const url = new URL(req.url, `http://localhost:${PORT}`)
+    const userId = url.searchParams.get("userId")
+    if (!userId) {
+      res.writeHead(400, { "Content-Type": "application/json" })
+      res.end(JSON.stringify({ error: "userId is required" }))
+      return
+    }
+    getAllWindows(userId).then((entries) => {
+      const rows = db.findMany("user_session", { filter: { op: "eq", field: "user_id", value: userId } })
+      const defaultMap = new Map(rows.map((r: any) => [r.session_id, r.is_default === 1]))
+      const list = entries.map((e) => ({
+        id: e.id,
+        directory: e.directory,
+        createdAt: e.createdAt,
+        isDefault: defaultMap.get(e.id) ?? false,
+      }))
+      res.writeHead(200, { "Content-Type": "application/json" })
+      res.end(JSON.stringify(list))
+    }).catch((err: any) => {
+      res.writeHead(500, { "Content-Type": "application/json" })
+      res.end(JSON.stringify({ error: err.message }))
+    })
+    return
+  }
+
+  // POST /api/windows — create new window
+  if (req.method === "POST" && req.url === "/api/windows") {
+    (async () => {
+      let body = ""
+      for await (const chunk of req) body += chunk
+      const { userId } = body ? JSON.parse(body) : {} as any
+      if (!userId) {
+        res.writeHead(400, { "Content-Type": "application/json" })
+        res.end(JSON.stringify({ error: "userId is required" }))
+        return
+      }
+      createNewWindow(userId, false).then((entry) => {
+        res.writeHead(200, { "Content-Type": "application/json" })
+        res.end(JSON.stringify({ id: entry.id, directory: entry.directory, isDefault: false }))
+      }).catch((err: any) => {
+        res.writeHead(500, { "Content-Type": "application/json" })
+        res.end(JSON.stringify({ error: err.message }))
+      })
+    })()
+    return
+  }
+
+  // DELETE /api/windows/:id — delete non-default window
+  const windowDeleteMatch = req.url?.match(/^\/api\/windows\/([^/?]+)$/)
+  if (req.method === "DELETE" && windowDeleteMatch) {
+    const ok = deleteWindow(windowDeleteMatch[1])
+    if (ok) {
+      res.writeHead(200, { "Content-Type": "application/json" })
+      res.end(JSON.stringify({ ok: true }))
+    } else {
+      res.writeHead(400, { "Content-Type": "application/json" })
+      res.end(JSON.stringify({ error: "Cannot delete default window or window not found" }))
+    }
+    return
+  }
+
   // GET /api/sessions/:id
   const sessionMatch = req.url?.match(/^\/api\/sessions\/([^/?]+)(?:\/([a-z]+))?/)
   if (req.method === "GET" && sessionMatch) {
@@ -1041,15 +1155,51 @@ export async function startServer() {
   const migrations = Database.getMigrations()
   db = await sharedStorage.connect(migrations)
 
-  // Server-specific table: maps user IDs to their session
-  sharedStorage.exec(`
-    CREATE TABLE IF NOT EXISTS "user_session" (
-      "user_id"      TEXT PRIMARY KEY,
-      "session_id"   TEXT NOT NULL,
-      "directory"    TEXT NOT NULL DEFAULT '',
-      "time_created" INTEGER NOT NULL
-    )
-  `)
+  // Server-specific table: maps user IDs to their windows/sessions.
+  // Migrate from old schema (user_id PK, no is_default) to new schema
+  // (session_id PK, is_default) — preserves all existing data.
+  const cols = sharedStorage.query(`PRAGMA table_info("user_session")`)
+  if (cols.length > 0) {
+    const hasIsDefault = cols.some((c: any) => c.name === "is_default")
+    // pk field in PRAGMA table_info is >0 for PK columns
+    const pkCol = cols.find((c: any) => c.pk === 1)
+    const needsPkMigration = pkCol && pkCol.name === "user_id"
+
+    if (!hasIsDefault || needsPkMigration) {
+      console.log("🔄  Migrating user_session table…")
+      // Step 1: add is_default column if missing (needed before copying data)
+      if (!hasIsDefault) {
+        sharedStorage.exec(`ALTER TABLE "user_session" ADD COLUMN "is_default" INTEGER NOT NULL DEFAULT 0`)
+        // Mark all existing sessions as default
+        sharedStorage.exec(`UPDATE "user_session" SET "is_default" = 1`)
+      }
+      // Step 2: rebuild table to change PK from user_id to session_id
+      if (needsPkMigration) {
+        sharedStorage.exec(`CREATE TABLE "user_session_new" (
+          "session_id"   TEXT PRIMARY KEY,
+          "user_id"      TEXT NOT NULL,
+          "directory"    TEXT NOT NULL DEFAULT '',
+          "time_created" INTEGER NOT NULL,
+          "is_default"   INTEGER NOT NULL DEFAULT 0
+        )`)
+        sharedStorage.exec(`INSERT INTO "user_session_new" SELECT "session_id","user_id","directory","time_created","is_default" FROM "user_session"`)
+        sharedStorage.exec(`DROP TABLE "user_session"`)
+        sharedStorage.exec(`ALTER TABLE "user_session_new" RENAME TO "user_session"`)
+      }
+      console.log("✅  user_session migration complete")
+    }
+  } else {
+    // Table doesn't exist — create fresh
+    sharedStorage.exec(`
+      CREATE TABLE IF NOT EXISTS "user_session" (
+        "session_id"   TEXT PRIMARY KEY,
+        "user_id"      TEXT NOT NULL,
+        "directory"    TEXT NOT NULL DEFAULT '',
+        "time_created" INTEGER NOT NULL,
+        "is_default"   INTEGER NOT NULL DEFAULT 0
+      )
+    `)
+  }
 
   const appDistExists = fs.existsSync(APP_DIST)
 

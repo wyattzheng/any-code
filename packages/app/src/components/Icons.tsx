@@ -144,6 +144,24 @@ export function TerminalIcon({ size = 18, color = "currentColor" }: IconProps) {
     );
 }
 
+export function WindowIcon({ size = 18, color = "currentColor" }: IconProps) {
+    return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="3" />
+            <rect x="7" y="7" width="10" height="10" rx="1.5" />
+        </svg>
+    );
+}
+
+export function PlusIcon({ size = 14, color = "currentColor" }: IconProps) {
+    return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+    );
+}
+
 export function StopIcon({ size = 14, color = "currentColor" }: IconProps) {
     return (
         <svg width={size} height={size} viewBox="0 0 24 24" fill={color} stroke="none">

@@ -164,6 +164,19 @@ export class SqlJsStorage implements StorageProvider {
         this.scheduleFlush()
     }
 
+    /** Run a SELECT query and return rows as objects. */
+    query(sql: string, params?: any[]): Record<string, any>[] {
+        if (!this.db) throw new Error("SqlJsStorage: db not initialized")
+        const stmt = this.db.prepare(sql)
+        if (params) stmt.bind(params)
+        const results: Record<string, any>[] = []
+        while (stmt.step()) {
+            results.push(stmt.getAsObject() as Record<string, any>)
+        }
+        stmt.free()
+        return results
+    }
+
     close() {
         // Flush any pending writes before closing
         if (this.flushTimer) {
