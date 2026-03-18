@@ -111,6 +111,20 @@ export function App() {
         }
     }, [sessionId]);
 
+    /** Request diff (changed line numbers) for a file */
+    const requestDiff = useCallback(async (filePath: string): Promise<{ added: number[]; removed: number[] }> => {
+        if (!sessionId) return { added: [], removed: [] };
+        try {
+            const res = await fetch(
+                `${API_BASE}/api/sessions/${sessionId}/diff?path=${encodeURIComponent(filePath)}`
+            );
+            if (!res.ok) return { added: [], removed: [] };
+            return await res.json();
+        } catch {
+            return { added: [], removed: [] };
+        }
+    }, [sessionId]);
+
     if (error) {
         return (
             <div className="app" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -148,11 +162,12 @@ export function App() {
     // Directory set — full UI
     return (
         <div className="app">
-            <MainView activeTab={activeTab} topLevel={topLevel} changes={changes} requestLs={requestLs} requestFile={requestFile} />
+            <MainView activeTab={activeTab} topLevel={topLevel} changes={changes} requestLs={requestLs} requestFile={requestFile} requestDiff={requestDiff} />
             <ConversationOverlay sessionId={sessionId} />
             <TabBar
                 activeTab={activeTab}
                 onTabChange={setActiveTab}
+                changeCount={changes.length}
             />
         </div>
     );

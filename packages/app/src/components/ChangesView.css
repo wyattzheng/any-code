@@ -17,9 +17,9 @@
 }
 
 .change-item {
-    padding: 8px 12px;
+    padding: 6px 12px;
     font-size: 13px;
-    line-height: 1;
+    line-height: 1.4;
     display: flex;
     align-items: center;
     gap: 8px;

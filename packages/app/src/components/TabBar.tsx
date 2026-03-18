@@ -5,9 +5,10 @@ import "./TabBar.css";
 interface TabBarProps {
     activeTab: TabId;
     onTabChange: (tab: TabId) => void;
+    changeCount?: number;
 }
 
-export function TabBar({ activeTab, onTabChange }: TabBarProps) {
+export function TabBar({ activeTab, onTabChange, changeCount }: TabBarProps) {
     return (
         <nav className="tab-bar">
             {/* 动态 Tab 区域：未来从 agent tablist JSON 读取 */}
@@ -34,7 +35,12 @@ export function TabBar({ activeTab, onTabChange }: TabBarProps) {
                 className={`tab-item ${activeTab === "changes" ? "active" : ""}`}
                 onClick={() => onTabChange("changes")}
             >
-                <span className="tab-icon"><DiffIcon /></span>
+                <span className="tab-icon">
+                    <DiffIcon />
+                    {changeCount !== undefined && changeCount > 0 && (
+                        <span className="tab-badge">{changeCount}</span>
+                    )}
+                </span>
                 <span className="tab-label">变更</span>
             </button>
         </nav>

@@ -675,6 +675,62 @@ const server = http.createServer(async (req, res) => {
       return
     }
 
+    // GET /api/sessions/:id/diff?path=xxx — changed line numbers for a file
+    if (sub === "diff") {
+      const filePath = url.searchParams.get("path") || ""
+      const dir = session.directory
+      if (!dir) {
+        res.writeHead(200, { "Content-Type": "application/json" })
+        res.end(JSON.stringify({ added: [], removed: [] }))
+        return
+      }
+      try {
+        const added: number[] = []
+        const removed: number[] = []
+        // Try tracked diff first, then fall back to untracked (new file)
+        let result = await gitProvider.run(
+          ["diff", "--unified=0", "--", filePath],
+          { cwd: dir },
+        )
+        if (result.exitCode !== 0 || !result.text().trim()) {
+          // Untracked or staged-only — try diff against empty tree
+          result = await gitProvider.run(
+            ["diff", "--unified=0", "--cached", "--", filePath],
+            { cwd: dir },
+          )
+        }
+        const diffText = result.text()
+        // Parse unified diff hunk headers: @@ -old,count +new,count @@
+        const hunkRe = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/gm
+        let m: RegExpExecArray | null
+        while ((m = hunkRe.exec(diffText))) {
+          const oldStart = parseInt(m[1], 10)
+          const oldCount = parseInt(m[2] ?? "1", 10)
+          const newStart = parseInt(m[3], 10)
+          const newCount = parseInt(m[4] ?? "1", 10)
+          for (let i = 0; i < oldCount; i++) removed.push(oldStart + i)
+          for (let i = 0; i < newCount; i++) added.push(newStart + i)
+        }
+        // For completely untracked files, mark all lines as added
+        if (!diffText.trim()) {
+          try {
+            const target = path.resolve(dir, filePath)
+            if (target.startsWith(path.resolve(dir))) {
+              const content = await fsPromises.readFile(target, "utf-8")
+              const lineCount = content.split("\n").length
+              for (let i = 1; i <= lineCount; i++) added.push(i)
+            }
+          } catch { /* ignore */ }
+        }
+        res.writeHead(200, { "Content-Type": "application/json" })
+        res.end(JSON.stringify({ added, removed }))
+      } catch {
+        res.writeHead(200, { "Content-Type": "application/json" })
+        res.end(JSON.stringify({ added: [], removed: [] }))
+      }
+      return
+    }
+
     // GET /api/sessions/:id (no sub-route) — basic session info
     res.writeHead(200, { "Content-Type": "application/json" })
     res.end(JSON.stringify({

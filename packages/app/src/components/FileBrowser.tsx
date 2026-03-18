@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback } from "react";
 import type { DirEntry } from "../App";
 import { FolderOpenIcon, FileDocIcon, ChevronIcon } from "./Icons";
+import { CodeViewer } from "./CodeViewer";
 import "./FileBrowser.css";
 
 interface FileBrowserProps {
@@ -149,7 +150,7 @@ export function FileBrowser({ topLevel, requestLs, requestFile }: FileBrowserPro
                             {fileLoading ? (
                                 <div className="file-content-loading">加载中…</div>
                             ) : fileContent !== null ? (
-                                <pre className="file-content-code">{fileContent}</pre>
+                                <CodeViewer code={fileContent} filePath={selectedFile} />
                             ) : (
                                 <div className="file-content-error">无法读取文件</div>
                             )}

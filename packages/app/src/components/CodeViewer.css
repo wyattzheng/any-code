@@ -1,0 +1,77 @@
+.code-viewer {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.6;
+    tab-size: 4;
+}
+
+.code-viewer pre {
+    margin: 0;
+    padding: 12px 0;
+    overflow: visible;
+    width: fit-content;
+    min-width: 100%;
+    background: transparent !important;
+}
+
+.code-viewer code {
+    counter-reset: line;
+}
+
+/* Each line rendered by Shiki */
+.code-viewer .line {
+    display: inline-block;
+    width: 100%;
+    padding: 0 12px 0 0;
+    min-height: 1.6em;
+}
+
+/* Line number via ::before */
+.code-viewer .line::before {
+    content: attr(data-line);
+    display: inline-block;
+    width: 3.5em;
+    padding-right: 1em;
+    text-align: right;
+    color: #555;
+    user-select: none;
+    flex-shrink: 0;
+}
+
+/* ── Diff highlighting ─────────────────────────────────────────── */
+.code-viewer .line.diff-added {
+    background: rgba(35, 134, 54, 0.2);
+}
+
+.code-viewer .line.diff-added::before {
+    color: var(--color-success);
+}
+
+.code-viewer .line.diff-removed {
+    background: rgba(218, 54, 51, 0.2);
+}
+
+.code-viewer .line.diff-removed::before {
+    color: var(--color-danger);
+}
+
+/* ── Fallback / Loading ────────────────────────────────────────── */
+.code-viewer-fallback {
+    margin: 0;
+    padding: 12px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--color-text-dim);
+    white-space: pre-wrap;
+    word-break: break-all;
+    tab-size: 4;
+}
+
+.code-viewer-loading {
+    padding: 12px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--color-text-dim);
+    opacity: 0.5;
+}

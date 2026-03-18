@@ -1,11 +1,13 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import type { GitChange } from "../App";
 import { FileDocIcon, DiffIcon } from "./Icons";
+import { CodeViewer } from "./CodeViewer";
 import "./ChangesView.css";
 
 interface ChangesViewProps {
     changes: GitChange[];
     requestFile: (path: string) => Promise<string | null>;
+    requestDiff: (path: string) => Promise<{ added: number[]; removed: number[] }>;
 }
 
 function statusClass(status: string): string {
@@ -25,7 +27,7 @@ function statusLabel(status: string): string {
     }
 }
 
-export function ChangesView({ changes, requestFile }: ChangesViewProps) {
+export function ChangesView({ changes, requestFile, requestDiff }: ChangesViewProps) {
     const [listHeight, setListHeight] = useState(200);
     const containerRef = useRef<HTMLDivElement>(null);
     const dragRef = useRef<{ startY: number; startHeight: number } | null>(null);
@@ -33,6 +35,24 @@ export function ChangesView({ changes, requestFile }: ChangesViewProps) {
     const [selectedFile, setSelectedFile] = useState<string | null>(null);
     const [fileContent, setFileContent] = useState<string | null>(null);
     const [fileLoading, setFileLoading] = useState(false);
+    const [addedLines, setAddedLines] = useState<Set<number>>(new Set());
+    const [removedLines, setRemovedLines] = useState<Set<number>>(new Set());
+    const [scrollToLine, setScrollToLine] = useState<number | null>(null);
+    const contentBodyRef = useRef<HTMLDivElement>(null);
+
+    // Scroll to first changed line after content renders
+    useEffect(() => {
+        if (scrollToLine === null || !contentBodyRef.current) return;
+        // Wait a tick for Shiki to render
+        const timer = setTimeout(() => {
+            const el = contentBodyRef.current?.querySelector(`[data-line="${scrollToLine}"]`);
+            if (el) {
+                el.scrollIntoView({ block: "center", behavior: "instant" });
+            }
+            setScrollToLine(null);
+        }, 100);
+        return () => clearTimeout(timer);
+    }, [scrollToLine, fileContent]);
 
     const onDragMove = useCallback((clientY: number) => {
         if (!dragRef.current || !containerRef.current) return;
@@ -67,10 +87,25 @@ export function ChangesView({ changes, requestFile }: ChangesViewProps) {
     const handleFileClick = async (filePath: string) => {
         setSelectedFile(filePath);
         setFileContent(null);
+        setAddedLines(new Set());
+        setRemovedLines(new Set());
         setFileLoading(true);
-        const content = await requestFile(filePath);
+
+        const [content, diff] = await Promise.all([
+            requestFile(filePath),
+            requestDiff(filePath),
+        ]);
+
         setFileContent(content);
+        setAddedLines(new Set(diff.added));
+        setRemovedLines(new Set(diff.removed));
         setFileLoading(false);
+
+        // Scroll to first changed line
+        const allChanged = [...diff.added, ...diff.removed].sort((a, b) => a - b);
+        if (allChanged.length > 0) {
+            setScrollToLine(allChanged[0]);
+        }
     };
 
     const isEmpty = changes.length === 0;
@@ -84,11 +119,16 @@ export function ChangesView({ changes, requestFile }: ChangesViewProps) {
                             <FileDocIcon />
                             <span className="file-content-path">{selectedFile}</span>
                         </div>
-                        <div className="file-content-body">
+                        <div className="file-content-body" ref={contentBodyRef}>
                             {fileLoading ? (
                                 <div className="file-content-loading">加载中…</div>
                             ) : fileContent !== null ? (
-                                <pre className="file-content-code">{fileContent}</pre>
+                                <CodeViewer
+                                    code={fileContent}
+                                    filePath={selectedFile}
+                                    addedLines={addedLines}
+                                    removedLines={removedLines}
+                                />
                             ) : (
                                 <div className="file-content-error">无法读取文件</div>
                             )}
@@ -113,7 +153,7 @@ export function ChangesView({ changes, requestFile }: ChangesViewProps) {
                     {isEmpty ? (
                         <div className="changes-empty">
                             <DiffIcon size={40} />
-                            <p>工作区干净 ✨</p>
+                            <p>工作区干净</p>
                         </div>
                     ) : (
                         changes.map((change) => (

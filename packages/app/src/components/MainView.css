@@ -4,6 +4,14 @@
     position: relative;
 }
 
+.main-tab-panel {
+    flex-direction: column;
+    height: 100%;
+    width: 100%;
+    position: absolute;
+    inset: 0;
+}
+
 .main-view-iframe {
     width: 100%;
     height: 100%;

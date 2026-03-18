@@ -53,9 +53,9 @@
 }
 
 .file-tree-item {
-    padding: 8px 12px;
+    padding: 6px 12px;
     font-size: 13px;
-    line-height: 1;
+    line-height: 1.4;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -135,10 +135,10 @@
     font-size: 11px;
 }
 
-/* File content body — scrollable area */
+/* File content body — scrollable area (both axes) */
 .file-content-body {
     flex: 1;
-    overflow-y: auto;
+    overflow: auto;
 }
 
 .file-content-code {
