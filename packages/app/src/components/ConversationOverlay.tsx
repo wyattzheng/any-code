@@ -435,7 +435,7 @@ export function ConversationOverlay({ sessionId, fileContext }: ConversationOver
     }, []);
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
+        if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); handleSend(); }
     };
 
     // ── Recording ──

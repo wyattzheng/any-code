@@ -37,7 +37,6 @@ export function ChangesView({ changes, requestFile, requestDiff, onFileContext }
     const [fileContent, setFileContent] = useState<string | null>(null);
     const [fileLoading, setFileLoading] = useState(false);
     const [addedLines, setAddedLines] = useState<Set<number>>(new Set());
-    const [removedLines, setRemovedLines] = useState<Set<number>>(new Set());
     const [scrollToLine, setScrollToLine] = useState<number | null>(null);
     const contentBodyRef = useRef<HTMLDivElement>(null);
 
@@ -75,7 +74,6 @@ export function ChangesView({ changes, requestFile, requestDiff, onFileContext }
         setSelectedFile(filePath);
         setFileContent(null);
         setAddedLines(new Set());
-        setRemovedLines(new Set());
         setScrollToLine(null);
         setFileLoading(true);
         onFileContext?.(null); // clear selection on file switch
@@ -91,11 +89,10 @@ export function ChangesView({ changes, requestFile, requestDiff, onFileContext }
 
         setFileContent(content);
         setAddedLines(new Set(diff.added));
-        setRemovedLines(new Set(diff.removed));
         setFileLoading(false);
 
         // Scroll to first changed line
-        const allChanged = [...diff.added, ...diff.removed].sort((a, b) => a - b);
+        const allChanged = [...diff.added].sort((a, b) => a - b);
         if (allChanged.length > 0) {
             setScrollToLine(allChanged[0]);
         }
@@ -129,7 +126,6 @@ export function ChangesView({ changes, requestFile, requestDiff, onFileContext }
                                     code={fileContent}
                                     filePath={selectedFile}
                                     addedLines={addedLines}
-                                    removedLines={removedLines}
                                     onSelectionChange={handleSelectionChange}
                                     scrollToLine={scrollToLine}
                                 />
