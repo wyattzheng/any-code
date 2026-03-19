@@ -41,12 +41,16 @@ const userSettings = (() => {
 
 // ── Config (env vars > settings.json > defaults) ──────────────────────────
 
-const PROVIDER = process.env.PROVIDER ?? "anthropic"
+const PROVIDER = process.env.PROVIDER ?? ""
 const MODEL = process.env.MODEL ?? userSettings.MODEL ?? "claude-sonnet-4-20250514"
 const API_KEY = process.env.API_KEY ?? userSettings.API_KEY
 const BASE_URL = process.env.BASE_URL ?? userSettings.BASE_URL
 const PORT = parseInt(process.env.PORT ?? "3210", 10)
 const PREVIEW_PORT = parseInt(process.env.PREVIEW_PORT ?? String(PORT + 1), 10)
+if (!PROVIDER || !MODEL || !BASE_URL) {
+  console.error("❌  Missing PROVIDER, MODEL, BASE_URL")
+  process.exit();
+}
 
 if (!API_KEY) {
   console.error("❌  Missing API_KEY")
@@ -220,14 +224,6 @@ function registerSession(id: string, agent: InstanceType<typeof CodeAgent>, dire
     console.log(`📂  Session ${id} directory set to: ${dir}`)
     pushState(id)
     watchDirectory(id, dir)
-  })
-
-  // Supplementary: also trigger on agent events (file edits via tools)
-  let pushTimer: ReturnType<typeof setTimeout> | null = null
-  agent.on("file.edited", () => {
-    if (!entry.directory) return
-    if (pushTimer) clearTimeout(pushTimer)
-    pushTimer = setTimeout(() => pushState(id), 300)
   })
 
   return entry
@@ -418,6 +414,17 @@ const sessionChatAbort = new Map<string, () => void>()
 
 // Cached last-pushed state JSON per session — used for diffing + replay to new clients
 const lastStateJson = new Map<string, string>()
+const statePushTimers = new Map<string, ReturnType<typeof setTimeout>>()
+
+function scheduleStatePush(sessionId: string, delayMs = 300) {
+  const existing = statePushTimers.get(sessionId)
+  if (existing) clearTimeout(existing)
+  const timer = setTimeout(() => {
+    statePushTimers.delete(sessionId)
+    void pushState(sessionId)
+  }, delayMs)
+  statePushTimers.set(sessionId, timer)
+}
 
 function getSessionClients(sessionId: string): Set<ClientLike> {
   let set = sessionClients.get(sessionId)
@@ -597,10 +604,8 @@ function watchDirectory(sessionId: string, dir: string) {
   const existing = watchers.get(sessionId)
   if (existing) existing.close()
 
-  let timer: ReturnType<typeof setTimeout> | null = null
   const debouncedPush = () => {
-    if (timer) clearTimeout(timer)
-    timer = setTimeout(() => pushState(sessionId), 500)
+    scheduleStatePush(sessionId, 500)
   }
 
   try {
@@ -1242,7 +1247,7 @@ const server = http.createServer(async (req, res) => {
     }
     client.lastActivity = Date.now()
     // Fire-and-forget — response goes through poll, not this request
-    handleClientMessage(client.sessionId, client, data).catch(() => {})
+    handleClientMessage(client.sessionId, client, data).catch(() => { })
     res.writeHead(200, { "Content-Type": "application/json" })
     res.end(JSON.stringify({ ok: true }))
     return
@@ -1642,7 +1647,7 @@ export async function startServer() {
     ws.on("message", async (raw) => {
       try {
         const msg = JSON.parse(raw.toString())
-        handleClientMessage(sessionId, ws as ClientLike, msg).catch(() => {})
+        handleClientMessage(sessionId, ws as ClientLike, msg).catch(() => { })
       } catch { /* ignore malformed */ }
     })
 
