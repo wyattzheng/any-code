@@ -75,9 +75,9 @@ export interface VendorLLM {
 
 export interface VendorProvider {
   id: string
-  npm: string
-  bundled: ProviderSDKFactory
-  sdkKey?: string
+  npms?: string[]
+  bundled?: Partial<Record<string, ProviderSDKFactory>>
+  sdkKeys?: Partial<Record<string, string>>
   matchesRuntime?: (input: ProviderRuntimeInput) => boolean
   customLoader?: (context: AgentContext, provider: ProviderInfoLike) => Promise<ProviderLoaderResult>
   patchRequest?: (input: ProviderRequestPatchInput) => void

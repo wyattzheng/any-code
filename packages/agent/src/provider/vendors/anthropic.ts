@@ -8,9 +8,13 @@ import type { VendorProvider } from "./types"
 
 export const anthropicVendor: VendorProvider = {
   id: "anthropic",
-  npm: "@ai-sdk/anthropic",
-  bundled: createAnthropic,
-  sdkKey: "anthropic",
+  npms: ["@ai-sdk/anthropic"],
+  bundled: {
+    "@ai-sdk/anthropic": createAnthropic,
+  },
+  sdkKeys: {
+    "@ai-sdk/anthropic": "anthropic",
+  },
   async customLoader() {
     return {
       autoload: false,

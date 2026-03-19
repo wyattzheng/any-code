@@ -5,9 +5,13 @@ import type { VendorProvider } from "./types"
 
 export const googleVendor: VendorProvider = {
   id: "google",
-  npm: "@ai-sdk/google",
-  bundled: createGoogleGenerativeAI,
-  sdkKey: "google",
+  npms: ["@ai-sdk/google"],
+  bundled: {
+    "@ai-sdk/google": createGoogleGenerativeAI,
+  },
+  sdkKeys: {
+    "@ai-sdk/google": "google",
+  },
   transform: {
     options({ model }) {
       if (model.api.npm !== "@ai-sdk/google") return {}

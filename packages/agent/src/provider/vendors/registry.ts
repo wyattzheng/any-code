@@ -6,7 +6,6 @@ import { anthropicVendor } from "./anthropic"
 import { githubCopilotVendor } from "./github-copilot"
 import { googleVendor } from "./google"
 import { liteLLMVendor } from "./litellm"
-import { openAICompatibleVendor } from "./openai-compatible"
 import { openAIVendor } from "./openai"
 import type { ProviderRuntimeInput, ProviderTransformInput, ProviderRequestPatchInput, VendorProvider } from "./types"
 
@@ -15,18 +14,19 @@ const VENDORS = [
   githubCopilotVendor,
   googleVendor,
   liteLLMVendor,
-  openAICompatibleVendor,
   openAIVendor,
 ] satisfies VendorProvider[]
 
-const VENDORS_BY_NPM = new Map(VENDORS.map((vendor) => [vendor.npm, vendor]))
+const VENDORS_BY_NPM = new Map(
+  VENDORS.flatMap((vendor) => (vendor.npms ?? []).map((npm) => [npm, vendor] as const)),
+)
 
 function matchesRuntimeVendor(vendor: VendorProvider, input: ProviderRuntimeInput) {
   return (
     vendor.matchesRuntime?.(input) ||
     vendor.id === input.provider.id ||
     vendor.id === input.model.providerID ||
-    vendor.npm === input.model.api.npm
+    vendor.npms?.includes(input.model.api.npm) === true
   )
 }
 
@@ -35,10 +35,8 @@ export const VendorRegistry = {
     return VENDORS
   },
 
-  bundledProviders() {
-    return Object.fromEntries(
-      VENDORS.filter((vendor) => !(vendor.matchesRuntime || vendor.llm)).map((vendor) => [vendor.npm, vendor.bundled]),
-    )
+  getBundledProvider(npm: string) {
+    return VENDORS_BY_NPM.get(npm)?.bundled?.[npm]
   },
 
   customLoaders() {
@@ -46,7 +44,7 @@ export const VendorRegistry = {
   },
 
   getOptionsKey(model: Provider.Model) {
-    return VENDORS_BY_NPM.get(model.api.npm)?.sdkKey ?? model.providerID
+    return VENDORS_BY_NPM.get(model.api.npm)?.sdkKeys?.[model.api.npm] ?? model.providerID
   },
 
   applyRequestPatch(input: ProviderRequestPatchInput) {
@@ -56,7 +54,7 @@ export const VendorRegistry = {
   applyMessageTransforms(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>) {
     msgs = VENDORS.reduce((result, vendor) => vendor.transform?.message?.(result, model, options) ?? result, msgs)
 
-    const key = VENDORS_BY_NPM.get(model.api.npm)?.sdkKey
+    const key = VENDORS_BY_NPM.get(model.api.npm)?.sdkKeys?.[model.api.npm]
     if (!key || key === model.providerID) return msgs
 
     const remap = (opts: Record<string, any> | undefined) => {

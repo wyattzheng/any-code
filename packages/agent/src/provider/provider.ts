@@ -451,7 +451,7 @@ export namespace Provider {
           return wrapSSE(res, chunkTimeout, chunkAbortCtl)
         }
 
-        const bundledFn = VendorRegistry.bundledProviders()[model.api.npm]
+        const bundledFn = VendorRegistry.getBundledProvider(model.api.npm)
         if (bundledFn) {
           log.info("using bundled provider", { providerID: model.providerID, pkg: model.api.npm })
           const loaded = bundledFn({
