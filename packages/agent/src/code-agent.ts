@@ -65,7 +65,7 @@ import { SystemPrompt } from "./prompt"
 
 import { ContextCompaction } from "./memory/compaction"
 import { LLMRunner } from "./llm-runner"
-import MAX_STEPS from "./prompt/prompt/max-steps.txt"
+import MAX_STEPS from "./prompt/max-steps.txt"
 
 // ── Types ──────────────────────────────────────────────────────────────────
 

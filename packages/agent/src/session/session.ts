@@ -18,9 +18,9 @@ import { VendorRegistry } from "../provider/vendors"
 import { SystemPrompt } from "../prompt"
 
 import { type AgentContext } from "../context"
-import PROMPT_PLAN from "../prompt/prompt/plan.txt"
-import BUILD_SWITCH from "../prompt/prompt/build-switch.txt"
-import MAX_STEPS from "../prompt/prompt/max-steps.txt"
+import PROMPT_PLAN from "../prompt/plan.txt"
+import BUILD_SWITCH from "../prompt/build-switch.txt"
+import MAX_STEPS from "../prompt/max-steps.txt"
 import { defer } from "../util/fn"
 import { ToolRegistry } from "../tool/registry"
 // MCP module removed (agent mode)
