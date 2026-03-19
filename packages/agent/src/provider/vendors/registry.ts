@@ -149,21 +149,3 @@ export const VendorRegistry = {
     return VENDORS.some((vendor) => matchesRuntimeVendor(vendor, input) && vendor.llm?.needsNoopToolFallback?.(input) === true)
   },
 }
-
-export const BUNDLED_PROVIDERS = VendorRegistry.bundledProviders()
-export const CUSTOM_LOADERS = VendorRegistry.customLoaders()
-
-export const applyProviderRequestPatch = VendorRegistry.applyRequestPatch.bind(VendorRegistry)
-export const applyProviderMessageTransforms = VendorRegistry.applyMessageTransforms.bind(VendorRegistry)
-export const getProviderOptions = VendorRegistry.getOptions.bind(VendorRegistry)
-export const getProviderSmallOptions = VendorRegistry.getSmallOptions.bind(VendorRegistry)
-export const getProviderTemperature = VendorRegistry.getTemperature.bind(VendorRegistry)
-export const getProviderTopK = VendorRegistry.getTopK.bind(VendorRegistry)
-export const transformProviderSchema = VendorRegistry.transformSchema.bind(VendorRegistry)
-export const getProviderOptionsKey = VendorRegistry.getOptionsKey.bind(VendorRegistry)
-export const getProviderSystemPrompt = VendorRegistry.getProviderSystemPrompt.bind(VendorRegistry)
-export const getInstructionPrompt = VendorRegistry.getInstructionPrompt.bind(VendorRegistry)
-export const shouldUseInstructionPrompt = VendorRegistry.shouldUseInstructionPrompt.bind(VendorRegistry)
-export const shouldIncludeProviderSystemPrompt = VendorRegistry.shouldIncludeProviderSystemPrompt.bind(VendorRegistry)
-export const shouldDisableMaxOutputTokens = VendorRegistry.shouldDisableMaxOutputTokens.bind(VendorRegistry)
-export const shouldAddNoopToolFallback = VendorRegistry.shouldAddNoopToolFallback.bind(VendorRegistry)
