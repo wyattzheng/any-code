@@ -163,6 +163,7 @@ interface SessionEntry {
   agent: InstanceType<typeof CodeAgent>
   directory: string  // empty = no project directory set yet
   createdAt: number
+  state: SessionStateModel
 }
 
 // In-memory agent cache, keyed by session ID
@@ -223,8 +224,17 @@ function createAgentConfig(cfg: ServerConfig, directory: string, sessionId?: str
 
 /** Wire up agent events and register in sessions map. */
 function registerSession(cfg: ServerConfig, id: string, agent: InstanceType<typeof CodeAgent>, directory: string, createdAt: number): SessionEntry {
-  const entry: SessionEntry = { id, agent, directory, createdAt }
+  const entry: SessionEntry = { 
+    id, 
+    agent, 
+    directory, 
+    createdAt,
+    state: new SessionStateModel(id, cfg) 
+  }
   sessions.set(id, entry)
+
+  // Kick off initial state compute
+  entry.state.updateFileSystem(directory)
 
   // Listen for directory.set events from the agent's set_working_directory tool
   agent.on("directory.set", (data: any) => {
@@ -234,7 +244,7 @@ function registerSession(cfg: ServerConfig, id: string, agent: InstanceType<type
     // Persist directory back to user_session mapping
     db.update("user_session", { op: "eq", field: "session_id", value: id }, { directory: dir })
     console.log(`📂  Session ${id} directory set to: ${dir}`)
-    pushState(cfg, id)
+    entry.state.updateFileSystem(dir)
     watchDirectory(cfg, id, dir)
   })
 
@@ -422,7 +432,6 @@ const sessionClients = new Map<string, Set<ClientLike>>()
 const sessionChatAbort = new Map<string, () => void>()
 
 // Cached last-pushed state JSON per session — used for diffing + replay to new clients
-const lastStateJson = new Map<string, string>()
 const statePushTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
 function scheduleStatePush(cfg: ServerConfig, sessionId: string, delayMs = 300) {
@@ -430,7 +439,7 @@ function scheduleStatePush(cfg: ServerConfig, sessionId: string, delayMs = 300) 
   if (existing) clearTimeout(existing)
   const timer = setTimeout(() => {
     statePushTimers.delete(sessionId)
-    void pushState(cfg, sessionId)
+    getSession(sessionId)?.state.updateFileSystem()
   }, delayMs)
   statePushTimers.set(sessionId, timer)
 }
@@ -557,57 +566,92 @@ function watchDirectory(cfg: ServerConfig, sessionId: string, dir: string) {
   }
 }
 
-/** Build current state payload for a session */
-async function buildState(cfg: ServerConfig, sessionId: string): Promise<Record<string, unknown> | null> {
-  const session = getSession(sessionId)
-  if (!session) return null
-  const dir = session.directory
-  const changes = dir ? await getGitChanges(dir) : []
-  const topLevel = dir ? await listDir(dir) : []
-  return {
-    type: "state",
-    directory: dir,
-    changes,
-    topLevel,
-    previewPort: (previewSessionId === sessionId && previewTarget) ? cfg.previewPort : null,
-  }
-}
+export class SessionStateModel {
+  sessionId: string
+  cfg: ServerConfig
+  directory: string = ""
+  topLevel: any[] = []
+  changes: any[] = []
+  previewPort: number | null = null
 
-/** Push current state to all clients — only if data actually changed */
-async function pushState(cfg: ServerConfig, sessionId: string) {
-  try {
-    const payload = await buildState(cfg, sessionId)
-    if (!payload) return
-    const json = JSON.stringify(payload)
-    const prev = lastStateJson.get(sessionId)
-    if (prev === json) return // nothing changed — skip
-    lastStateJson.set(sessionId, json)
-    const clientCount = sessionClients.get(sessionId)?.size ?? 0
-    console.log(`📤  pushState(${sessionId}): dir="${payload.directory}", topLevel=${(payload.topLevel as any[]).length} entries, changes=${(payload.changes as any[]).length}, clients=${clientCount}`)
-    // Broadcast pre-serialised JSON directly
-    const clients = sessionClients.get(sessionId)
-    if (!clients) return
+  private _isComputing = false
+  private _needsCompute = false
+
+  constructor(sessionId: string, cfg: ServerConfig) {
+    this.sessionId = sessionId
+    this.cfg = cfg
+  }
+
+  async updateFileSystem(dir?: string) {
+    if (dir !== undefined && this.directory !== dir) {
+       this.directory = dir
+       this.topLevel = []
+       this.changes = []
+    }
+    
+    // Calculate expected port here during file system polls as well
+    const expectedPort = (previewSessionId === this.sessionId && previewTarget) ? this.cfg.previewPort : null
+    if (this.previewPort !== expectedPort) {
+      this.previewPort = expectedPort
+    }
+
+    if (this._isComputing) {
+      this._needsCompute = true
+      return
+    }
+    
+    this._isComputing = true
+    try {
+      do {
+        this._needsCompute = false
+        const currentDir = this.directory
+        const [topLevel, changes] = await Promise.all([
+          currentDir ? listDir(currentDir) : Promise.resolve([]),
+          currentDir ? getGitChanges(currentDir) : Promise.resolve([]),
+        ])
+        
+        const newTopJson = JSON.stringify(topLevel)
+        const newChangesJson = JSON.stringify(changes)
+        const oldTopJson = JSON.stringify(this.topLevel)
+        const oldChangesJson = JSON.stringify(this.changes)
+        
+        if (newTopJson !== oldTopJson || newChangesJson !== oldChangesJson) {
+          this.topLevel = topLevel
+          this.changes = changes
+          this.notify()
+        }
+      } while (this._needsCompute)
+    } catch (err) {
+      console.error(`❌ SessionStateModel compute error:`, err)
+    } finally {
+      this._isComputing = false
+    }
+  }
+
+  setPreviewPort(port: number | null) {
+    if (this.previewPort !== port) {
+      this.previewPort = port
+      this.notify()
+    }
+  }
+
+  toJSON() {
+    return {
+      type: "state",
+      directory: this.directory,
+      topLevel: this.topLevel,
+      changes: this.changes,
+      previewPort: this.previewPort,
+    }
+  }
+
+  notify() {
+    const json = JSON.stringify(this.toJSON())
+    const clients = getSessionClients(this.sessionId)
+    console.log(`📤  SessionStateModel(${this.sessionId}): dir="${this.directory}", topLevel=${this.topLevel.length} entries, changes=${this.changes.length}, previewPort=${this.previewPort}, clients=${clients.size}`)
     for (const c of clients) {
       if (c.readyState === WS.OPEN) c.send(json)
     }
-  } catch (err) {
-    console.error(`❌  pushState error:`, err)
-  }
-}
-
-/** Send cached state to a single client (for initial connect). If no cache, compute fresh. */
-async function sendStateTo(cfg: ServerConfig, sessionId: string, client: ClientLike) {
-  try {
-    let json = lastStateJson.get(sessionId)
-    if (!json) {
-      const payload = await buildState(cfg, sessionId)
-      if (!payload) return
-      json = JSON.stringify(payload)
-      lastStateJson.set(sessionId, json)
-    }
-    if (client.readyState === WS.OPEN) client.send(json)
-  } catch (err) {
-    console.error(`❌  sendStateTo error:`, err)
   }
 }
 
@@ -881,11 +925,8 @@ class NodePreviewProvider implements PreviewProvider {
     previewSessionId = this.sessionId
     console.log(`🔗  Preview proxy: :${this.cfg.previewPort} → ${previewTarget} (session ${this.sessionId})`)
 
-    // Broadcast preview port to frontend
-    broadcast(this.sessionId, {
-      type: "preview",
-      port: this.cfg.previewPort,
-    })
+    // Let the reactive state model handle the broadcast natively
+    getSession(this.sessionId)?.state.setPreviewPort(this.cfg.previewPort)
   }
 }
 
@@ -1503,7 +1544,10 @@ export async function startServer() {
     console.log(`🔌  WS client connected to session ${sessionId} (${clients.size} total)`)
 
     // Send current state to this client only (no broadcast)
-    sendStateTo(cfg, sessionId, ws as ClientLike)
+    const sessionModel = getSession(sessionId)?.state
+    if (sessionModel) {
+      ws.send(JSON.stringify(sessionModel.toJSON()))
+    }
 
     ws.on("message", async (raw) => {
       try {
