@@ -202,7 +202,7 @@ export function ConversationOverlay({ sessionId, fileContext, chatHandlerRef, se
         localStorage.setItem(STORAGE_KEY_DOCKED, docked || "");
     }, [docked, isSidebar]);
 
-    const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number; wasDocked: boolean } | null>(null);
+    const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number; wasDocked: boolean; lastCx: number } | null>(null);
     const resizeRef = useRef<{ startX: number; startY: number; origW: number; origH: number } | null>(null);
     const recordStartTime = useRef<number>(0);
     const [elapsed, setElapsed] = useState(0);
@@ -456,13 +456,13 @@ export function ConversationOverlay({ sessionId, fileContext, chatHandlerRef, se
         let originatedFromDock = false;
         if (docked) {
             originatedFromDock = true;
-            // Undock: treat drag start on docked tab as starting a drag of the expanded panel
             setDocked(null);
         }
-        dragRef.current = { startX: cx, startY: cy, origX: position.x, origY: position.y, wasDocked: originatedFromDock };
+        dragRef.current = { startX: cx, startY: cy, origX: position.x, origY: position.y, wasDocked: originatedFromDock, lastCx: cx };
     }, [position, docked]);
     const onDragMove = useCallback((cx: number, cy: number) => {
         if (!dragRef.current) return;
+        dragRef.current.lastCx = cx;
         const newX = dragRef.current.origX + cx - dragRef.current.startX;
         const newY = dragRef.current.origY + cy - dragRef.current.startY;
         setPosition({ x: newX, y: newY });
@@ -473,9 +473,9 @@ export function ConversationOverlay({ sessionId, fileContext, chatHandlerRef, se
             const panelLeft = newX;
             const VISIBLE_AMOUNT = size.w / 2;
 
-            if (panelRight < VISIBLE_AMOUNT) {
+            if (cx <= 20 || panelRight < VISIBLE_AMOUNT) {
                 setIsDockTarget("left");
-            } else if (panelLeft > window.innerWidth - VISIBLE_AMOUNT) {
+            } else if (cx >= window.innerWidth - 20 || panelLeft > window.innerWidth - VISIBLE_AMOUNT) {
                 setIsDockTarget("right");
             } else {
                 setIsDockTarget(null);
@@ -485,6 +485,7 @@ export function ConversationOverlay({ sessionId, fileContext, chatHandlerRef, se
     const onDragEnd = useCallback(() => {
         if (!dragRef.current) return;
         const wasDocked = dragRef.current.wasDocked;
+        const lastCx = dragRef.current.lastCx;
         dragRef.current = null;
         setIsDockTarget(null);
         
@@ -493,18 +494,19 @@ export function ConversationOverlay({ sessionId, fileContext, chatHandlerRef, se
             const panelRight = pos.x + size.w; 
             const panelLeft = pos.x; 
             
-            // To dock, the user must drag the panel mostly off the screen, leaving half of it visible
+            // To dock, the user must drag the panel mostly off the screen, leaving half of it visible,
+            // OR pull their pointer directly to the screen edge.
             const VISIBLE_AMOUNT = size.w / 2;
 
             // If the user just started dragging from a docked state, DO NOT re-dock immediately
             // This forces them to drag it out toward the middle, then next time they can drag to edge to dock
             if (!wasDocked) {
-                if (panelRight < VISIBLE_AMOUNT) {
-                    // Pushed far off the left side
+                if (lastCx <= 20 || panelRight < VISIBLE_AMOUNT) {
+                    // Pushed far off the left side or cursor pinned to left edge
                     setDocked("left");
                     return pos;
-                } else if (panelLeft > window.innerWidth - VISIBLE_AMOUNT) {
-                    // Pushed far off the right side
+                } else if (lastCx >= window.innerWidth - 20 || panelLeft > window.innerWidth - VISIBLE_AMOUNT) {
+                    // Pushed far off the right side or cursor pinned to right edge
                     setDocked("right");
                     return pos;
                 }

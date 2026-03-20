@@ -398,13 +398,15 @@
 
 /* Subtle visual feedback when dragging towards the dock zone */
 .co-dock-target-left {
-    border-left: 2px solid var(--color-accent) !important;
-    transition: border-color 0.15s ease-out;
+    border-right: 2px solid var(--color-accent) !important;
+    box-shadow: 4px 0 16px rgba(0, 0, 0, 0.4) !important;
+    transition: box-shadow 0.2s, border-color 0.2s;
 }
 
 .co-dock-target-right {
-    border-right: 2px solid var(--color-accent) !important;
-    transition: border-color 0.15s ease-out;
+    border-left: 2px solid var(--color-accent) !important;
+    box-shadow: -4px 0 16px rgba(0, 0, 0, 0.4) !important;
+    transition: box-shadow 0.2s, border-color 0.2s;
 }
 
 .co-panel-docked {
