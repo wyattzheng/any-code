@@ -385,11 +385,7 @@
 
 /* ── Docked (collapsed) State ── */
 .conversation-panel {
-    transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.15),
-                width 0.3s cubic-bezier(0.2, 0, 0, 1),
-                height 0.3s cubic-bezier(0.2, 0, 0, 1),
-                background 0.3s ease,
-                border-radius 0.3s ease;
+    /* No transitions for snapping instanly without flashy morphing */
     will-change: transform, width, height;
 }
 
@@ -398,7 +394,6 @@
     flex-direction: column;
     height: 100%;
     width: 100%;
-    transition: opacity 0.2s ease;
 }
 
 .co-panel-docked {

@@ -139,7 +139,7 @@ const SIDEBAR_BREAKPOINT = 768;
 const STORAGE_KEY_POS = "anycode-conv-pos";
 const STORAGE_KEY_SIZE = "anycode-conv-size";
 const STORAGE_KEY_DOCKED = "anycode-conv-docked";
-const DOCK_THRESHOLD = 40; // px from edge to auto-dock
+const DOCK_THRESHOLD = 80; // px from edge to auto-dock
 
 function loadStoredRect() {
     try {
@@ -201,7 +201,7 @@ export function ConversationOverlay({ sessionId, fileContext, chatHandlerRef, se
         localStorage.setItem(STORAGE_KEY_DOCKED, docked || "");
     }, [docked, isSidebar]);
 
-    const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
+    const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number; wasDocked: boolean } | null>(null);
     const resizeRef = useRef<{ startX: number; startY: number; origW: number; origH: number } | null>(null);
     const recordStartTime = useRef<number>(0);
     const [elapsed, setElapsed] = useState(0);
@@ -452,11 +452,13 @@ export function ConversationOverlay({ sessionId, fileContext, chatHandlerRef, se
 
     // ── Drag ──
     const onDragStart = useCallback((cx: number, cy: number) => {
+        let originatedFromDock = false;
         if (docked) {
+            originatedFromDock = true;
             // Undock: treat drag start on docked tab as starting a drag of the expanded panel
             setDocked(null);
         }
-        dragRef.current = { startX: cx, startY: cy, origX: position.x, origY: position.y };
+        dragRef.current = { startX: cx, startY: cy, origX: position.x, origY: position.y, wasDocked: originatedFromDock };
     }, [position, docked]);
     const onDragMove = useCallback((cx: number, cy: number) => {
         if (!dragRef.current) return;
@@ -464,24 +466,31 @@ export function ConversationOverlay({ sessionId, fileContext, chatHandlerRef, se
     }, []);
     const onDragEnd = useCallback(() => {
         if (!dragRef.current) return;
+        const wasDocked = dragRef.current.wasDocked;
         dragRef.current = null;
+        
         // Panel base is now left: 0, top: 0. pos.x is exact screen X.
         setPosition(pos => {
             const panelRight = pos.x + size.w; 
             const panelLeft = pos.x; 
             
-            if (panelLeft < DOCK_THRESHOLD) {
-                setDocked("left");
-            } else if (window.innerWidth - panelRight < DOCK_THRESHOLD) {
-                setDocked("right");
-            } else {
-                // Ensure it stays reasonably on screen
-                return {
-                    x: Math.max(0, Math.min(pos.x, window.innerWidth - size.w)),
-                    y: Math.max(0, Math.min(pos.y, window.innerHeight - 40))
-                };
+            // If the user just started dragging from a docked state, DO NOT re-dock immediately
+            // This forces them to drag it out toward the middle, then next time they can drag to edge to dock
+            if (!wasDocked) {
+                if (panelLeft < DOCK_THRESHOLD) {
+                    setDocked("left");
+                    return pos;
+                } else if (window.innerWidth - panelRight < DOCK_THRESHOLD) {
+                    setDocked("right");
+                    return pos;
+                }
             }
-            return pos;
+
+            // Ensure it stays reasonably on screen
+            return {
+                x: Math.max(0, Math.min(pos.x, window.innerWidth - size.w)),
+                y: Math.max(0, Math.min(pos.y, window.innerHeight - 40))
+            };
         });
     }, [size.w]);
 
