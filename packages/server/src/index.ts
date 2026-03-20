@@ -1440,28 +1440,27 @@ export async function startServer() {
   const cols = sharedStorage.query(`PRAGMA table_info("user_session")`)
   if (cols.length > 0) {
     const hasIsDefault = cols.some((c: any) => c.name === "is_default")
-    // pk field in PRAGMA table_info is >0 for PK columns
+    const hasUserId = cols.some((c: any) => c.name === "user_id")
     const pkCol = cols.find((c: any) => c.pk === 1)
     const needsPkMigration = pkCol && pkCol.name === "user_id"
+    const needsMigration = !hasIsDefault || needsPkMigration || hasUserId
 
-    if (!hasIsDefault || needsPkMigration) {
+    if (needsMigration) {
       console.log("🔄  Migrating user_session table…")
       // Step 1: add is_default column if missing (needed before copying data)
       if (!hasIsDefault) {
         sharedStorage.exec(`ALTER TABLE "user_session" ADD COLUMN "is_default" INTEGER NOT NULL DEFAULT 0`)
-        // Mark all existing sessions as default
         sharedStorage.exec(`UPDATE "user_session" SET "is_default" = 1`)
       }
-      // Step 2: rebuild table to change PK from user_id to session_id
-      if (needsPkMigration) {
+      // Step 2: rebuild table — drop user_id column and fix PK
+      if (needsPkMigration || hasUserId) {
         sharedStorage.exec(`CREATE TABLE "user_session_new" (
           "session_id"   TEXT PRIMARY KEY,
-          "user_id"      TEXT NOT NULL,
           "directory"    TEXT NOT NULL DEFAULT '',
           "time_created" INTEGER NOT NULL,
           "is_default"   INTEGER NOT NULL DEFAULT 0
         )`)
-        sharedStorage.exec(`INSERT INTO "user_session_new" SELECT "session_id","user_id","directory","time_created","is_default" FROM "user_session"`)
+        sharedStorage.exec(`INSERT INTO "user_session_new" SELECT "session_id","directory","time_created","is_default" FROM "user_session"`)
         sharedStorage.exec(`DROP TABLE "user_session"`)
         sharedStorage.exec(`ALTER TABLE "user_session_new" RENAME TO "user_session"`)
       }
@@ -1472,7 +1471,6 @@ export async function startServer() {
     sharedStorage.exec(`
       CREATE TABLE IF NOT EXISTS "user_session" (
         "session_id"   TEXT PRIMARY KEY,
-        "user_id"      TEXT NOT NULL,
         "directory"    TEXT NOT NULL DEFAULT '',
         "time_created" INTEGER NOT NULL,
         "is_default"   INTEGER NOT NULL DEFAULT 0

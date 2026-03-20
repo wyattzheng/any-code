@@ -1,8 +1,10 @@
 {
     "name": "anycodex",
-    "version": "0.0.18",
+    "version": "0.0.19",
     "type": "module",
-    "files": ["dist"],
+    "files": [
+        "dist"
+    ],
     "bin": {
         "anycode": "dist/bin.js",
         "anycodex": "dist/bin.js"
