@@ -22,7 +22,8 @@ import fsPromises from "fs/promises"
 import { execFile, spawn as cpSpawn } from "child_process"
 import { CodeAgent, Database, type NoSqlDb, type TerminalProvider, type PreviewProvider } from "@any-code/agent"
 import { WebSocketServer, WebSocket as WS } from "ws"
-import * as pty from "node-pty"
+// @ts-expect-error — @lydell/node-pty has types but exports config doesn't expose them
+import * as pty from "@lydell/node-pty"
 import { SqlJsStorage } from "./storage-sqljs"
 import { NodeFS } from "./vfs-node"
 import { NodeSearchProvider } from "./search-node"
@@ -1159,8 +1160,21 @@ const MIME_TYPES: Record<string, string> = {
   ".woff": "font/woff", ".ttf": "font/ttf",
 }
 
-const appIndexPath = fileURLToPath(import.meta.resolve("@any-code/app/index.html"))
-const APP_DIST = path.dirname(appIndexPath)
+function resolveAppDist(): string {
+  // 1. Bundled CLI — app dist is copied alongside the server bundle
+  const bundled = path.join(path.dirname(fileURLToPath(import.meta.url)), "app")
+  if (fs.existsSync(path.join(bundled, "index.html"))) return bundled
+
+  // 2. Monorepo dev — resolve from workspace package
+  try {
+    const resolved = path.dirname(fileURLToPath(import.meta.resolve("@any-code/app/index.html")))
+    if (fs.existsSync(path.join(resolved, "index.html"))) return resolved
+  } catch {}
+
+  return bundled // fallback (will show "App dist not found" warning)
+}
+
+const APP_DIST = resolveAppDist()
 
 function serveStatic(req: http.IncomingMessage, res: http.ServerResponse): boolean {
   const url = req.url || "/"

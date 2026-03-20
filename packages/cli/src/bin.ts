@@ -4,6 +4,7 @@ import os from "os";
 import fs from "fs";
 import readline from "readline";
 import { fileURLToPath } from "url";
+import { startServer } from "@any-code/server";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -204,26 +205,20 @@ function getPm2Process(): any | null {
     }
 }
 
-// ── Resolve server entry ──────────────────────────────────────────────────
+// ── PM2 ecosystem config ──────────────────────────────────────────────────
 
-function getServerScript(): string {
-    try {
-        const serverPkg = path.dirname(
-            fileURLToPath(import.meta.resolve("@any-code/server/package.json"))
-        );
-        return path.join(serverPkg, "dist", "cli.js");
-    } catch {
-        const fallback = path.resolve(__dirname, "../../server/dist/cli.js");
-        return fallback;
-    }
+function getBinScript(): string {
+    return path.resolve(__dirname, "bin.js");
 }
 
-function writeEcosystem(script: string): string {
+function writeEcosystem(): string {
     const ecosystemPath = path.join(ANYCODE_DIR, "ecosystem.config.cjs");
+    const script = getBinScript();
     const content = `module.exports = {
   apps: [{
     name: ${JSON.stringify(PROCESS_NAME)},
     script: ${JSON.stringify(script)},
+    args: "server",
     interpreter: "node"
   }]
 };
@@ -272,10 +267,9 @@ async function cmdServer() {
     banner();
     await ensureSettings();
 
-    const script = getServerScript();
     info("Starting server in foreground...");
     blank();
-    await import(script);
+    startServer();
 }
 
 async function cmdStart() {
@@ -286,8 +280,7 @@ async function cmdStart() {
     step("Checking pm2");
     ensurePm2();
 
-    const script = getServerScript();
-    const ecosystemPath = writeEcosystem(script);
+    const ecosystemPath = writeEcosystem();
 
     // Register pm2 startup (silent)
     step("Registering auto-start on boot");
@@ -460,8 +453,7 @@ async function cmdUpdate() {
 
         // Restart/start via pm2
         ensurePm2();
-        const script = getServerScript();
-        const ecosystemPath = writeEcosystem(script);
+        const ecosystemPath = writeEcosystem();
         const existing = hasPm2() ? getPm2Process() : null;
         if (existing) {
             step("Restarting server");
@@ -498,8 +490,7 @@ async function cmdUpdate() {
             const existing = getPm2Process();
             if (existing) {
                 step("Restarting server");
-                const script = getServerScript();
-                const ecosystemPath = writeEcosystem(script);
+                const ecosystemPath = writeEcosystem();
                 pm2Silent(`delete ${PROCESS_NAME}`);
                 pm2Silent(`start ${ecosystemPath}`);
                 pm2Silent("save");

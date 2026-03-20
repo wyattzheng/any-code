@@ -1,8 +1,24 @@
 import type { AgentContext } from "../context"
 import { NamedError } from "./error"
-import matter from "gray-matter"
 import { z } from "zod"
 import { Filesystem } from "../util/filesystem"
+
+/** Simple frontmatter parser — replaces gray-matter (CJS, depends on fs) */
+function parseFrontmatter(input: string): { data: Record<string, string>; content: string } {
+  const match = input.match(/^---\r?\n([\s\S]*?)\r?\n---/)
+  if (!match) return { data: {}, content: input }
+
+  const yaml = match[1]
+  const data: Record<string, string> = {}
+  for (const line of yaml.split(/\r?\n/)) {
+    const kv = line.match(/^([a-zA-Z_]\w*)\s*:\s*(.*)$/)
+    if (kv) data[kv[1]] = kv[2].trim().replace(/^["']|["']$/g, "")
+  }
+
+  const content = input.slice(match[0].length).replace(/^\r?\n/, "")
+  return { data, content }
+}
+
 
 export namespace ConfigMarkdown {
   export const FILE_REGEX = /(?<![\w`])@(\.?[^\s`,.]*(?:\.[^\s`,.]+)*)/g
@@ -73,11 +89,10 @@ export namespace ConfigMarkdown {
     const template = await Filesystem.readText(context, filePath)
 
     try {
-      const md = matter(template)
-      return md
+      return parseFrontmatter(template)
     } catch {
       try {
-        return matter(fallbackSanitization(template))
+        return parseFrontmatter(fallbackSanitization(template))
       } catch (err) {
         throw new FrontmatterError(
           {
