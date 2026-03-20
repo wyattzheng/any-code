@@ -138,6 +138,8 @@ interface ConversationOverlayProps {
 const SIDEBAR_BREAKPOINT = 768;
 const STORAGE_KEY_POS = "anycode-conv-pos";
 const STORAGE_KEY_SIZE = "anycode-conv-size";
+const STORAGE_KEY_DOCKED = "anycode-conv-docked";
+const DOCK_THRESHOLD = 40; // px from edge to auto-dock
 
 function loadStoredRect() {
     try {
@@ -175,6 +177,12 @@ export function ConversationOverlay({ sessionId, fileContext, chatHandlerRef, se
     const stored = useRef(loadStoredRect());
     const [position, setPosition] = useState(stored.current.pos);
     const [size, setSize] = useState(stored.current.size);
+    const [docked, setDocked] = useState<"left" | "right" | null>(() => {
+        try {
+            const v = localStorage.getItem(STORAGE_KEY_DOCKED);
+            return v === "left" || v === "right" ? v : null;
+        } catch { return null; }
+    });
 
     // Persist floating position/size to localStorage
     useEffect(() => {
@@ -185,6 +193,10 @@ export function ConversationOverlay({ sessionId, fileContext, chatHandlerRef, se
         if (isSidebar) return;
         localStorage.setItem(STORAGE_KEY_SIZE, JSON.stringify(size));
     }, [size, isSidebar]);
+    useEffect(() => {
+        if (isSidebar) return;
+        localStorage.setItem(STORAGE_KEY_DOCKED, docked || "");
+    }, [docked, isSidebar]);
 
     const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
     const resizeRef = useRef<{ startX: number; startY: number; origW: number; origH: number } | null>(null);
@@ -437,13 +449,31 @@ export function ConversationOverlay({ sessionId, fileContext, chatHandlerRef, se
 
     // ── Drag ──
     const onDragStart = useCallback((cx: number, cy: number) => {
+        if (docked) {
+            // Undock: treat drag start on docked tab as starting a drag of the expanded panel
+            setDocked(null);
+        }
         dragRef.current = { startX: cx, startY: cy, origX: position.x, origY: position.y };
-    }, [position]);
+    }, [position, docked]);
     const onDragMove = useCallback((cx: number, cy: number) => {
         if (!dragRef.current) return;
         setPosition({ x: dragRef.current.origX + cx - dragRef.current.startX, y: dragRef.current.origY + cy - dragRef.current.startY });
     }, []);
-    const onDragEnd = useCallback(() => { dragRef.current = null; }, []);
+    const onDragEnd = useCallback(() => {
+        if (!dragRef.current) return;
+        dragRef.current = null;
+        // Check if panel is near edge → auto-dock
+        setPosition(pos => {
+            const panelRight = pos.x + size.w + 20; // 20 = conversation-floating right offset
+            const panelLeft = pos.x + 20;
+            if (panelLeft < DOCK_THRESHOLD) {
+                setDocked("left");
+            } else if (window.innerWidth - panelRight < DOCK_THRESHOLD) {
+                setDocked("right");
+            }
+            return pos;
+        });
+    }, [size.w]);
 
     const handleMouseDown = (e: React.MouseEvent) => {
         e.preventDefault(); onDragStart(e.clientX, e.clientY);
@@ -523,6 +553,28 @@ export function ConversationOverlay({ sessionId, fileContext, chatHandlerRef, se
     const panelStyle = isSidebar
         ? undefined
         : { transform: `translate(${position.x}px, ${position.y}px)`, width: size.w, height: size.h };
+
+    // ── Docked (collapsed) tab ──
+    if (!isSidebar && docked) {
+        const tabStyle: React.CSSProperties = {
+            position: "absolute",
+            top: Math.max(20, Math.min(position.y + 20, window.innerHeight - 120)),
+            [docked]: 0,
+            zIndex: 50,
+        };
+        return (
+            <div
+                className={`co-docked-tab co-docked-${docked}`}
+                style={tabStyle}
+                onClick={() => setDocked(null)}
+                onMouseDown={handleMouseDown}
+                onTouchStart={handleTouchStart}
+            >
+                <ChatIcon />
+                {busy && <span className="co-docked-dot" />}
+            </div>
+        );
+    }
 
     return (
         <div className={panelClass} style={panelStyle}>
