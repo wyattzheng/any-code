@@ -11,9 +11,12 @@
  *   API_KEY     — Provider API key  (required)
  *   BASE_URL    — Custom API base URL (optional)
  *   PORT        — HTTP port         (default: 3210)
+ *   TLS_CERT    — Path to TLS certificate file (optional, enables HTTPS)
+ *   TLS_KEY     — Path to TLS private key file  (optional, enables HTTPS)
  */
 
 import http from "http"
+import https from "https"
 import { fileURLToPath } from "url"
 import path from "path"
 import os from "os"
@@ -41,6 +44,8 @@ interface ServerConfig {
   previewPort: number
   appDist: string
   userSettings: Record<string, any>
+  tlsCert?: string
+  tlsKey?: string
 }
 
 function loadConfig(): ServerConfig {
@@ -64,7 +69,13 @@ function loadConfig(): ServerConfig {
     process.exit(1)
   }
   const appDist = resolveAppDist()
-  return { provider, model, apiKey, baseUrl, port, previewPort, appDist, userSettings }
+  const tlsCert = process.env.TLS_CERT ?? userSettings.TLS_CERT ?? undefined
+  const tlsKey = process.env.TLS_KEY ?? userSettings.TLS_KEY ?? undefined
+  if ((tlsCert && !tlsKey) || (!tlsCert && tlsKey)) {
+    console.error("❌  Both TLS_CERT and TLS_KEY must be set together")
+    process.exit(1)
+  }
+  return { provider, model, apiKey, baseUrl, port, previewPort, appDist, userSettings, tlsCert, tlsKey }
 }
 
 // ── Global error handlers — registered inside startServer() ──
@@ -891,7 +902,7 @@ function getOrCreatePreviewProvider(cfg: ServerConfig, sessionId: string): NodeP
 
 /** Dedicated preview HTTP server — proxies all requests to the current target */
 function createPreviewServer(cfg: ServerConfig): http.Server {
-  const previewServer = http.createServer((req, res) => {
+  const previewServer = createServer(cfg, (req, res) => {
     res.setHeader("Access-Control-Allow-Origin", "*")
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
     res.setHeader("Access-Control-Allow-Headers", "*")
@@ -1127,10 +1138,21 @@ function serveAppIndex(cfg: ServerConfig, res: http.ServerResponse): boolean {
   return false
 }
 
+/** Create an http or https server depending on TLS config */
+function createServer(cfg: ServerConfig, handler: http.RequestListener): http.Server {
+  if (cfg.tlsCert && cfg.tlsKey) {
+    return https.createServer({
+      cert: fs.readFileSync(cfg.tlsCert),
+      key: fs.readFileSync(cfg.tlsKey),
+    }, handler)
+  }
+  return http.createServer(handler)
+}
+
 // ── HTTP Server ────────────────────────────────────────────────────────────
 
 function createMainServer(cfg: ServerConfig): http.Server {
-  const server = http.createServer(async (req, res) => {
+  const server = createServer(cfg, async (req, res) => {
     res.setHeader("Access-Control-Allow-Origin", "*")
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
     res.setHeader("Access-Control-Allow-Headers", "Content-Type")
@@ -1499,21 +1521,25 @@ export async function startServer() {
 
   const HOST = process.env.HOST ?? "0.0.0.0"
 
+  const proto = cfg.tlsCert ? "https" : "http"
+  const wsProto = cfg.tlsCert ? "wss" : "ws"
+
   previewServer.listen(cfg.previewPort, HOST, () => {
-    console.log(`👁  Preview proxy: http://${HOST}:${cfg.previewPort}`)
+    console.log(`👁  Preview proxy: ${proto}://${HOST}:${cfg.previewPort}`)
   })
 
   server.listen(cfg.port, HOST, () => {
-    console.log(`🌐  http://${HOST}:${cfg.port}`)
+    console.log(`🌐  ${proto}://${HOST}:${cfg.port}`)
     console.log(`🤖  Provider: ${cfg.provider} / ${cfg.model}`)
-    console.log(`🖥  Admin: http://${HOST}:${cfg.port}/admin`)
+    console.log(`🖥  Admin: ${proto}://${HOST}:${cfg.port}/admin`)
     if (appDistExists) {
-      console.log(`📱  App: http://${HOST}:${cfg.port}`)
+      console.log(`📱  App: ${proto}://${HOST}:${cfg.port}`)
     } else {
       console.log(`⚠  App dist not found at ${cfg.appDist} — run 'pnpm --filter @any-code/app build' first`)
     }
     console.log(`📋  Sessions: POST /api/sessions to create`)
-    console.log(`🔌  WebSocket: ws://${HOST}:${cfg.port}?sessionId=xxx`)
+    console.log(`🔌  WebSocket: ${wsProto}://${HOST}:${cfg.port}?sessionId=xxx`)
+    if (cfg.tlsCert) console.log(`🔒  TLS enabled`)
   })
 }
 
