@@ -89,7 +89,10 @@ function LazyTreeItem({
 }
 
 export function FileBrowser({ topLevel, requestLs, requestFile, onFileContext }: FileBrowserProps) {
-    const [sidebarHeight, setSidebarHeight] = useState<number | null>(null);
+    const [sidebarHeight, setSidebarHeight] = useState<number | null>(() => {
+        const saved = localStorage.getItem('fb-sidebar-height');
+        return saved ? Number(saved) : null;
+    });
     const containerRef = useRef<HTMLDivElement>(null);
     const dragRef = useRef<{ startY: number; startHeight: number } | null>(null);
 
@@ -103,6 +106,7 @@ export function FileBrowser({ topLevel, requestLs, requestFile, onFileContext }:
         const delta = clientY - dragRef.current.startY;
         const newHeight = Math.max(60, Math.min(dragRef.current.startHeight + delta, containerRect.height - 60));
         setSidebarHeight(newHeight);
+        localStorage.setItem('fb-sidebar-height', String(newHeight));
     }, []);
 
     const onDragEnd = useCallback(() => {
