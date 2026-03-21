@@ -29,7 +29,7 @@ function statusLabel(status: string): string {
 }
 
 export function ChangesView({ changes, requestFile, requestDiff, onFileContext }: ChangesViewProps) {
-    const [listHeight, setListHeight] = useState(120);
+    const [listHeight, setListHeight] = useState<number | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const dragRef = useRef<{ startY: number; startHeight: number } | null>(null);
 
@@ -78,7 +78,8 @@ export function ChangesView({ changes, requestFile, requestDiff, onFileContext }
 
     const handleMouseDown = (e: React.MouseEvent) => {
         e.preventDefault();
-        dragRef.current = { startY: e.clientY, startHeight: listHeight };
+        const currentHeight = listHeight ?? (containerRef.current ? containerRef.current.getBoundingClientRect().height / 2 : 200);
+        dragRef.current = { startY: e.clientY, startHeight: currentHeight };
         const onMove = (ev: MouseEvent) => onDragMove(ev.clientY);
         const onUp = () => { onDragEnd(); window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
         window.addEventListener("mousemove", onMove);
@@ -87,7 +88,8 @@ export function ChangesView({ changes, requestFile, requestDiff, onFileContext }
 
     const handleTouchStart = (e: React.TouchEvent) => {
         const touch = e.touches[0];
-        dragRef.current = { startY: touch.clientY, startHeight: listHeight };
+        const currentHeight = listHeight ?? (containerRef.current ? containerRef.current.getBoundingClientRect().height / 2 : 200);
+        dragRef.current = { startY: touch.clientY, startHeight: currentHeight };
         const onMove = (ev: TouchEvent) => { ev.preventDefault(); onDragMove(ev.touches[0].clientY); };
         const onUp = () => { onDragEnd(); window.removeEventListener("touchmove", onMove); window.removeEventListener("touchend", onUp); };
         window.addEventListener("touchmove", onMove, { passive: false });
@@ -138,7 +140,7 @@ export function ChangesView({ changes, requestFile, requestDiff, onFileContext }
 
     return (
         <div className="changes-view" ref={containerRef}>
-            <div className="changes-list" style={{ height: listHeight }}>
+            <div className="changes-list" style={listHeight != null ? { height: listHeight, flex: 'none' } : { flex: 1 }}>
                 <div className="change-items">
                     {isEmpty ? (
                         <div className="changes-empty">
