@@ -231,15 +231,17 @@ export function ConversationOverlay({ sessionId, fileContext, chatHandlerRef, se
 
     const handleBorderMouseDown = useCallback((e: React.MouseEvent) => {
         e.preventDefault();
+        document.body.style.userSelect = 'none';
         onSidebarResizeStart(e.clientX);
         const onMove = (ev: MouseEvent) => onSidebarResizeMove(ev.clientX);
-        const onUp = () => { onSidebarResizeEnd(); window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+        const onUp = () => { document.body.style.userSelect = ''; onSidebarResizeEnd(); window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
         window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
     }, [onSidebarResizeStart, onSidebarResizeMove, onSidebarResizeEnd]);
     const handleBorderTouchStart = useCallback((e: React.TouchEvent) => {
+        document.body.style.userSelect = 'none';
         onSidebarResizeStart(e.touches[0].clientX);
         const onMove = (ev: TouchEvent) => { ev.preventDefault(); onSidebarResizeMove(ev.touches[0].clientX); };
-        const onUp = () => { onSidebarResizeEnd(); window.removeEventListener('touchmove', onMove); window.removeEventListener('touchend', onUp); };
+        const onUp = () => { document.body.style.userSelect = ''; onSidebarResizeEnd(); window.removeEventListener('touchmove', onMove); window.removeEventListener('touchend', onUp); };
         window.addEventListener('touchmove', onMove, { passive: false }); window.addEventListener('touchend', onUp);
     }, [onSidebarResizeStart, onSidebarResizeMove, onSidebarResizeEnd]);
 

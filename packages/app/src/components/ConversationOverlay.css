@@ -1,7 +1,7 @@
 .conversation-panel {
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    overflow: visible;
 }
 
 /* ── Floating mode ── */
@@ -29,10 +29,10 @@
 /* Left-edge resize zone — full height, wide touch target */
 .co-sidebar-border {
     position: absolute;
-    left: -8px;
+    left: -16px;
     top: 0;
     bottom: 0;
-    width: 16px;
+    width: 32px;
     cursor: col-resize;
     z-index: 10;
     touch-action: none;
