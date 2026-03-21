@@ -1,5 +1,8 @@
 FROM node:22-slim
 
+# Install git (required for git operations inside container)
+RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
+
 # Enable pnpm via corepack (built into Node 22, no download needed)
 RUN corepack enable pnpm
 

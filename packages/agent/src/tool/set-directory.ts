@@ -11,6 +11,8 @@ When to call:
 - After you clone a repository
 - When the user asks to open or switch to a specific project
 
+IMPORTANT: If the project is newly created and has no git history, run \`git init\` in the project directory BEFORE calling this tool. The diff viewer and change tracking depend on git.
+
 The directory must be an absolute path to an existing directory. To switch projects, first call with null to clear, then call again with the new path.`,
   parameters: z.object({
     directory: z.string().nullable().describe("Absolute path to the project directory. Pass null to clear the current directory."),
