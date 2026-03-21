@@ -306,13 +306,23 @@ export class CodeAgent extends EventEmitter {
     /**
      * Change the working directory for this agent instance.
      * Mutates internal context (directory, worktree, project, containsPath).
-     * Can only be called once (from empty → set). Throws if already set.
+     * Pass empty string to clear the directory (allows re-setting later).
      */
     setWorkingDirectory(dir: string) {
         const current = this.options.directory
-        // Allow setting only if currently unset (empty string)
+        // Clearing: allow anytime
+        if (!dir || dir === "") {
+            this.options.directory = ""
+            this.options.worktree = ""
+            if (this._context) {
+                ;(this._context as any).directory = ""
+                ;(this._context as any).worktree = ""
+            }
+            return
+        }
+        // Setting: only if currently unset (empty string)
         if (current && current !== "") {
-            throw new Error(`Working directory already set to "${current}". Cannot change once set.`)
+            throw new Error(`Working directory already set to "${current}". Clear it first by setting to empty string.`)
         }
         this.options.directory = dir
         this.options.worktree = dir

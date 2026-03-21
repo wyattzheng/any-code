@@ -2,9 +2,11 @@ import z from "zod"
 import { Tool } from "./tool"
 
 export const SetWorkingDirectoryTool = Tool.define("set_working_directory", {
-  description: `Use this tool to set the working directory for this session. The user will tell you which project or folder they want to work on. The directory must be an absolute path to an existing directory on the file system. After setting the directory, the full development environment (file browser, diff viewer, etc.) will become available.
+  description: `Set the working directory for this session. The typical usage is to open a project repository's root directory so the full development environment (file browser, diff viewer, terminal, etc.) becomes available.
 
-IMPORTANT: If you want to change to a different working directory, you must first call this tool with directory set to null to clear the current directory, and then call it again with the new path.`,
+The directory must be an absolute path to an existing directory on the file system.
+
+To switch to a different project, first call this tool with directory set to null to clear the current directory, then call it again with the new path. After clearing, you can freely set a new directory.`,
   parameters: z.object({
     directory: z.string().nullable().describe("Absolute path to the project directory. Pass null to clear the current directory."),
   }),
