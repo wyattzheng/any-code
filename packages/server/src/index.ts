@@ -398,10 +398,21 @@ const gitProvider = new NodeGitProvider()
 async function getGitChanges(dir: string): Promise<GitChange[]> {
   if (!dir) return []
   try {
+    // Find the actual git root — may differ from `dir` if project is inside a parent repo
+    const rootResult = await gitProvider.run(["rev-parse", "--show-toplevel"], { cwd: dir })
+    const gitRoot = rootResult.exitCode === 0 ? rootResult.text().trim() : ""
+    if (!gitRoot) return []
+
     const result = await gitProvider.run(["status", "--porcelain", "-uall"], { cwd: dir })
     if (result.exitCode !== 0) return []
     const text = result.text()
     if (!text.trim()) return []
+
+    // git status paths are relative to gitRoot
+    // If gitRoot !== dir, we need to filter & re-relativize paths
+    const needsFilter = path.resolve(gitRoot) !== path.resolve(dir)
+    const relPrefix = needsFilter ? path.relative(gitRoot, dir) + "/" : ""
+
     return text
       .split("\n")
       .filter((line: string) => line.trim())
@@ -412,6 +423,11 @@ async function getGitChanges(dir: string): Promise<GitChange[]> {
         if (xy[0] === "?" || xy[1] === "?") status = "?"
         return { file, status }
       })
+      .filter(({ file }) => !needsFilter || file.startsWith(relPrefix))
+      .map(({ file, status }) => ({
+        file: needsFilter ? file.slice(relPrefix.length) : file,
+        status,
+      }))
   } catch {
     return []
   }
