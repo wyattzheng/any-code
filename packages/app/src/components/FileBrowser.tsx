@@ -89,7 +89,7 @@ function LazyTreeItem({
 }
 
 export function FileBrowser({ topLevel, requestLs, requestFile, onFileContext }: FileBrowserProps) {
-    const [sidebarHeight, setSidebarHeight] = useState(120);
+    const [sidebarHeight, setSidebarHeight] = useState<number | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const dragRef = useRef<{ startY: number; startHeight: number } | null>(null);
 
@@ -111,7 +111,8 @@ export function FileBrowser({ topLevel, requestLs, requestFile, onFileContext }:
 
     const handleMouseDown = (e: React.MouseEvent) => {
         e.preventDefault();
-        dragRef.current = { startY: e.clientY, startHeight: sidebarHeight };
+        const currentHeight = sidebarHeight ?? (containerRef.current ? containerRef.current.getBoundingClientRect().height / 2 : 200);
+        dragRef.current = { startY: e.clientY, startHeight: currentHeight };
         const onMove = (ev: MouseEvent) => onDragMove(ev.clientY);
         const onUp = () => { onDragEnd(); window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
         window.addEventListener("mousemove", onMove);
@@ -120,7 +121,8 @@ export function FileBrowser({ topLevel, requestLs, requestFile, onFileContext }:
 
     const handleTouchStart = (e: React.TouchEvent) => {
         const touch = e.touches[0];
-        dragRef.current = { startY: touch.clientY, startHeight: sidebarHeight };
+        const currentHeight = sidebarHeight ?? (containerRef.current ? containerRef.current.getBoundingClientRect().height / 2 : 200);
+        dragRef.current = { startY: touch.clientY, startHeight: currentHeight };
         const onMove = (ev: TouchEvent) => { ev.preventDefault(); onDragMove(ev.touches[0].clientY); };
         const onUp = () => { onDragEnd(); window.removeEventListener("touchmove", onMove); window.removeEventListener("touchend", onUp); };
         window.addEventListener("touchmove", onMove, { passive: false });
@@ -153,7 +155,7 @@ export function FileBrowser({ topLevel, requestLs, requestFile, onFileContext }:
 
     return (
         <div className="file-browser" ref={containerRef}>
-            <div className="file-browser-sidebar" style={{ height: sidebarHeight }}>
+            <div className="file-browser-sidebar" style={sidebarHeight != null ? { height: sidebarHeight, flex: 'none' } : { flex: 1 }}>
                 <div className="file-tree">
                     {isEmpty ? (
                         <div className="file-tree-empty">
