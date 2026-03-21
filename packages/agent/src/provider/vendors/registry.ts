@@ -133,10 +133,10 @@ export const VendorRegistry = {
     const model = input.model as Provider.Model | undefined
     const runtime = input.model
       ? {
-          model: input.model as Provider.Model,
-          provider: input.provider ?? { id: input.model.providerID, options: {} },
-          auth: input.auth,
-        }
+        model: input.model as Provider.Model,
+        provider: input.provider ?? { id: input.model.providerID, options: {} },
+        auth: input.auth,
+      }
       : undefined
 
     const accessor: ModelProviderAccessor = {
@@ -270,8 +270,7 @@ export const VendorRegistry = {
       },
 
       wrapProviderOptions(options: { [x: string]: any }) {
-        const key = this.getOptionsKey()
-        return { [key]: options }
+        return { [model?.providerID]: options }
       },
 
       shouldUseInstructionPrompt() {
