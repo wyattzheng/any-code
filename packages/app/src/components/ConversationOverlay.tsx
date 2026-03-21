@@ -301,9 +301,25 @@ export function ConversationOverlay({ sessionId, fileContext, chatHandlerRef, se
         })();
     }, [sessionId]);
 
-    // Auto-scroll
+    // Smart auto-scroll: locked (follow new messages) / unlocked (user scrolled up)
+    const scrollLocked = useRef(true);
+
     useEffect(() => {
-        msgsRef.current?.scrollTo(0, msgsRef.current.scrollHeight);
+        const el = msgsRef.current;
+        if (!el) return;
+        const onScroll = () => {
+            const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 30;
+            scrollLocked.current = atBottom;
+        };
+        el.addEventListener('scroll', onScroll, { passive: true });
+        return () => el.removeEventListener('scroll', onScroll);
+    }, []);
+
+    // Auto-scroll only when locked
+    useEffect(() => {
+        if (scrollLocked.current) {
+            msgsRef.current?.scrollTo(0, msgsRef.current.scrollHeight);
+        }
     }, [messages]);
 
     // Recording timer
