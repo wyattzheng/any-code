@@ -21,17 +21,30 @@ export const ReadyState = {
 
 export class WebSocketChannel implements Channel {
     private ws: WebSocket;
+    private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+    private lastReceived = Date.now();
     onopen: (() => void) | null = null;
     onmessage: ((data: any) => void) | null = null;
     onclose: (() => void) | null = null;
 
     constructor(url: string) {
         this.ws = new WebSocket(url);
-        this.ws.onopen = () => this.onopen?.();
-        this.ws.onmessage = (e) => {
-            try { this.onmessage?.(JSON.parse(e.data)); } catch { /* ignore */ }
+        this.ws.onopen = () => {
+            this.startHeartbeat();
+            this.onopen?.();
         };
-        this.ws.onclose = () => this.onclose?.();
+        this.ws.onmessage = (e) => {
+            this.lastReceived = Date.now();
+            try {
+                const data = JSON.parse(e.data);
+                if (data.type === "pong") return; // swallow pong responses
+                this.onmessage?.(data);
+            } catch { /* ignore */ }
+        };
+        this.ws.onclose = () => {
+            this.stopHeartbeat();
+            this.onclose?.();
+        };
         this.ws.onerror = () => {};
     }
 
@@ -43,7 +56,29 @@ export class WebSocketChannel implements Channel {
         }
     }
 
-    close() { this.ws.close(); }
+    close() {
+        this.stopHeartbeat();
+        this.ws.close();
+    }
+
+    private startHeartbeat() {
+        this.lastReceived = Date.now();
+        this.heartbeatTimer = setInterval(() => {
+            // If no message in 45s, server is probably dead — force reconnect
+            if (Date.now() - this.lastReceived > 45_000) {
+                this.ws.close();
+                return;
+            }
+            this.send({ type: "ping" });
+        }, 30_000);
+    }
+
+    private stopHeartbeat() {
+        if (this.heartbeatTimer) {
+            clearInterval(this.heartbeatTimer);
+            this.heartbeatTimer = null;
+        }
+    }
 }
 
 import { getWsUrl } from "./serverUrl";

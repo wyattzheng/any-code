@@ -539,6 +539,12 @@ function broadcastAll(data: Record<string, unknown>) {
 
 /** Handle incoming client message from WebSocket */
 async function handleClientMessage(sessionId: string, client: ClientLike, msg: any) {
+  // Application-level heartbeat: reply with pong immediately
+  if (msg.type === "ping") {
+    client.send(JSON.stringify({ type: "pong" }))
+    return
+  }
+
   if (msg.type === "ls") {
     const session = getSession(sessionId)!
     const dir = session.directory
