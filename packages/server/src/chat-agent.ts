@@ -474,6 +474,7 @@ export class CodexAgent implements IChatAgent {
   private _codex: any = null
   private _thread: any = null
   private _workingDirectory: string = ""
+  private _oauthProviderPrefix: string = ""
 
   constructor(config: ChatAgentConfig) {
     this.config = config
@@ -522,23 +523,53 @@ export class CodexAgent implements IChatAgent {
     try {
       // Lazily create the Codex instance
       if (!this._codex) {
-        this._codex = new Codex({
-          ...(this.config.apiKey ? { apiKey: this.config.apiKey } : {}),
-          ...(this.config.baseUrl ? { baseUrl: this.config.baseUrl } : {}),
-          // Disable WebSocket transport — API proxies often don't support it,
-          // causing "stream disconnected" errors. Falls back to SSE.
-          config: {
-            model_providers: {
-              openai: { name: "openai", supports_websockets: false },
-            },
-          },
-        })
+        const isOAuth = this.config.apiKey?.startsWith("oauth:")
+        if (isOAuth) {
+          // Format: oauth:<access_token>:<refresh_token>:<id_token>
+          // Write auth.json to a dedicated CODEX_HOME dir and inject via env.
+          const parts = this.config.apiKey!.slice("oauth:".length).split(":")
+          const accessToken = parts[0]
+          const refreshToken = parts[1] || ""
+          const idToken = parts[2] || ""
+
+          const fs = await import("fs")
+          const path = await import("path")
+          const os = await import("os")
+          const codexHome = path.join(os.homedir(), ".codex-oauth")
+          fs.mkdirSync(codexHome, { recursive: true })
+          fs.writeFileSync(
+            path.join(codexHome, "auth.json"),
+            JSON.stringify({
+              auth_mode: "chatgpt",
+              OPENAI_API_KEY: null,
+              tokens: {
+                id_token: idToken,
+                access_token: accessToken,
+                ...(refreshToken ? { refresh_token: refreshToken } : {}),
+              },
+              last_refresh: new Date().toISOString(),
+            }),
+          )
+          // Pass CODEX_HOME via env, don't pass apiKey (let CLI use auth.json)
+          this._codex = new Codex({
+            ...(this.config.baseUrl ? { baseUrl: this.config.baseUrl } : {}),
+            env: { ...process.env, CODEX_HOME: codexHome } as Record<string, string>,
+          })
+        } else {
+          // "chatgpt-oauth" is a sentinel meaning "use OAuth auth from mounted auth.json"
+          // Don't pass apiKey or baseUrl — let CLI use its own defaults for OAuth mode.
+          const skipApiKey = this.config.apiKey === "chatgpt-oauth"
+          this._codex = new Codex({
+            ...(!skipApiKey && this.config.apiKey ? { apiKey: this.config.apiKey } : {}),
+            ...(!skipApiKey && this.config.baseUrl ? { baseUrl: this.config.baseUrl } : {}),
+          })
+        }
       }
 
       // Reuse thread for multi-turn conversation, or start a new one
       if (!this._thread) {
         this._thread = this._codex.startThread({
-          model: this.config.model || undefined,
+          model: this.config.model || "o4-mini",
           ...(this._workingDirectory ? { workingDirectory: this._workingDirectory } : {}),
           approvalPolicy: "never",
           sandboxMode: "danger-full-access",
@@ -624,6 +655,16 @@ export class CodexAgent implements IChatAgent {
                 hasEmittedThinkingEnd = true
                 yield { type: "thinking.end" as const, thinkingDuration: 0 }
               }
+            } else if (item.type === "agent_message") {
+              // For short text responses, the SDK may emit item.completed directly
+              // (skipping item.started/item.updated), so we must yield text here too.
+              if (hasEmittedThinkingStart && !hasEmittedThinkingEnd) {
+                hasEmittedThinkingEnd = true
+                yield { type: "thinking.end" as const, thinkingDuration: 0 }
+              }
+              if (item.text) {
+                yield { type: "text.delta" as const, content: item.text }
+              }
             } else if (item.type === "command_execution") {
               yield {
                 type: "tool.done" as const,
@@ -665,9 +706,16 @@ export class CodexAgent implements IChatAgent {
           }
 
           case "error": {
+            const msg = (event as any).message ?? "Unknown error"
+            // Codex CLI emits transient reconnection errors internally — suppress them
+            // since the CLI's retry logic handles recovery automatically.
+            if (/Reconnecting\.{3}/.test(msg)) {
+              console.log(`[CodexAgent] ${msg}`)
+              break
+            }
             yield {
               type: "error" as const,
-              error: (event as any).message ?? "Unknown error",
+              error: msg,
             }
             break
           }
