@@ -284,6 +284,7 @@ export class ClaudeCodeAgent implements IChatAgent {
         }
       } catch { /* SDK tools unavailable, proceed without them */ }
 
+      let capturedStderr = ""
       const stream = queryFn({
         prompt: messages(),
         options: {
@@ -293,6 +294,10 @@ export class ClaudeCodeAgent implements IChatAgent {
           baseTools: [{ preset: "default" }],
           deniedTools: ["AskUserQuestion"],
           cwd: process.cwd(),
+          stderr: (data: string) => {
+            console.error("[ClaudeCode Stderr]", data)
+            capturedStderr += data + "\n"
+          },
           env: {
             ...process.env,
             ...(this.config.apiKey ? { ANTHROPIC_API_KEY: this.config.apiKey } : {}),
