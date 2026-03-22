@@ -1279,7 +1279,11 @@ function createMainServer(cfg: ServerConfig): http.Server {
     res.setHeader("Access-Control-Allow-Headers", "Content-Type")
     if (req.method === "OPTIONS") { res.writeHead(204); res.end(); return }
 
-
+    // ── Static files first — never blocked by async API operations ──
+    if (req.method === "GET" && !req.url?.startsWith("/api/") && !req.url?.startsWith("/admin")) {
+      if (serveStatic(cfg, req, res)) return
+      if (serveAppIndex(cfg, res)) return
+    }
 
     // ── Session management ──
     if (req.method === "POST" && req.url === "/api/sessions") {
@@ -1523,12 +1527,6 @@ function createMainServer(cfg: ServerConfig): http.Server {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" })
       res.end(adminHTML(cfg))
       return
-    }
-
-    // ── Static files from app/dist ──
-    if (req.method === "GET") {
-      if (serveStatic(cfg, req, res)) return
-      if (serveAppIndex(cfg, res)) return
     }
 
     res.writeHead(404, { "Content-Type": "application/json" })
