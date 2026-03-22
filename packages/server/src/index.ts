@@ -31,6 +31,7 @@ import { SqlJsStorage } from "./storage-sqljs"
 import { watch as chokidarWatch, type FSWatcher as ChokidarWatcher } from "chokidar"
 import { NodeFS } from "./vfs-node"
 import { NodeSearchProvider } from "./search-node"
+import { AnyCodeAgent, ClaudeCodeAgent, type IChatAgent } from "./chat-agent"
 
 // ── Paths ──────────────────────────────────────────────────────────────────
 
@@ -47,6 +48,8 @@ interface ServerConfig {
   userSettings: Record<string, any>
   tlsCert?: string
   tlsKey?: string
+  /** Agent backend: "anycode" (default) or "claudecode" */
+  agent: string
 }
 
 function loadConfig(): ServerConfig {
@@ -54,6 +57,7 @@ function loadConfig(): ServerConfig {
   try {
     userSettings = JSON.parse(fs.readFileSync(path.join(ANYCODE_DIR, "settings.json"), "utf-8"))
   } catch { }
+  const agent = process.env.AGENT ?? userSettings.AGENT ?? "anycode"
   const provider = process.env.PROVIDER ?? userSettings.PROVIDER ?? "anthropic";
   const model = process.env.MODEL ?? userSettings.MODEL ?? "claude-sonnet-4-20250514"
   const apiKey = process.env.API_KEY ?? userSettings.API_KEY ?? ""
@@ -76,7 +80,7 @@ function loadConfig(): ServerConfig {
     console.error("❌  Both TLS_CERT and TLS_KEY must be set together")
     process.exit(1)
   }
-  return { provider, model, apiKey, baseUrl, port, previewPort, appDist, userSettings, tlsCert, tlsKey }
+  return { provider, model, apiKey, baseUrl, port, previewPort, appDist, userSettings, tlsCert, tlsKey, agent }
 }
 
 // ── Global error handlers — registered inside startServer() ──
@@ -161,7 +165,7 @@ class NodeGitProvider {
 
 interface SessionEntry {
   id: string
-  agent: InstanceType<typeof CodeAgent>
+  chatAgent: IChatAgent
   directory: string  // empty = no project directory set yet
   title: string      // session title (populated when agent generates it)
   createdAt: number
@@ -224,11 +228,21 @@ function createAgentConfig(cfg: ServerConfig, directory: string, sessionId?: str
   }
 }
 
+/** Create a ChatAgentConfig for the given session context */
+function createChatAgentConfig(cfg: ServerConfig, directory: string, sessionId?: string, terminal?: TerminalProvider, preview?: PreviewProvider) {
+  return {
+    apiKey: cfg.apiKey,
+    model: cfg.model,
+    baseUrl: cfg.baseUrl,
+    codeAgentOptions: createAgentConfig(cfg, directory, sessionId, terminal, preview),
+  }
+}
+
 /** Wire up agent events and register in sessions map. */
-function registerSession(cfg: ServerConfig, id: string, agent: InstanceType<typeof CodeAgent>, directory: string, createdAt: number): SessionEntry {
+function registerSession(cfg: ServerConfig, id: string, chatAgent: IChatAgent, directory: string, createdAt: number): SessionEntry {
   const entry: SessionEntry = { 
     id, 
-    agent, 
+    chatAgent,
     directory, 
     createdAt,
     title: "",
@@ -239,11 +253,11 @@ function registerSession(cfg: ServerConfig, id: string, agent: InstanceType<type
   // Kick off initial state compute
   entry.state.updateFileSystem(directory)
 
-  // Listen for directory.set events from the agent's set_user_watch_project tool
-  agent.on("directory.set", (data: any) => {
+  // Listen for directory.set events from the agent
+  chatAgent.on("directory.set", (data: any) => {
     const dir = data.directory
     entry.directory = dir
-    try { agent.setWorkingDirectory(dir) } catch { /* already set */ }
+    try { chatAgent.setWorkingDirectory(dir) } catch { /* already set */ }
     // Persist directory back to user_session mapping
     db.update("user_session", { op: "eq", field: "session_id", value: id }, { directory: dir })
     console.log(`📂  Session ${id} directory set to: ${dir}`)
@@ -254,7 +268,7 @@ function registerSession(cfg: ServerConfig, id: string, agent: InstanceType<type
   })
 
   // Listen for session title changes to push window list updates
-  agent.on("session.updated", (data: any) => {
+  chatAgent.on("session.updated", (data: any) => {
     const title = data?.info?.title
     if (title && title !== entry.title) {
       entry.title = title
@@ -276,11 +290,12 @@ async function resumeSession(cfg: ServerConfig, row: Record<string, unknown>): P
   const dir = (row.directory as string) || ""
   const tp = getOrCreateTerminalProvider(sessionId)
   const pp = getOrCreatePreviewProvider(cfg, sessionId)
-  const agent = new CodeAgent(createAgentConfig(cfg, dir, sessionId, tp, pp))
-  await agent.init()
-  const entry = registerSession(cfg, sessionId, agent, dir, row.time_created as number)
+
+  const chatAgent = new AnyCodeAgent(createChatAgentConfig(cfg, dir, sessionId, tp, pp))
+
+  const entry = registerSession(cfg, sessionId, chatAgent, dir, row.time_created as number)
   if (dir) {
-    try { agent.setWorkingDirectory(dir) } catch { /* already set */ }
+    try { chatAgent.setWorkingDirectory(dir) } catch { /* already set */ }
     watchDirectory(cfg, sessionId, dir)
   }
   console.log(`♻️  Session ${sessionId} resumed`)
@@ -294,9 +309,11 @@ async function createNewWindow(cfg: ServerConfig, isDefault = false): Promise<Se
   const tempId = `temp-${Date.now()}`
   const tp = getOrCreateTerminalProvider(tempId)
   const pp = getOrCreatePreviewProvider(cfg, tempId)
-  const agent = new CodeAgent(createAgentConfig(cfg, "", undefined, tp, pp))
-  await agent.init()
-  const sessionId = agent.sessionId
+
+  const chatAgent = new AnyCodeAgent(createChatAgentConfig(cfg, "", undefined, tp, pp))
+  await chatAgent.ensureInit()
+
+  const sessionId = chatAgent.sessionId
   const now = Date.now()
   terminalProviders.delete(tempId)
   terminalProviders.set(sessionId, tp)
@@ -304,7 +321,7 @@ async function createNewWindow(cfg: ServerConfig, isDefault = false): Promise<Se
   previewProviders.set(sessionId, pp)
     ; (tp as any).sessionId = sessionId
     ; (pp as any).sessionId = sessionId
-  const entry = registerSession(cfg, sessionId, agent, "", now)
+  const entry = registerSession(cfg, sessionId, chatAgent, "", now)
 
   db.insert("user_session", {
     session_id: sessionId,
@@ -559,10 +576,13 @@ async function handleClientMessage(sessionId: string, client: ClientLike, msg: a
     broadcast(sessionId, { type: "chat.userMessage", text: contextLabel })
 
     let aborted = false
-    sessionChatAbort.set(sessionId, () => { aborted = true })
+    sessionChatAbort.set(sessionId, () => {
+      aborted = true
+      session.chatAgent.abort?.()
+    })
 
     try {
-      for await (const event of session.agent.chat(effectiveMessage)) {
+      for await (const event of session.chatAgent.chat(effectiveMessage)) {
         if (aborted) break
         broadcast(sessionId, { type: "chat.event", event })
       }
@@ -1470,8 +1490,8 @@ function createMainServer(cfg: ServerConfig): http.Server {
     if (req.method === "GET" && req.url === "/api/status") {
       const list = Array.from(sessions.values()).map((s) => ({
         id: s.id, directory: s.directory,
-        stats: s.agent.getStats(),
-        sessionId: s.agent.sessionId,
+        stats: s.chatAgent.getStats(),
+        sessionId: s.chatAgent.sessionId,
       }))
       res.writeHead(200, { "Content-Type": "application/json" })
       res.end(JSON.stringify({ sessions: list }))
@@ -1488,7 +1508,7 @@ function createMainServer(cfg: ServerConfig): http.Server {
         res.end(JSON.stringify({ error: "Session not found" }))
         return
       }
-      session.agent.getSessionMessages({ limit: 30 }).then((messages: any) => {
+      session.chatAgent.getSessionMessages({ limit: 30 }).then((messages: any) => {
         res.writeHead(200, { "Content-Type": "application/json" })
         res.end(JSON.stringify(messages))
       }).catch((err: any) => {
