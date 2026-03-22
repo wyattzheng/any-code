@@ -132,6 +132,8 @@ export class ClaudeCodeAgent implements IChatAgent {
   private abortController: AbortController | null = null
   private config: ChatAgentConfig
   private eventHandlers = new Map<string, Array<(data: any) => void>>()
+  /** SDK-managed session ID — populated after first response, used for `resume` on subsequent calls */
+  private _claudeSessionId: string | null = null
 
   constructor(config: ChatAgentConfig) {
     this.config = config
@@ -204,10 +206,16 @@ export class ClaudeCodeAgent implements IChatAgent {
             ...(this.config.baseUrl ? { ANTHROPIC_BASE_URL: this.config.baseUrl } : {}),
           },
           abortController: self.abortController,
+          // Resume previous session for conversation memory
+          ...(this._claudeSessionId ? { resume: this._claudeSessionId } : {}),
         },
       })
 
       for await (const msg of stream) {
+        // Capture session_id from the first message for conversation memory
+        if (!this._claudeSessionId && (msg as any).session_id) {
+          this._claudeSessionId = (msg as any).session_id
+        }
         switch (msg.type) {
           // Complete assistant message — extract content blocks
           case "assistant": {
