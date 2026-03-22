@@ -529,7 +529,7 @@ export class CodexAgent implements IChatAgent {
           // causing "stream disconnected" errors. Falls back to SSE.
           config: {
             model_providers: {
-              openai: { supports_websockets: false },
+              openai: { name: "openai", supports_websockets: false },
             },
           },
         })
