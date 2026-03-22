@@ -190,6 +190,12 @@ export interface CodeAgentOptions {
      * Optional — when not provided, set_preview_url tool will throw errors.
      */
     preview?: PreviewProvider
+
+    /**
+     * Extra tools to register (set_directory, terminal, preview, etc.).
+     * Passed through to ToolRegistryService for inclusion in tool list.
+     */
+    extraTools?: Tool.Info[]
 }
 
 export interface CodeAgentSession {
@@ -392,6 +398,7 @@ export class CodeAgent extends EventEmitter {
             configOverrides: this.options.config as any,
             instructions: this.options.instructions,
             db: this._dbClient,
+            extraTools: this.options.extraTools,
             containsPath: (filepath: string) => {
                 const normalized = path.resolve(filepath)
                 return normalized.startsWith(path.resolve(worktree)) ||

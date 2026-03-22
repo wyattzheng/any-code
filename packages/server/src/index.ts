@@ -23,7 +23,7 @@ import os from "os"
 import fs from "fs"
 import fsPromises from "fs/promises"
 import { execFile, spawn as cpSpawn } from "child_process"
-import { CodeAgent, Database, type NoSqlDb, type TerminalProvider, type PreviewProvider } from "@any-code/agent"
+import { CodeAgent, Database, type NoSqlDb, type TerminalProvider, type PreviewProvider, SetWorkingDirectoryTool, TerminalWriteTool, TerminalReadTool, SetPreviewUrlTool } from "@any-code/agent"
 import { WebSocketServer, WebSocket as WS } from "ws"
 // @ts-expect-error — @lydell/node-pty has types but exports config doesn't expose them
 import * as pty from "@lydell/node-pty"
@@ -193,6 +193,12 @@ function createAgentConfig(cfg: ServerConfig, directory: string, sessionId?: str
     ...(sessionId ? { sessionId } : {}),
     ...(terminal ? { terminal } : {}),
     ...(preview ? { preview } : {}),
+    extraTools: [
+      SetWorkingDirectoryTool,
+      TerminalWriteTool,
+      TerminalReadTool,
+      SetPreviewUrlTool,
+    ],
     provider: {
       id: cfg.provider,
       apiKey: cfg.apiKey,

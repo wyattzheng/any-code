@@ -18,6 +18,7 @@ import type { Agent } from "./agent"
 import type { Provider } from "./provider/provider"
 import type { ModelsDev } from "./provider/models"
 import type { ToolRegistry } from "./tool/registry"
+import type { Tool } from "./tool/tool"
 import type { Skill } from "./skill"
 import type { Settings } from "./settings"
 
@@ -96,6 +97,9 @@ export interface AgentContext {
   instructions?: string[]
   /** Database client — set during init, used for all DB operations */
   db: any
+
+  /** Extra tools injected from outside (set_directory, terminal, preview, etc.) */
+  extraTools?: Tool.Info[]
 
   // ── Service instances ──────────────────────────────────────────
   // Phase 0: stateless services (created in CodeAgent constructor)

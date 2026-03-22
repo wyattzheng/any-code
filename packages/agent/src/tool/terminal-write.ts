@@ -26,24 +26,24 @@ export const TerminalWriteTool = Tool.define("terminal_write", async () => {
       if (params.type === "create") {
         terminal.create()
         return {
-          title: "Create terminal",
-          metadata: { type: "create" as const },
+          title: "Terminal created",
+          metadata: { type: "create" },
           output: "Terminal created successfully.",
-        }
+        } as any
       }
 
       if (params.type === "destroy") {
         terminal.destroy()
         return {
-          title: "Destroy terminal",
-          metadata: { type: "destroy" as const },
+          title: "Terminal destroyed",
+          metadata: { type: "destroy" },
           output: "Terminal destroyed successfully.",
-        }
+        } as any
       }
 
-      // type === "input"
-      if (!params.content && params.content !== "") {
-        throw new Error('The "content" parameter is required when type is "input".')
+      // input
+      if (!params.content) {
+        throw new Error("content is required for input")
       }
 
       if (!terminal.exists()) {
@@ -62,7 +62,7 @@ export const TerminalWriteTool = Tool.define("terminal_write", async () => {
           pressEnter,
         },
         output: `Input sent to terminal.`,
-      }
+      } as any
     },
   }
 })
