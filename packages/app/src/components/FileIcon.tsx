@@ -228,7 +228,15 @@ export function FileIcon({ filename, isDir = false, size = 16 }: FileIconProps) 
     return (
         <span
             className="vsc-file-icon"
-            style={{ width: size, height: size, display: "inline-flex", flexShrink: 0 }}
+            style={{
+                width: size,
+                height: size,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+                verticalAlign: "middle",
+            }}
             dangerouslySetInnerHTML={{ __html: html }}
         />
     );
