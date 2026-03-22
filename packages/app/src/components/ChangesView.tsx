@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import type { GitChange, FileContext } from "../App";
-import { FileDocIcon, DiffIcon } from "./Icons";
+import { DiffIcon } from "./Icons";
+import { FileIcon } from "./FileIcon";
 import { CodeViewer } from "./CodeViewer";
 import "./ChangesView.css";
 
@@ -153,7 +154,7 @@ export function ChangesView({ changes, requestFile, requestDiff, onFileContext }
                                 className={`change-item ${statusClass(change.status)}${selectedFile === change.file ? " selected" : ""}`}
                                 onClick={() => handleFileClick(change.file)}
                             >
-                                <FileDocIcon />
+                                <FileIcon filename={change.file.split('/').pop() || change.file} />
                                 <span>{change.file}</span>
                                 <span className="change-badge">{statusLabel(change.status)}</span>
                             </div>
@@ -166,7 +167,7 @@ export function ChangesView({ changes, requestFile, requestDiff, onFileContext }
                 {selectedFile ? (
                     <>
                         <div className="file-content-header" onMouseDown={handleMouseDown} onTouchStart={handleTouchStart}>
-                            <FileDocIcon />
+                            <FileIcon filename={selectedFile.split('/').pop() || selectedFile} />
                             <span className="file-content-path">{selectedFile}</span>
                             <div className="file-content-menu">
                                 <button className="file-content-menu-btn" onClick={() => setMenuOpen(!menuOpen)}>

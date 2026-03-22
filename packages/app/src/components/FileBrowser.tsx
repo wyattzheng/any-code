@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback } from "react";
 import type { DirEntry, FileContext } from "../App";
-import { FolderOpenIcon, FileDocIcon, ChevronIcon } from "./Icons";
+import { ChevronIcon } from "./Icons";
+import { FileIcon } from "./FileIcon";
 import { CodeViewer } from "./CodeViewer";
 import "./FileBrowser.css";
 
@@ -55,7 +56,7 @@ function LazyTreeItem({
                 style={{ paddingLeft: `${12 + depth * 16 + 18}px` }}
                 onClick={() => onFileClick(fullPath)}
             >
-                <span className="file-icon"><FileDocIcon /></span>
+                <span className="file-icon"><FileIcon filename={entry.name} size={14} /></span>
                 <span className="file-name">{entry.name}</span>
             </div>
         );
@@ -69,7 +70,7 @@ function LazyTreeItem({
                 onClick={toggle}
             >
                 <span className={`chevron ${expanded ? "expanded" : ""}`}><ChevronIcon /></span>
-                <span className="file-icon"><FolderOpenIcon /></span>
+                <span className="file-icon"><FileIcon filename={entry.name} isDir size={14} /></span>
                 <span className="file-name">{entry.name}/</span>
                 {loading && <span className="tree-loading">…</span>}
             </div>
@@ -163,7 +164,7 @@ export function FileBrowser({ topLevel, requestLs, requestFile, onFileContext }:
                 <div className="file-tree">
                     {isEmpty ? (
                         <div className="file-tree-empty">
-                            <FolderOpenIcon size={40} />
+                            <FileIcon filename="" isDir size={40} />
                             <p>加载中…</p>
                         </div>
                     ) : (
@@ -185,7 +186,7 @@ export function FileBrowser({ topLevel, requestLs, requestFile, onFileContext }:
                 {selectedFile ? (
                     <>
                         <div className="file-content-header" onMouseDown={handleMouseDown} onTouchStart={handleTouchStart}>
-                            <FileDocIcon />
+                            <FileIcon filename={selectedFile.split('/').pop() || selectedFile} />
                             <span className="file-content-path">{selectedFile}</span>
                             <div className="file-content-menu">
                                 <button className="file-content-menu-btn" onClick={() => setMenuOpen(!menuOpen)}>
@@ -215,7 +216,7 @@ export function FileBrowser({ topLevel, requestLs, requestFile, onFileContext }:
                     </>
                 ) : (
                     <div className="file-empty">
-                        <FileDocIcon size={36} />
+                        <FileIcon filename="file" size={36} />
                         <p>选择文件查看内容</p>
                     </div>
                 )}
