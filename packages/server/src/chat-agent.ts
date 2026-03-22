@@ -162,8 +162,52 @@ export class ClaudeCodeAgent implements IChatAgent {
     return null
   }
 
-  getSessionMessages(_opts: { limit: number }): Promise<any> {
-    return Promise.resolve([])
+  async getSessionMessages(opts: { limit: number }): Promise<any> {
+    if (!this._claudeSessionId) return []
+    let sdk: any
+    try {
+      // @ts-ignore
+      sdk = await import("@anthropic-ai/claude-agent-sdk")
+    } catch {
+      return []
+    }
+    
+    if (typeof sdk.getSessionMessages !== "function") return []
+    
+    try {
+      const dbMsgs = await sdk.getSessionMessages(this._claudeSessionId)
+      const limit = opts?.limit ?? 50
+      const recent = dbMsgs.slice(-limit)
+      
+      return recent.map((m: any) => {
+        const msg = m.message || {}
+        const role = msg.role || m.type || "unknown"
+        
+        const simplified: any = {
+          id: msg.id || m.uuid || "",
+          role: role === "assistant" ? "assistant" : "user",
+          createdAt: m.timestamp ? new Date(m.timestamp).getTime() : Date.now(),
+        }
+        
+        const contentBlocks = Array.isArray(msg.content) ? msg.content : typeof msg.content === "string" ? [{ type: "text", text: msg.content }] : []
+        
+        if (simplified.role === "user") {
+          simplified.text = contentBlocks.filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n")
+        } else {
+          simplified.parts = contentBlocks.map((b: any) => {
+            if (b.type === "text") return { type: "text", content: b.text || "" }
+            if (b.type === "thinking" || b.type === "redacted_thinking") return { type: "thinking", content: b.thinking || "" }
+            if (b.type === "tool_use" || b.type === "server_tool_use") return { type: "tool", tool: b.name, content: "Executed tool " + b.name }
+            return { type: b.type }
+          })
+        }
+        
+        return simplified
+      })
+    } catch (err) {
+      console.error("[ClaudeCodeAgent] Failed to fetch session history:", err)
+      return []
+    }
   }
 
   async *chat(input: string): AsyncGenerator<ChatAgentEvent, void, unknown> {
