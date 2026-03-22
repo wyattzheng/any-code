@@ -253,6 +253,8 @@ export class ClaudeCodeAgent implements IChatAgent {
     let hasEmittedThinkingStart = false
     let hasEmittedThinkingEnd = false
 
+    const activeToolCalls = new Map<number, { id: string, name: string, argsStr: string }>()
+
     try {
       // Build MCP server with custom tools (set_user_watch_project, set_preview_url, terminal_write, terminal_read)
       let mcpConfig: Record<string, any> | undefined
@@ -403,15 +405,37 @@ export class ClaudeCodeAgent implements IChatAgent {
                   type: "thinking.delta" as const,
                   thinkingContent: delta.thinking ?? "",
                 }
+              } else if (delta?.type === "input_json_delta") {
+                const toolCall = activeToolCalls.get(evt.index)
+                if (toolCall) {
+                  toolCall.argsStr += delta.partial_json ?? ""
+                }
               }
             }
             // content_block_start: tool_use start
             if (evt.type === "content_block_start" && evt.content_block?.type === "tool_use") {
-              yield {
-                type: "tool.start" as const,
-                toolCallId: evt.content_block.id ?? "",
-                toolName: evt.content_block.name ?? "",
-                toolArgs: evt.content_block.input ?? {},
+              activeToolCalls.set(evt.index, {
+                id: evt.content_block.id ?? "",
+                name: evt.content_block.name ?? "",
+                argsStr: ""
+              })
+            }
+            // content_block_stop: emit tool.start with fully parsed arguments
+            if (evt.type === "content_block_stop") {
+              const toolCall = activeToolCalls.get(evt.index)
+              if (toolCall) {
+                let parsedArgs = {}
+                try {
+                  parsedArgs = JSON.parse(toolCall.argsStr)
+                } catch { /* ignore */ }
+                
+                yield {
+                  type: "tool.start" as const,
+                  toolCallId: toolCall.id,
+                  toolName: toolCall.name,
+                  toolArgs: parsedArgs,
+                }
+                activeToolCalls.delete(evt.index)
               }
             }
             break
