@@ -52,6 +52,7 @@ function WindowView({ sessionId, visible, onWindowsChanged }: WindowViewProps) {
     const [fileContext, setFileContext] = useState<FileContext | null>(null);
     const [previewPort, setPreviewPort] = useState<number | null>(null);
     const chatHandlerRef = useRef<((data: any) => void) | undefined>(undefined);
+    const chatResetRef = useRef<(() => void) | undefined>(undefined);
     const channelRef = useRef<Channel | null>(null);
 
     const sendMessage = useCallback((data: any) => {
@@ -71,6 +72,9 @@ function WindowView({ sessionId, visible, onWindowsChanged }: WindowViewProps) {
 
             ch.onopen = () => {
                 retryDelay = 1000;
+                // If we reconnected (not first connect), reset chat busy state
+                // because we may have missed chat.done during the disconnect
+                chatResetRef.current?.();
                 onWindowsChanged();
             };
 
@@ -181,7 +185,7 @@ function WindowView({ sessionId, visible, onWindowsChanged }: WindowViewProps) {
                         </div>
                     )}
                 </div>
-                <ConversationOverlay sessionId={sessionId} fileContext={fileContext} chatHandlerRef={chatHandlerRef} sendMessage={sendMessage} />
+                <ConversationOverlay sessionId={sessionId} fileContext={fileContext} chatHandlerRef={chatHandlerRef} chatResetRef={chatResetRef} sendMessage={sendMessage} />
             </div>
             <TabBar activeTab={activeTab} onTabChange={setActiveTab} changeCount={changes.length} />
         </div>

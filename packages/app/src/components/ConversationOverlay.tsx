@@ -142,6 +142,7 @@ interface ConversationOverlayProps {
     sessionId: string;
     fileContext?: FileContext | null;
     chatHandlerRef?: MutableRefObject<((data: any) => void) | undefined>;
+    chatResetRef?: MutableRefObject<(() => void) | undefined>;
     sendMessage: (data: any) => void;
 }
 
@@ -170,7 +171,7 @@ function defaultSidebarWidth() {
     return 150;
 }
 
-export function ConversationOverlay({ sessionId, fileContext, chatHandlerRef, sendMessage }: ConversationOverlayProps) {
+export function ConversationOverlay({ sessionId, fileContext, chatHandlerRef, chatResetRef, sendMessage }: ConversationOverlayProps) {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [input, setInput] = useState("");
     const [recording, setRecording] = useState(false);
@@ -518,6 +519,15 @@ export function ConversationOverlay({ sessionId, fileContext, chatHandlerRef, se
         };
         return () => { chatHandlerRef.current = undefined; };
     }, [handleEvent, chatHandlerRef]);
+
+    // Reset busy state when WebSocket reconnects (may have missed chat.done)
+    useEffect(() => {
+        if (!chatResetRef) return;
+        chatResetRef.current = () => {
+            setBusy(false);
+        };
+        return () => { chatResetRef.current = undefined; };
+    }, [chatResetRef]);
 
     // ── Send message ──
     const handleSend = useCallback(() => {
