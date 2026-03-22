@@ -270,3 +270,13 @@ export class ClaudeCodeAgent implements IChatAgent {
     this.abortController = null
   }
 }
+
+// ── Factory ──────────────────────────────────────────────────────────────
+
+/** Create the appropriate IChatAgent based on agent type string */
+export function createChatAgent(agentType: string, config: ChatAgentConfig): IChatAgent {
+  if (agentType === "claudecode") {
+    return new ClaudeCodeAgent(config)
+  }
+  return new AnyCodeAgent(config)
+}

@@ -31,7 +31,7 @@ import { SqlJsStorage } from "./storage-sqljs"
 import { watch as chokidarWatch, type FSWatcher as ChokidarWatcher } from "chokidar"
 import { NodeFS } from "./vfs-node"
 import { NodeSearchProvider } from "./search-node"
-import { AnyCodeAgent, ClaudeCodeAgent, type IChatAgent } from "./chat-agent"
+import { createChatAgent, type IChatAgent } from "./chat-agent"
 
 // ── Paths ──────────────────────────────────────────────────────────────────
 
@@ -291,7 +291,7 @@ async function resumeSession(cfg: ServerConfig, row: Record<string, unknown>): P
   const tp = getOrCreateTerminalProvider(sessionId)
   const pp = getOrCreatePreviewProvider(cfg, sessionId)
 
-  const chatAgent = new AnyCodeAgent(createChatAgentConfig(cfg, dir, sessionId, tp, pp))
+  const chatAgent = createChatAgent(cfg.agent, createChatAgentConfig(cfg, dir, sessionId, tp, pp))
 
   const entry = registerSession(cfg, sessionId, chatAgent, dir, row.time_created as number)
   if (dir) {
@@ -310,7 +310,7 @@ async function createNewWindow(cfg: ServerConfig, isDefault = false): Promise<Se
   const tp = getOrCreateTerminalProvider(tempId)
   const pp = getOrCreatePreviewProvider(cfg, tempId)
 
-  const chatAgent = new AnyCodeAgent(createChatAgentConfig(cfg, "", undefined, tp, pp))
+  const chatAgent = createChatAgent(cfg.agent, createChatAgentConfig(cfg, "", undefined, tp, pp))
   await chatAgent.ensureInit()
 
   const sessionId = chatAgent.sessionId
