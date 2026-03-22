@@ -525,6 +525,13 @@ export class CodexAgent implements IChatAgent {
         this._codex = new Codex({
           ...(this.config.apiKey ? { apiKey: this.config.apiKey } : {}),
           ...(this.config.baseUrl ? { baseUrl: this.config.baseUrl } : {}),
+          // Disable WebSocket transport — API proxies often don't support it,
+          // causing "stream disconnected" errors. Falls back to SSE.
+          config: {
+            model_providers: {
+              openai: { supports_websockets: false },
+            },
+          },
         })
       }
 
