@@ -116,6 +116,11 @@
     background: rgba(255, 255, 255, 0.06);
 }
 
+.taskbar-add:disabled {
+    opacity: 0.3;
+    pointer-events: none;
+}
+
 /* ── Gear button ── */
 .taskbar-gear {
     display: flex;

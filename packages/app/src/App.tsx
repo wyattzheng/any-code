@@ -344,7 +344,11 @@ export function App() {
         try { localStorage.setItem('anycode:lastWindow', id); } catch { }
     }, []);
 
+    const [windowCreating, setWindowCreating] = useState(false);
+
     const handleWindowCreate = useCallback(async () => {
+        if (windowCreating) return;
+        setWindowCreating(true);
         try {
             const res = await fetch(`${getApiBase()}/api/windows`, {
                 method: "POST",
@@ -356,8 +360,10 @@ export function App() {
             await fetchWindows();
             setActiveWindowId(data.id);
             try { localStorage.setItem('anycode:lastWindow', data.id); } catch { }
-        } catch { /* ignore */ }
-    }, [fetchWindows]);
+        } catch { /* ignore */ } finally {
+            setWindowCreating(false);
+        }
+    }, [fetchWindows, windowCreating]);
 
     const handleWindowDelete = useCallback(async (id: string) => {
         try {
@@ -406,6 +412,7 @@ export function App() {
                 onSwitch={handleWindowSwitch}
                 onCreate={handleWindowCreate}
                 onDelete={handleWindowDelete}
+                creating={windowCreating}
             />
             {windows.map((w) => (
                 <WindowView

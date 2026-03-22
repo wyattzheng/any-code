@@ -17,6 +17,7 @@ interface WindowSwitcherProps {
     onSwitch: (id: string) => void;
     onCreate: () => void;
     onDelete: (id: string) => void;
+    creating?: boolean;
 }
 
 function windowLabel(w: WindowInfo): string {
@@ -85,6 +86,7 @@ export function WindowSwitcher({
     onSwitch,
     onCreate,
     onDelete,
+    creating = false,
 }: WindowSwitcherProps) {
     const [popoverId, setPopoverId] = useState<string | null>(null);
     const [popoverPos, setPopoverPos] = useState<{ x: number; y: number } | null>(null);
@@ -143,7 +145,7 @@ export function WindowSwitcher({
                         </button>
                     ))}
                 </div>
-                <button className="taskbar-add" onClick={onCreate} title="新建窗口">+</button>
+                <button className="taskbar-add" onClick={onCreate} disabled={creating} title="新建窗口">{creating ? "…" : "+"}</button>
                 <button className="taskbar-gear" onClick={() => setShowSettings(true)} title="设置">
                     <GearIcon size={12} />
                 </button>
