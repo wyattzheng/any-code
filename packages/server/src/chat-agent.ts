@@ -209,49 +209,60 @@ export class ClaudeCodeAgent implements IChatAgent {
 
       for await (const msg of stream) {
         switch (msg.type) {
-          case "text":
-          case "text_delta":
-            yield {
-              type: "text.delta" as const,
-              content: msg.delta ?? msg.text ?? "",
-            }
-            break
-
-          case "tool_use":
-            yield {
-              type: "tool.start" as const,
-              toolCallId: msg.tool_use_id ?? msg.id ?? "",
-              toolName: msg.name ?? "",
-              toolArgs: msg.input ?? {},
-            }
-            break
-
-          case "tool_result":
-            yield {
-              type: "tool.done" as const,
-              toolCallId: msg.tool_use_id ?? msg.id ?? "",
-              toolName: msg.name ?? "",
-              toolOutput: typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content ?? ""),
-              toolTitle: msg.name ?? "",
-              toolMetadata: {},
-            }
-            break
-
-          case "thinking":
-            yield {
-              type: "thinking.delta" as const,
-              thinkingContent: msg.thinking ?? msg.delta ?? "",
-            }
-            break
-
-          case "result":
-            if (msg.result) {
-              yield {
-                type: "text.delta" as const,
-                content: msg.result,
+          // Complete assistant message — extract content blocks
+          case "assistant": {
+            const blocks = msg.message?.content ?? []
+            for (const block of blocks) {
+              if (block.type === "thinking") {
+                yield {
+                  type: "thinking.delta" as const,
+                  thinkingContent: block.thinking ?? "",
+                }
+              } else if (block.type === "text") {
+                yield {
+                  type: "text.delta" as const,
+                  content: block.text ?? "",
+                }
+              } else if (block.type === "tool_use") {
+                yield {
+                  type: "tool.start" as const,
+                  toolCallId: block.id ?? "",
+                  toolName: block.name ?? "",
+                  toolArgs: block.input ?? {},
+                }
               }
             }
             break
+          }
+
+          // Tool result messages
+          case "user": {
+            const blocks = msg.message?.content ?? []
+            for (const block of blocks) {
+              if (block.type === "tool_result") {
+                yield {
+                  type: "tool.done" as const,
+                  toolCallId: block.tool_use_id ?? "",
+                  toolName: "",
+                  toolOutput: typeof block.content === "string" ? block.content : JSON.stringify(block.content ?? ""),
+                  toolTitle: "",
+                  toolMetadata: {},
+                }
+              }
+            }
+            break
+          }
+
+          // Final result
+          case "result": {
+            if ((msg as any).result) {
+              yield {
+                type: "text.delta" as const,
+                content: (msg as any).result,
+              }
+            }
+            break
+          }
         }
       }
     } catch (err: any) {
