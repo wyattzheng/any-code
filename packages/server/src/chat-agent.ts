@@ -368,12 +368,8 @@ export class ClaudeCodeAgent implements IChatAgent {
 
           // Final result
           case "result": {
-            if ((msg as any).result) {
-              yield {
-                type: "text.delta" as const,
-                content: (msg as any).result,
-              }
-            }
+            // Re-yielding the full result causes duplicate messages on the UI
+            // because the text was already streamed token-by-token via 'stream_event'.
             break
           }
         }
