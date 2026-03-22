@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { GearIcon, CloseIcon } from "./Icons";
+import { getServerUrl, setServerUrl } from "../serverUrl";
 import "./WindowSwitcher.css";
 
 export interface WindowInfo {
@@ -26,6 +28,57 @@ function windowLabel(w: WindowInfo): string {
     return w.isDefault ? "默认" : "新窗口";
 }
 
+function SettingsModal({ onClose }: { onClose: () => void }) {
+    const [url, setUrl] = useState(getServerUrl() || "");
+    const [editing, setEditing] = useState(false);
+    const [saved, setSaved] = useState(false);
+
+    const handleSave = () => {
+        setServerUrl(url.trim());
+        setEditing(false);
+        setSaved(true);
+        setTimeout(() => setSaved(false), 1500);
+    };
+
+    return (
+        <div className="settings-overlay" onClick={onClose}>
+            <div className="settings-modal" onClick={(e) => e.stopPropagation()}>
+                <div className="settings-header">
+                    <span className="settings-title">设置</span>
+                    <button className="settings-close" onClick={onClose}>
+                        <CloseIcon size={12} />
+                    </button>
+                </div>
+                <div className="settings-body">
+                    <div className="settings-row">
+                        <label className="settings-label">服务器地址</label>
+                        {editing ? (
+                            <div className="settings-edit-row">
+                                <input
+                                    className="settings-input"
+                                    type="url"
+                                    value={url}
+                                    onChange={(e) => setUrl(e.target.value)}
+                                    onKeyDown={(e) => e.key === "Enter" && handleSave()}
+                                    autoFocus
+                                />
+                                <button className="settings-btn" onClick={handleSave}>保存</button>
+                                <button className="settings-btn settings-btn-dim" onClick={() => { setEditing(false); setUrl(getServerUrl() || ""); }}>取消</button>
+                            </div>
+                        ) : (
+                            <div className="settings-value-row">
+                                <span className="settings-value">{getServerUrl() || "(未配置)"}</span>
+                                <button className="settings-btn" onClick={() => setEditing(true)}>修改</button>
+                            </div>
+                        )}
+                        {saved && <span className="settings-saved">✓ 已保存</span>}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 export function WindowSwitcher({
     windows,
     activeWindowId,
@@ -35,6 +88,7 @@ export function WindowSwitcher({
 }: WindowSwitcherProps) {
     const [popoverId, setPopoverId] = useState<string | null>(null);
     const [popoverPos, setPopoverPos] = useState<{ x: number; y: number } | null>(null);
+    const [showSettings, setShowSettings] = useState(false);
     const taskbarRef = useRef<HTMLElement>(null);
     const btnRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
 
@@ -75,38 +129,45 @@ export function WindowSwitcher({
     }, [activeWindowId, onSwitch]);
 
     return (
-        <nav className="taskbar" ref={taskbarRef}>
-            <div className="taskbar-items">
-                {windows.map((w) => (
-                    <button
-                        key={w.id}
-                        ref={(el) => { if (el) btnRefs.current.set(w.id, el); }}
-                        className={`taskbar-item ${w.id === activeWindowId ? "active" : ""}`}
-                        onClick={() => handleClick(w)}
-                    >
-                        <span className="taskbar-label">{windowLabel(w)}</span>
-                    </button>
-                ))}
-            </div>
-            <button className="taskbar-add" onClick={onCreate} title="新建窗口">+</button>
-
-            {popoverId && popoverPos && (
-                <div
-                    className="taskbar-popover"
-                    style={{ left: popoverPos.x, top: popoverPos.y }}
-                >
-                    <button
-                        className="taskbar-popover-btn"
-                        onClick={() => {
-                            const id = popoverId;
-                            setPopoverId(null);
-                            onDelete(id);
-                        }}
-                    >
-                        关闭窗口
-                    </button>
+        <>
+            <nav className="taskbar" ref={taskbarRef}>
+                <div className="taskbar-items">
+                    {windows.map((w) => (
+                        <button
+                            key={w.id}
+                            ref={(el) => { if (el) btnRefs.current.set(w.id, el); }}
+                            className={`taskbar-item ${w.id === activeWindowId ? "active" : ""}`}
+                            onClick={() => handleClick(w)}
+                        >
+                            <span className="taskbar-label">{windowLabel(w)}</span>
+                        </button>
+                    ))}
                 </div>
-            )}
-        </nav>
+                <button className="taskbar-add" onClick={onCreate} title="新建窗口">+</button>
+                <button className="taskbar-gear" onClick={() => setShowSettings(true)} title="设置">
+                    <GearIcon size={12} />
+                </button>
+
+                {popoverId && popoverPos && (
+                    <div
+                        className="taskbar-popover"
+                        style={{ left: popoverPos.x, top: popoverPos.y }}
+                    >
+                        <button
+                            className="taskbar-popover-btn"
+                            onClick={() => {
+                                const id = popoverId;
+                                setPopoverId(null);
+                                onDelete(id);
+                            }}
+                        >
+                            关闭窗口
+                        </button>
+                    </div>
+                )}
+            </nav>
+
+            {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
+        </>
     );
 }
