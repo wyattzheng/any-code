@@ -1603,10 +1603,12 @@ export async function startServer() {
     clients.add(ws as ClientLike)
     console.log(`🔌  WS client connected to session ${sessionId} (${clients.size} total)`)
 
-    // Send current state to this client only (no broadcast)
+    // Send current state to this client immediately, then trigger a fresh compute
     const sessionModel = getSession(sessionId)?.state
     if (sessionModel) {
       ws.send(JSON.stringify(sessionModel.toJSON()))
+      // Refresh state in background so client gets up-to-date data
+      sessionModel.updateFileSystem()
     }
 
     ws.on("message", async (raw) => {
