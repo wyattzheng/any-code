@@ -98,8 +98,11 @@ function summarizeToolInfo(tool: ToolCard) {
         case "write":
         case "edit":
         case "multiedit":
-        case "read": {
-            const path = compactPathLabel(tool.title || firstString(tool.args, ["filePath", "path"]));
+        case "FileEdit":
+        case "NotebookEdit":
+        case "read":
+        case "FileRead": {
+            const path = compactPathLabel(tool.title || firstString(tool.args, ["filePath", "path", "file_path", "absolute_path"]));
             const off = Number(tool.args?.offset) || 0;
             const lim = Number(tool.args?.limit) || 0;
             if (off || lim) {
@@ -110,18 +113,23 @@ function summarizeToolInfo(tool: ToolCard) {
         }
         case "ls":
         case "glob":
-            return compactPathLabel(tool.title || firstString(tool.args, ["filePath", "path"]));
+        case "LS":
+        case "GlobTool":
+            return compactPathLabel(tool.title || firstString(tool.args, ["filePath", "path", "dir_path", "pattern"]));
         case "set_user_watch_project": {
             const titlePath = tool.title?.replace(/^Set directory:\s*/, "") || "";
             return compactPathLabel(titlePath || firstString(tool.args, ["directory"]));
         }
         case "codesearch":
-            return (tool.title?.replace(/^Code search:\s*/, "") || firstString(tool.args, ["query"])).trim();
+        case "CodeSearch":
+            return (tool.title?.replace(/^Code search:\s*/, "") || firstString(tool.args, ["query", "search_term"])).trim();
         case "websearch":
             return (tool.title?.replace(/^Web search:\s*/, "") || firstString(tool.args, ["query"])).trim();
         case "grep":
+        case "GrepTool":
             return firstString(tool.args, ["pattern", "query", "include"]);
         case "bash":
+        case "Bash":
             return firstString(tool.args, ["command", "description"]) || normalizeInlineText(tool.title);
         default:
             return normalizeInlineText(tool.title) || normalizeInlineText(tool.args);
