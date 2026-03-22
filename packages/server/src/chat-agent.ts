@@ -197,6 +197,7 @@ export class ClaudeCodeAgent implements IChatAgent {
         options: {
           model: this.config.model || "sonnet",
           thinking: { type: "enabled", budgetTokens: 10000 },
+          allowDangerouslySkipPermissions: true,
           baseTools: [{ preset: "default" }],
           deniedTools: ["AskUserQuestion"],
           cwd: process.cwd(),
