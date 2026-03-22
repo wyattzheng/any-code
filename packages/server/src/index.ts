@@ -248,13 +248,13 @@ function createChatAgentConfig(cfg: ServerConfig, directory: string, sessionId?:
 
 /** Wire up agent events and register in sessions map. */
 function registerSession(cfg: ServerConfig, id: string, chatAgent: IChatAgent, directory: string, createdAt: number): SessionEntry {
-  const entry: SessionEntry = { 
-    id, 
+  const entry: SessionEntry = {
+    id,
     chatAgent,
-    directory, 
+    directory,
     createdAt,
     title: "",
-    state: new SessionStateModel(id, cfg) 
+    state: new SessionStateModel(id, cfg)
   }
   sessions.set(id, entry)
 
@@ -658,11 +658,11 @@ export class SessionStateModel {
 
   async updateFileSystem(dir?: string) {
     if (dir !== undefined && this.directory !== dir) {
-       this.directory = dir
-       this.topLevel = []
-       this.changes = []
+      this.directory = dir
+      this.topLevel = []
+      this.changes = []
     }
-    
+
     // Calculate expected port here during file system polls as well
     const expectedPort = (previewSessionId === this.sessionId && previewTarget) ? this.cfg.previewPort : null
     if (this.previewPort !== expectedPort) {
@@ -673,7 +673,7 @@ export class SessionStateModel {
       this._needsCompute = true
       return
     }
-    
+
     this._isComputing = true
     try {
       do {
@@ -683,12 +683,12 @@ export class SessionStateModel {
           currentDir ? listDir(currentDir) : Promise.resolve([]),
           currentDir ? getGitChanges(currentDir) : Promise.resolve([]),
         ])
-        
+
         const newTopJson = JSON.stringify(topLevel)
         const newChangesJson = JSON.stringify(changes)
         const oldTopJson = JSON.stringify(this.topLevel)
         const oldChangesJson = JSON.stringify(this.changes)
-        
+
         if (newTopJson !== oldTopJson || newChangesJson !== oldChangesJson) {
           this.topLevel = topLevel
           this.changes = changes
@@ -1612,6 +1612,22 @@ export async function startServer() {
 
   // ── WebSocket server on same HTTP server ──
   const wss = new WebSocketServer({ server })
+
+  // Heartbeat: ping clients every 30s, terminate dead connections
+  const WS_PING_INTERVAL = 30_000
+  const aliveSet = new WeakSet<WS>()
+  const pingTimer = setInterval(() => {
+    for (const ws of wss.clients) {
+      if (!aliveSet.has(ws)) {
+        ws.terminate()
+        continue
+      }
+      aliveSet.delete(ws)
+      ws.ping()
+    }
+  }, WS_PING_INTERVAL)
+  wss.on("close", () => clearInterval(pingTimer))
+
   wss.on("connection", (ws, req) => {
     const url = new URL(req.url || "/", `http://localhost:${cfg.port}`)
     const sessionId = url.searchParams.get("sessionId")
@@ -1619,6 +1635,10 @@ export async function startServer() {
       ws.close(4001, "Invalid session")
       return
     }
+
+    // Mark alive on connect and on each pong
+    aliveSet.add(ws)
+    ws.on("pong", () => aliveSet.add(ws))
 
     // Terminal WebSocket — separate lifecycle from state clients
     if (url.pathname === "/terminal") {
