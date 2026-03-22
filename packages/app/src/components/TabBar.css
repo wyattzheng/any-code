@@ -4,7 +4,7 @@
     min-height: var(--tab-height);
     background: var(--color-surface);
     border-top: 1px solid var(--color-border);
-    padding: 6px 12px;
+    padding: 6px 12px calc(6px + env(safe-area-inset-bottom, 0px));
     gap: 4px;
     flex-shrink: 0;
     z-index: 100;
