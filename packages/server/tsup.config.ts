@@ -11,4 +11,5 @@ export default defineConfig({
     clean: true,
     skipNodeModulesBundle: true,
     external: ["sql.js", "@lydell/node-pty"],
+    onSuccess: "cp src/codex-mcp-bridge.cjs dist/codex-mcp-bridge.cjs",
 });

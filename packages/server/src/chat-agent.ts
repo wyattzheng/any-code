@@ -459,11 +459,18 @@ export class ClaudeCodeAgent implements IChatAgent {
 
 // ── CodexAgent ───────────────────────────────────────────────────────────
 
+import { createServer as createTcpServer, type Server as TcpServer } from "net"
+import { statSync } from "fs"
+import { join, dirname } from "path"
+
 /**
  * CodexAgent — wraps @openai/codex-sdk.
  *
  * Uses dynamic import to avoid hard dependency on the SDK package.
  * Spawns the Codex CLI via the SDK, maps ThreadEvent → ChatAgentEvent.
+ *
+ * Also exposes 4 custom AnyCode tools to the Codex CLI via a lightweight
+ * MCP server bridge (codex-mcp-bridge.cjs) that communicates back over TCP.
  */
 export class CodexAgent implements IChatAgent {
   readonly name = "Codex Agent"
@@ -474,7 +481,8 @@ export class CodexAgent implements IChatAgent {
   private _codex: any = null
   private _thread: any = null
   private _workingDirectory: string = ""
-  private _oauthProviderPrefix: string = ""
+  private _mcpServer: TcpServer | null = null
+  private _mcpPort: number = 0
 
   constructor(config: ChatAgentConfig) {
     this.config = config
@@ -521,12 +529,30 @@ export class CodexAgent implements IChatAgent {
     this.abortController = new AbortController()
 
     try {
+      // Start MCP bridge TCP server if not already running
+      if (!this._mcpServer) {
+        await this._startMcpBridge()
+      }
+
       // Lazily create the Codex instance
       if (!this._codex) {
+        // Find MCP bridge script path (next to the bundled dist output)
+        const bridgePath = join(dirname(new URL(import.meta.url).pathname), "codex-mcp-bridge.cjs")
+
+        // MCP server config to inject into Codex CLI
+        const mcpConfig = {
+          mcp_servers: {
+            "anycode-tools": {
+              type: "stdio",
+              command: "node",
+              args: [bridgePath],
+              env: { ANYCODE_MCP_PORT: String(this._mcpPort) },
+            }
+          }
+        }
+
         const isOAuth = this.config.apiKey?.startsWith("oauth:")
         if (isOAuth) {
-          // Format: oauth:<access_token>:<refresh_token>:<id_token>
-          // Write auth.json to a dedicated CODEX_HOME dir and inject via env.
           const parts = this.config.apiKey!.slice("oauth:".length).split(":")
           const accessToken = parts[0]
           const refreshToken = parts[1] || ""
@@ -550,18 +576,18 @@ export class CodexAgent implements IChatAgent {
               last_refresh: new Date().toISOString(),
             }),
           )
-          // Pass CODEX_HOME via env, don't pass apiKey (let CLI use auth.json)
           this._codex = new Codex({
             ...(this.config.baseUrl ? { baseUrl: this.config.baseUrl } : {}),
-            env: { ...process.env, CODEX_HOME: codexHome } as Record<string, string>,
+            env: { ...process.env, CODEX_HOME: codexHome, ANYCODE_MCP_PORT: String(this._mcpPort) } as Record<string, string>,
+            config: mcpConfig,
           })
         } else {
-          // "chatgpt-oauth" is a sentinel meaning "use OAuth auth from mounted auth.json"
-          // Don't pass apiKey or baseUrl — let CLI use its own defaults for OAuth mode.
           const skipApiKey = this.config.apiKey === "chatgpt-oauth"
           this._codex = new Codex({
             ...(!skipApiKey && this.config.apiKey ? { apiKey: this.config.apiKey } : {}),
             ...(!skipApiKey && this.config.baseUrl ? { baseUrl: this.config.baseUrl } : {}),
+            env: { ...process.env, ANYCODE_MCP_PORT: String(this._mcpPort) } as Record<string, string>,
+            config: mcpConfig,
           })
         }
       }
@@ -741,6 +767,113 @@ export class CodexAgent implements IChatAgent {
     }
 
     yield { type: "done" as const }
+  }
+
+  /** Emit an event to all registered handlers (used by MCP tools) */
+  private _emitEvent(event: string, data: any): void {
+    const handlers = this.eventHandlers.get(event) ?? []
+    for (const handler of handlers) handler(data)
+  }
+
+  /** Start TCP server for MCP bridge tool call forwarding */
+  private _startMcpBridge(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const server = createTcpServer((socket) => {
+        let buffer = ""
+        socket.on("data", (chunk: Buffer) => {
+          buffer += chunk.toString()
+          let newlineIdx
+          while ((newlineIdx = buffer.indexOf("\n")) !== -1) {
+            const line = buffer.slice(0, newlineIdx)
+            buffer = buffer.slice(newlineIdx + 1)
+            try {
+              const msg = JSON.parse(line)
+              if (msg.type === "tool_call") {
+                this._handleToolCall(msg.id, msg.toolName, msg.args, socket)
+              }
+            } catch {}
+          }
+        })
+      })
+      server.listen(0, "127.0.0.1", () => {
+        const addr = server.address() as any
+        this._mcpPort = addr.port
+        this._mcpServer = server
+        console.log(`[CodexAgent] MCP bridge TCP server on port ${this._mcpPort}`)
+        resolve()
+      })
+      server.on("error", reject)
+    })
+  }
+
+  /** Handle a tool call from the MCP bridge */
+  private async _handleToolCall(id: number, toolName: string, args: any, socket: any): Promise<void> {
+    try {
+      let result: any
+      switch (toolName) {
+        case "set_user_watch_project": {
+          const dir = args.directory
+          if (dir === null) {
+            this._emitEvent("directory.set", { directory: "" })
+            result = { output: "Working directory cleared." }
+          } else {
+            try {
+              const s = statSync(dir)
+              if (!s.isDirectory()) {
+                result = { output: `"${dir}" is not a directory.` }
+                break
+              }
+            } catch {
+              result = { output: `Directory "${dir}" does not exist.` }
+              break
+            }
+            this._emitEvent("directory.set", { directory: dir })
+            result = { output: `Working directory set to "${dir}".` }
+          }
+          break
+        }
+        case "terminal_write": {
+          const terminal = this.config.terminal
+          if (!terminal) { result = { output: "Terminal not available." }; break }
+          if (args.type === "create") {
+            terminal.create()
+            result = { output: "Terminal created." }
+          } else if (args.type === "destroy") {
+            terminal.destroy()
+            result = { output: "Terminal destroyed." }
+          } else {
+            if (!args.content) { result = { output: "content is required for input" }; break }
+            if (!terminal.exists()) { result = { output: 'No terminal exists. Use type "create" first.' }; break }
+            const data = (args.pressEnter ?? true) ? args.content + "\n" : args.content
+            terminal.write(data)
+            result = { output: "Input sent to terminal." }
+          }
+          break
+        }
+        case "terminal_read": {
+          const terminal = this.config.terminal
+          if (!terminal) { result = { output: "Terminal not available." }; break }
+          if (!terminal.exists()) { result = { output: "No terminal exists." }; break }
+          const waitMs = Math.min(args.waitBefore ?? 0, 5000)
+          if (waitMs > 0) await new Promise(r => setTimeout(r, waitMs))
+          const output = terminal.read(args.length ?? 50)
+          result = { output: output || "(no output)" }
+          break
+        }
+        case "set_preview_url": {
+          const preview = this.config.preview
+          if (!preview) { result = { output: "Preview not available." }; break }
+          preview.setPreviewTarget(args.url)
+          result = { output: `Preview URL set to ${args.url}` }
+          break
+        }
+        default:
+          result = { output: `Unknown tool: ${toolName}` }
+      }
+      socket.write(JSON.stringify({ type: "tool_result", id, result }) + "\n")
+    } catch (err: any) {
+      socket.write(JSON.stringify({ type: "tool_result", id, error: err?.message ?? String(err) }) + "\n")
+    }
   }
 
   abort(): void {
