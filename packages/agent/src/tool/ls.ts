@@ -1,7 +1,8 @@
 import z from "zod"
 import { Tool } from "./tool"
 import * as path from "../util/path"
-import DESCRIPTION from "./ls.txt"
+const DESCRIPTION = `Lists files and directories in a given path. The path parameter must be absolute; omit it to use the current workspace directory. You can optionally provide an array of glob patterns to ignore with the ignore parameter. You should generally prefer the Glob and Grep tools, if you know which directories to search.
+`
 import { assertExternalDirectory } from "./external-directory"
 
 export const IGNORE_PATTERNS = [

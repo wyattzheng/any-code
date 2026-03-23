@@ -5,7 +5,20 @@ import { Session } from "../session"
 import { MessageV2 } from "../memory/message-v2"
 import { Provider } from "../provider/provider"
 import { type SessionID, MessageID, PartID } from "../session/schema"
-import EXIT_DESCRIPTION from "./plan-exit.txt"
+const EXIT_DESCRIPTION = `Use this tool when you have completed the planning phase and are ready to exit plan agent.
+
+This tool will ask the user if they want to switch to build agent to start implementing the plan.
+
+Call this tool:
+- After you have written a complete plan to the plan file
+- After you have clarified any questions with the user
+- When you are confident the plan is ready for implementation
+
+Do NOT call this tool:
+- Before you have created or finalized the plan
+- If you still have unanswered questions about the implementation
+- If the user has indicated they want to continue planning
+`
 
 async function getLastModel(context: import("../context").AgentContext, sessionID: SessionID) {
   for await (const item of MessageV2.stream(context, sessionID)) {
