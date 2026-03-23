@@ -520,10 +520,19 @@ function removeClient(sessionId: string, client: ClientLike) {
 
 function broadcast(sessionId: string, data: Record<string, unknown>) {
   const clients = sessionClients.get(sessionId)
-  if (!clients) return
+  if (!clients || clients.size === 0) {
+    if ((data as any).type?.startsWith("chat.")) {
+      console.warn(`⚠  broadcast(${sessionId}): 0 clients, dropping ${(data as any).type}`)
+    }
+    return
+  }
   const json = JSON.stringify(data)
+  let sent = 0
   for (const c of clients) {
-    if (c.readyState === WS.OPEN) c.send(json)
+    if (c.readyState === WS.OPEN) { c.send(json); sent++ }
+  }
+  if (sent === 0 && (data as any).type?.startsWith("chat.")) {
+    console.warn(`⚠  broadcast(${sessionId}): ${clients.size} clients but 0 OPEN, dropping ${(data as any).type}`)
   }
 }
 
@@ -589,6 +598,8 @@ async function handleClientMessage(sessionId: string, client: ClientLike, msg: a
       ? `[${fileContext.file} L${fileContext.lines[0]}–${fileContext.lines[fileContext.lines.length - 1]}]\n${message}`
       : message
 
+    const wsClients = sessionClients.get(sessionId)
+    console.log(`💬  chat.send(${sessionId}): "${message.slice(0, 40)}${message.length > 40 ? "..." : ""}" → ${wsClients?.size ?? 0} clients`)
     broadcast(sessionId, { type: "chat.userMessage", text: contextLabel })
 
     let aborted = false
