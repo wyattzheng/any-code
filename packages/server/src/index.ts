@@ -27,10 +27,8 @@ import { CodeAgent, Database, type NoSqlDb, type TerminalProvider, type PreviewP
 import { WebSocketServer, WebSocket as WS } from "ws"
 // @ts-expect-error — @lydell/node-pty has types but exports config doesn't expose them
 import * as pty from "@lydell/node-pty"
-import { SqlJsStorage } from "./storage-sqljs"
+import { SqlJsStorage, NodeFS, NodeSearchProvider } from "@any-code/utils"
 import { watch as chokidarWatch, type FSWatcher as ChokidarWatcher } from "chokidar"
-import { NodeFS } from "./vfs-node"
-import { NodeSearchProvider } from "./search-node"
 import { createChatAgent, type IChatAgent } from "./chat-agent"
 
 // ── Paths ──────────────────────────────────────────────────────────────────
@@ -1705,4 +1703,5 @@ export async function startServer() {
   })
 }
 
-export { CodeAgent, SqlJsStorage, NodeFS, NodeSearchProvider }
+export { CodeAgent, SqlJsStorage, NodeFS, NodeSearchProvider };
+export type { VirtualFileSystem, StorageProvider, Migration } from "@any-code/utils"

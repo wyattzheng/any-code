@@ -22,6 +22,7 @@
     },
     "devDependencies": {
         "@any-code/agent": "workspace:*",
+        "@any-code/utils": "workspace:*",
         "@any-code/app": "workspace:*",
         "@types/node": "^25.5.0",
         "@types/ws": "^8.18.1",
