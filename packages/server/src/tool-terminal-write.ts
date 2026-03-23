@@ -1,5 +1,5 @@
 import z from "zod"
-import { Tool } from "./tool"
+import { Tool } from "@any-code/agent"
 const DESCRIPTION = `Send input to the shared user terminal, or create/destroy it.
 
 This tool interacts with a single shared terminal (PTY) that is also visible to the user.

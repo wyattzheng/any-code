@@ -1,5 +1,5 @@
 import z from "zod"
-import { Tool } from "./tool"
+import { Tool } from "@any-code/agent"
 const DESCRIPTION = `Set the preview URL for the user's preview panel.
 
 This tool configures a reverse proxy so the user can preview a locally running web application directly in the IDE's preview tab. A dedicated preview port on the server proxies all requests to the given local URL.

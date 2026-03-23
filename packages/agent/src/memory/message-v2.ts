@@ -3,7 +3,7 @@ import { SessionID, MessageID, PartID } from "../session/schema"
 import z from "zod"
 import { NamedError } from "../util/error"
 import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessage, type UIMessage } from "ai"
-import { LSP } from "../util/lsp"
+
 
 import { fn } from "../util/fn"
 import { NotFoundError } from "../storage"
@@ -159,7 +159,10 @@ export namespace MessageV2 {
   export const SymbolSource = FilePartSourceBase.extend({
     type: z.literal("symbol"),
     path: z.string(),
-    range: LSP.Range,
+    range: z.object({
+      start: z.object({ line: z.number(), character: z.number() }),
+      end: z.object({ line: z.number(), character: z.number() }),
+    }),
     name: z.string(),
     kind: z.number().int(),
   }).meta({

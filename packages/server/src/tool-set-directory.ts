@@ -1,5 +1,5 @@
 import z from "zod"
-import { Tool } from "./tool"
+import { Tool } from "@any-code/agent"
 
 export const SetWorkingDirectoryTool = Tool.define("set_user_watch_project", {
   description: `Let the user's frontend UI watch a project directory. This activates the file browser, diff viewer, and other project-related UI panels for the user to see and interact with.

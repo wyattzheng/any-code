@@ -1,5 +1,5 @@
 import z from "zod"
-import { Tool } from "./tool"
+import { Tool } from "@any-code/agent"
 const DESCRIPTION = `Read the terminal output from the bottom of the buffer.
 
 Returns the last N lines from the shared user terminal. Use this after sending a command via terminal_write to see its output.
