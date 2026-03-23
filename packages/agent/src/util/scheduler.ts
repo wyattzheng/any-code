@@ -1,11 +1,10 @@
 import type { AgentContext } from "../context"
-import { Log } from "../util/log"
+import { consoleLogger } from "@any-code/utils"
 
 /**
  * SchedulerService — per-instance task scheduler with interval timers.
  */
 export class SchedulerService {
-  private log = Log.create({ service: "scheduler" })
   private tasks = new Map<string, SchedulerService.Task>()
   private timers = new Map<string, ReturnType<typeof setInterval>>()
 
@@ -23,9 +22,9 @@ export class SchedulerService {
   }
 
   private async run(task: SchedulerService.Task) {
-    this.log.info("run", { id: task.id })
+    consoleLogger.info(`[scheduler] run ${task.id}`)
     await task.run().catch((error) => {
-      this.log.error("run failed", { id: task.id, error })
+      consoleLogger.error(`[scheduler] run failed ${task.id}`, error)
     })
   }
 

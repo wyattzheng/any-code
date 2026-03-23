@@ -2,10 +2,8 @@ import type { AgentContext } from "../context"
 import z from "zod"
 import * as path from "../util/path"
 import { Filesystem } from "../util/filesystem"
-import { Log } from "../util/log"
 
 export namespace Patch {
-  const log = Log.create({ service: "patch" })
 
   // Schema definitions
   export const PatchSchema = z.object({
@@ -535,13 +533,13 @@ export namespace Patch {
 
           await Filesystem.write(context, hunk.path, hunk.contents)
           added.push(hunk.path)
-          log.info(`Added file: ${hunk.path}`)
+          context.log.create({ service: "patch" }).info(`Added file: ${hunk.path}`)
           break
 
         case "delete":
           await Filesystem.remove(context, hunk.path)
           deleted.push(hunk.path)
-          log.info(`Deleted file: ${hunk.path}`)
+          context.log.create({ service: "patch" }).info(`Deleted file: ${hunk.path}`)
           break
 
         case "update":
@@ -557,12 +555,12 @@ export namespace Patch {
             await Filesystem.write(context, hunk.move_path, fileUpdate.content)
             await Filesystem.remove(context, hunk.path)
             modified.push(hunk.move_path)
-            log.info(`Moved file: ${hunk.path} -> ${hunk.move_path}`)
+            context.log.create({ service: "patch" }).info(`Moved file: ${hunk.path} -> ${hunk.move_path}`)
           } else {
             // Regular update
             await Filesystem.write(context, hunk.path, fileUpdate.content)
             modified.push(hunk.path)
-            log.info(`Updated file: ${hunk.path}`)
+            context.log.create({ service: "patch" }).info(`Updated file: ${hunk.path}`)
           }
           break
       }

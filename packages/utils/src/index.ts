@@ -5,6 +5,10 @@
  * interfaces for the Node.js platform.
  */
 
+// Logger
+export type { Logger } from "./logger"
+export { consoleLogger } from "./logger"
+
 // Interfaces
 export type { VirtualFileSystem, VFSStat, VFSDirEntry, GrepOptions, GrepMatch } from "./vfs"
 export type { StorageProvider, Migration } from "./storage"

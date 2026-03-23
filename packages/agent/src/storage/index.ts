@@ -432,7 +432,6 @@ function deserializeRow(row: Record<string, any>): Record<string, any> {
 // ── Storage ─────────────────────────────────────────────────────────────────
 
 import type { AgentContext } from "../context"
-import { Log } from "../util/log"
 import fs from "fs/promises"
 import { Filesystem } from "../util/filesystem"
 import { lazy } from "../util/lazy"
@@ -441,7 +440,9 @@ import { Glob } from "../util/glob"
 
 
 export namespace Storage {
-  const log = Log.create({ service: "storage" })
+  function getLog(context: AgentContext) {
+    return context.log.create({ service: "storage" })
+  }
 
   type Migration = (context: AgentContext, dir: string) => Promise<void>
 
@@ -463,7 +464,7 @@ export namespace Storage {
       for (const projectDir of projectDirs) {
         const fullPath = path.join(project, projectDir)
         if (!(await Filesystem.isDir(context, fullPath))) continue
-        log.info(`migrating project ${projectDir}`)
+        getLog(context).info(`migrating project ${projectDir}`)
         let projectID = projectDir
         const fullProjectDir = path.join(project, projectDir)
         let worktree = "/"
@@ -501,39 +502,39 @@ export namespace Storage {
             },
           })
 
-          log.info(`migrating sessions for project ${projectID}`)
+          getLog(context).info(`migrating sessions for project ${projectID}`)
           for (const sessionFile of await Glob.scan(context, "storage/session/info/*.json", {
             cwd: fullProjectDir,
             absolute: true,
           })) {
             const dest = path.join(dir, "session", projectID, path.basename(sessionFile))
-            log.info("copying", {
+            getLog(context).info("copying", {
               sessionFile,
               dest,
             })
             const session = await Filesystem.readJson<any>(context, sessionFile)
             await Filesystem.writeJson(context, dest, session)
-            log.info(`migrating messages for session ${session.id}`)
+            getLog(context).info(`migrating messages for session ${session.id}`)
             for (const msgFile of await Glob.scan(context, `storage/session/message/${session.id}/*.json`, {
               cwd: fullProjectDir,
               absolute: true,
             })) {
               const dest = path.join(dir, "message", session.id, path.basename(msgFile))
-              log.info("copying", {
+              getLog(context).info("copying", {
                 msgFile,
                 dest,
               })
               const message = await Filesystem.readJson<any>(context, msgFile)
               await Filesystem.writeJson(context, dest, message)
 
-              log.info(`migrating parts for message ${message.id}`)
+              getLog(context).info(`migrating parts for message ${message.id}`)
               for (const partFile of await Glob.scan(context, `storage/session/part/${session.id}/${message.id}/*.json`, {
                 cwd: fullProjectDir,
                 absolute: true,
               })) {
                 const dest = path.join(dir, "part", message.id, path.basename(partFile))
                 const part = await Filesystem.readJson(context, partFile)
-                log.info("copying", {
+                getLog(context).info("copying", {
                   partFile,
                   dest,
                 })
@@ -571,9 +572,9 @@ export namespace Storage {
       .then((x) => parseInt(x))
       .catch(() => 0)
     for (let index = migration; index < MIGRATIONS.length; index++) {
-      log.info("running migration", { index })
+      getLog(context).info("running migration", { index })
       const migrationFn = MIGRATIONS[index]
-      await migrationFn(context, dir).catch(() => log.error("failed to run migration", { index }))
+      await migrationFn(context, dir).catch(() => getLog(context).error("failed to run migration", { index }))
       await Filesystem.write(context, path.join(dir, "migration"), (index + 1).toString())
     }
     return dir

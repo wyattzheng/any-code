@@ -1,5 +1,4 @@
 import type { AgentContext } from "../context"
-import { Log } from "../util/log"
 import * as path from "../util/path"
 import z from "zod"
 import { Installation } from "../util/installation"
@@ -11,7 +10,6 @@ import { Filesystem } from "../util/filesystem"
 /* @ts-ignore */
 
 export namespace ModelsDev {
-  const log = Log.create({ service: "models.dev" })
   export function filepath(context: AgentContext) {
     return path.join(context.dataPath, "models.json")
   }
@@ -129,7 +127,7 @@ export namespace ModelsDev {
       },
       signal: AbortSignal.timeout(10 * 1000),
     }).catch((e) => {
-      log.error("Failed to fetch models.dev", {
+      context.log.create({ service: "models.dev" }).error("Failed to fetch models.dev", {
         error: e,
       })
     })
@@ -137,7 +135,7 @@ export namespace ModelsDev {
       try {
         await Filesystem.write(context, filepath(context), await result.text())
       } catch (e) {
-        log.warn("Failed to write models cache", { error: e })
+        context.log.create({ service: "models.dev" }).warn("Failed to write models cache", { error: e })
       }
     }
   }

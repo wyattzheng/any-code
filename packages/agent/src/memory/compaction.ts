@@ -4,12 +4,10 @@ import { SessionID, MessageID, PartID } from "../session/schema"
 import { MessageV2 } from "./message-v2"
 import { Provider } from "../provider/provider"
 import { VendorRegistry } from "../provider/vendors"
-import { Log } from "../util/log"
 import { Token } from "../util/fn"
 import { LLMRunner } from "../llm-runner"
 
 export namespace ContextCompaction {
-  const log = Log.create({ service: "context.compaction" })
 
   const COMPACTION_BUFFER = 20_000
 
@@ -43,7 +41,7 @@ export namespace ContextCompaction {
   export async function prune(context: AgentContext, input: { sessionID: SessionID }) {
     const config = context.config
     if (config.compaction?.prune === false) return
-    log.info("pruning")
+    context.log.create({ service: "context.compaction" }).info("pruning")
     const msgs = await context.memory.messages({ sessionID: input.sessionID })
     let total = 0
     let pruned = 0
@@ -71,7 +69,7 @@ export namespace ContextCompaction {
           }
       }
     }
-    log.info("found", { pruned, total })
+    context.log.create({ service: "context.compaction" }).info("found", { pruned, total })
     if (pruned > PRUNE_MINIMUM) {
       for (const part of toPrune) {
         if (part.state.status === "completed") {
@@ -79,7 +77,7 @@ export namespace ContextCompaction {
           await context.memory.updatePart(part)
         }
       }
-      log.info("pruned", { count: toPrune.length })
+      context.log.create({ service: "context.compaction" }).info("pruned", { count: toPrune.length })
     }
   }
 

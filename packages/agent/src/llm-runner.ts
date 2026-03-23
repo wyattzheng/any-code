@@ -8,7 +8,6 @@ import { SystemPrompt } from "./prompt"
 import { Flag } from "./util/flag"
 import { Installation } from "./util/installation"
 import { Auth } from "./util/auth"
-import { Log } from "./util/log"
 import { MessageV2 } from "./memory/message-v2"
 import { Session, SessionService } from "./session"
 import { PartID, SessionID } from "./session/schema"
@@ -120,7 +119,6 @@ export namespace SessionRetry {
 }
 
 export namespace LLM {
-  const log = Log.create({ service: "llm" })
   export const OUTPUT_TOKEN_MAX = VendorRegistry.getModelProvider().getOutputTokenMax()
 
   export type StreamInput = {
@@ -141,7 +139,7 @@ export namespace LLM {
   export type StreamOutput = StreamTextResult<ToolSet, unknown>
 
   export async function stream(context: AgentContext, input: StreamInput) {
-    const l = log
+    const l = context.log.create({ service: "llm" })
       .clone()
       .tag("providerID", input.model.providerID)
       .tag("modelID", input.model.id)
@@ -337,7 +335,6 @@ export namespace LLM {
 
 export namespace LLMRunner {
   const DOOM_LOOP_THRESHOLD = 3
-  const log = Log.create({ service: "session.processor" })
 
   export type Info = Awaited<ReturnType<typeof create>>
   export type Result = Awaited<ReturnType<Info["process"]>>
@@ -364,7 +361,7 @@ export namespace LLMRunner {
         return toolcalls[toolCallID]
       },
       async process(streamInput: LLM.StreamInput) {
-        log.info("process")
+        input.context.log.create({ service: "session.processor" }).info("process")
         needsCompaction = false
         const shouldBreak = (input.context.config).experimental?.continue_loop_on_deny !== true
         while (true) {
@@ -619,7 +616,7 @@ export namespace LLMRunner {
                   break
 
                 default:
-                  log.info("unhandled", {
+                  input.context.log.create({ service: "session.processor" }).info("unhandled", {
                     ...value,
                   })
                   continue
@@ -627,7 +624,7 @@ export namespace LLMRunner {
               if (needsCompaction) break
             }
           } catch (e: any) {
-            log.error("process", {
+            input.context.log.create({ service: "session.processor" }).error("process", {
               error: e,
               stack: JSON.stringify(e.stack),
             })

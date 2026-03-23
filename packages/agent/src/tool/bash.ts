@@ -2,7 +2,6 @@ import z from "zod"
 import { Tool } from "./tool"
 import * as path from "../util/path"
 import DESCRIPTION from "./bash.txt"
-import { Log } from "../util/log"
 
 import { Filesystem } from "../util/filesystem"
 import { Flag } from "../util/flag"
@@ -12,7 +11,6 @@ import { Truncate } from "./truncation"
 const MAX_METADATA_LENGTH = 30_000
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
 
-export const log = Log.create({ service: "bash-tool" })
 
 // ── Simple bash command parser ─────────────────────────────────────────────
 // Extracts individual commands from a bash string by splitting on ;, &&, ||, |
@@ -129,6 +127,7 @@ export const BashTool = Tool.define("bash", async (initCtx?: Tool.InitContext) =
           for (const arg of args) {
             if (arg.startsWith("-") || (name === "chmod" && arg.startsWith("+"))) continue
             const resolved = Filesystem.resolve(path.resolve(cwd, arg))
+            const log = ctx.log.create({ service: "bash-tool" })
             log.info("resolved path", { arg, resolved })
             if (resolved) {
               if (!ctx.containsPath(resolved)) {

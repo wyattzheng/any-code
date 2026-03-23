@@ -1,153 +1,167 @@
-import * as path from "./path"
 import z from "zod"
+import { type Logger, consoleLogger } from "@any-code/utils"
 
-export namespace Log {
-  export const Level = z.enum(["DEBUG", "INFO", "WARN", "ERROR"]).meta({ ref: "LogLevel", description: "Log level" })
-  export type Level = z.infer<typeof Level>
+export const LogLevel = z.enum(["DEBUG", "INFO", "WARN", "ERROR"]).meta({ ref: "LogLevel", description: "Log level" })
+export type LogLevel = z.infer<typeof LogLevel>
 
-  const levelPriority: Record<Level, number> = {
+const levelPriority: Record<LogLevel, number> = {
     DEBUG: 0,
     INFO: 1,
     WARN: 2,
     ERROR: 3,
-  }
+}
 
-  let level: Level = "INFO"
-
-  function shouldLog(input: Level): boolean {
-    return levelPriority[input] >= levelPriority[level]
-  }
-
-  export type Logger = {
+export type LogEntry = {
     debug(message?: any, extra?: Record<string, any>): void
     info(message?: any, extra?: Record<string, any>): void
     error(message?: any, extra?: Record<string, any>): void
     warn(message?: any, extra?: Record<string, any>): void
-    tag(key: string, value: string): Logger
-    clone(): Logger
+    tag(key: string, value: string): LogEntry
+    clone(): LogEntry
     time(
-      message: string,
-      extra?: Record<string, any>,
+        message: string,
+        extra?: Record<string, any>,
     ): {
-      stop(): void
-      [Symbol.dispose](): void
+        stop(): void
+        [Symbol.dispose](): void
     }
-  }
+}
 
-  const loggers = new Map<string, Logger>()
-
-  export const Default = create({ service: "default" })
-
-  export interface Options {
+export interface LogOptions {
     print: boolean
     dev?: boolean
-    level?: Level
-  }
+    level?: LogLevel
+    logger?: Logger
+}
 
-  /** The write function can be replaced at init time (e.g. to write to a file stream) */
-  let write = (msg: any) => {
-    console.error(msg)
-    return msg.length
-  }
+/**
+ * Log — multi-instance logging facility.
+ *
+ * Each instance owns its own logger, level, and write function.
+ * Consumers instantiate via `new Log(options)` and call `.create()`.
+ */
+export class Log {
+    private level: LogLevel = "INFO"
+    private _logger: Logger
+    private loggers = new Map<string, LogEntry>()
+    private last = Date.now()
 
-  export async function init(options: Options & { writer?: (msg: string) => void }) {
-    if (options.level) level = options.level
-    if (options.writer) {
-      write = (msg: any) => {
-        options.writer!(msg)
-        return msg.length
-      }
-    }
-  }
+    private write: (msg: string) => number
 
-  function formatError(error: Error, depth = 0): string {
-    const result = error.message
-    return error.cause instanceof Error && depth < 10
-      ? result + " Caused by: " + formatError(error.cause, depth + 1)
-      : result
-  }
-
-  let last = Date.now()
-  export function create(tags?: Record<string, any>) {
-    tags = tags || {}
-
-    const service = tags["service"]
-    if (service && typeof service === "string") {
-      const cached = loggers.get(service)
-      if (cached) {
-        return cached
-      }
+    constructor(options?: { level?: LogLevel; logger?: Logger }) {
+        this._logger = options?.logger ?? consoleLogger
+        if (options?.level) this.level = options.level
+        this.write = (msg: string) => {
+            this._logger.error(msg)
+            return msg.length
+        }
     }
 
-    function build(message: any, extra?: Record<string, any>) {
-      const prefix = Object.entries({
-        ...tags,
-        ...extra,
-      })
-        .filter(([_, value]) => value !== undefined && value !== null)
-        .map(([key, value]) => {
-          const prefix = `${key}=`
-          if (value instanceof Error) return prefix + formatError(value)
-          if (typeof value === "object") return prefix + JSON.stringify(value)
-          return prefix + value
-        })
-        .join(" ")
-      const next = new Date()
-      const diff = next.getTime() - last
-      last = next.getTime()
-      return [next.toISOString().split(".")[0], "+" + diff + "ms", prefix, message].filter(Boolean).join(" ") + "\n"
+    private shouldLog(input: LogLevel): boolean {
+        return levelPriority[input] >= levelPriority[this.level]
     }
-    const result: Logger = {
-      debug(message?: any, extra?: Record<string, any>) {
-        if (shouldLog("DEBUG")) {
-          write("DEBUG " + build(message, extra))
+
+    init(options: LogOptions & { writer?: (msg: string) => void }) {
+        if (options.level) this.level = options.level
+        if (options.logger) this._logger = options.logger
+        if (options.writer) {
+            this.write = (msg: string) => {
+                options.writer!(msg)
+                return msg.length
+            }
         }
-      },
-      info(message?: any, extra?: Record<string, any>) {
-        if (shouldLog("INFO")) {
-          write("INFO  " + build(message, extra))
+    }
+
+    private formatError(error: Error, depth = 0): string {
+        const result = error.message
+        return error.cause instanceof Error && depth < 10
+            ? result + " Caused by: " + this.formatError(error.cause, depth + 1)
+            : result
+    }
+
+    create(tags?: Record<string, any>): LogEntry {
+        tags = tags || {}
+
+        const service = tags["service"]
+        if (service && typeof service === "string") {
+            const cached = this.loggers.get(service)
+            if (cached) {
+                return cached
+            }
         }
-      },
-      error(message?: any, extra?: Record<string, any>) {
-        if (shouldLog("ERROR")) {
-          write("ERROR " + build(message, extra))
+
+        const self = this
+
+        function build(message: any, extra?: Record<string, any>) {
+            const prefix = Object.entries({
+                ...tags,
+                ...extra,
+            })
+                .filter(([_, value]) => value !== undefined && value !== null)
+                .map(([key, value]) => {
+                    const prefix = `${key}=`
+                    if (value instanceof Error) return prefix + self.formatError(value)
+                    if (typeof value === "object") return prefix + JSON.stringify(value)
+                    return prefix + value
+                })
+                .join(" ")
+            const next = new Date()
+            const diff = next.getTime() - self.last
+            self.last = next.getTime()
+            return [next.toISOString().split(".")[0], "+" + diff + "ms", prefix, message].filter(Boolean).join(" ") + "\n"
         }
-      },
-      warn(message?: any, extra?: Record<string, any>) {
-        if (shouldLog("WARN")) {
-          write("WARN  " + build(message, extra))
+
+        const result: LogEntry = {
+            debug(message?: any, extra?: Record<string, any>) {
+                if (self.shouldLog("DEBUG")) {
+                    self.write("DEBUG " + build(message, extra))
+                }
+            },
+            info(message?: any, extra?: Record<string, any>) {
+                if (self.shouldLog("INFO")) {
+                    self.write("INFO  " + build(message, extra))
+                }
+            },
+            error(message?: any, extra?: Record<string, any>) {
+                if (self.shouldLog("ERROR")) {
+                    self.write("ERROR " + build(message, extra))
+                }
+            },
+            warn(message?: any, extra?: Record<string, any>) {
+                if (self.shouldLog("WARN")) {
+                    self.write("WARN  " + build(message, extra))
+                }
+            },
+            tag(key: string, value: string) {
+                if (tags) tags[key] = value
+                return result
+            },
+            clone() {
+                return self.create({ ...tags })
+            },
+            time(message: string, extra?: Record<string, any>) {
+                const now = Date.now()
+                result.info(message, { status: "started", ...extra })
+                function stop() {
+                    result.info(message, {
+                        status: "completed",
+                        duration: Date.now() - now,
+                        ...extra,
+                    })
+                }
+                return {
+                    stop,
+                    [Symbol.dispose]() {
+                        stop()
+                    },
+                }
+            },
         }
-      },
-      tag(key: string, value: string) {
-        if (tags) tags[key] = value
+
+        if (service && typeof service === "string") {
+            this.loggers.set(service, result)
+        }
+
         return result
-      },
-      clone() {
-        return Log.create({ ...tags })
-      },
-      time(message: string, extra?: Record<string, any>) {
-        const now = Date.now()
-        result.info(message, { status: "started", ...extra })
-        function stop() {
-          result.info(message, {
-            status: "completed",
-            duration: Date.now() - now,
-            ...extra,
-          })
-        }
-        return {
-          stop,
-          [Symbol.dispose]() {
-            stop()
-          },
-        }
-      },
     }
-
-    if (service && typeof service === "string") {
-      loggers.set(service, result)
-    }
-
-    return result
-  }
 }

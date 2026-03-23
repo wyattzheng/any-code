@@ -20,7 +20,6 @@ import { ProviderID, type ModelID } from "../provider/schema"
 import { WebSearchTool } from "./websearch"
 import { CodeSearchTool } from "./codesearch"
 import { Flag } from "../util/flag"
-import { Log } from "../util/log"
 import { Truncate } from "./truncation"
 
 import { ApplyPatchTool } from "./apply_patch"
@@ -45,7 +44,6 @@ type ToolDefinition = {
 }
 
 export namespace ToolRegistry {
-  const log = Log.create({ service: "tool.registry" })
 
   /**
    * ToolRegistryService — caches resolved tool list.
@@ -161,7 +159,7 @@ export namespace ToolRegistry {
           return true
         })
         .map(async (t) => {
-          using _ = log.time(t.id)
+          using _ = context.log.create({ service: "tool.registry" }).time(t.id)
           const tool = await t.init({ agent, agentContext: context })
           const output = {
             description: tool.description,

@@ -9,7 +9,7 @@ import type { AgentContext } from "../context"
 import { Filesystem } from "../util/filesystem"
 import * as path from "../util/path"
 
-import { Log } from "../util/log"
+
 import { Flag } from "../util/flag"
 
 
@@ -125,12 +125,10 @@ export namespace FileIgnore {
 // ── FileTime ────────────────────────────────────────────────────────────────
 
 export class FileTimeService {
-  private log = Log.create({ service: "file.time" })
   private readTimes: { [sessionID: string]: { [path: string]: Date | undefined } } = {}
   private locks = new Map<string, Promise<void>>()
 
   read(sessionID: string, file: string) {
-    this.log.info("read", { sessionID, file })
     this.readTimes[sessionID] = this.readTimes[sessionID] || {}
     this.readTimes[sessionID][file] = new Date()
   }
@@ -203,7 +201,6 @@ export namespace FileTime {
 // ── Project ─────────────────────────────────────────────────────────────────
 
 export namespace Project {
-  const log = Log.create({ service: "project" })
 
   export const Info = z
     .object({

@@ -5,7 +5,6 @@ import z from "zod"
 
 import { NamedError } from "../util/error"
 import { ConfigMarkdown } from "../util/markdown"
-import { Log } from "../util/log"
 import { Filesystem } from "../util/filesystem"
 import { Flag } from "../util/flag"
 
@@ -17,7 +16,9 @@ import type { Agent } from "../agent"
 // ── Discovery ───────────────────────────────────────────────────────────────
 
 export namespace Discovery {
-  const log = Log.create({ service: "skill-discovery" })
+  function getLog(context: AgentContext) {
+    return context.log.create({ service: "skill-discovery" })
+  }
 
   type Index = {
     skills: Array<{
@@ -36,7 +37,7 @@ export namespace Discovery {
     return fetch(url)
       .then(async (response) => {
         if (!response.ok) {
-          log.error("failed to download", { url, status: response.status })
+          getLog(context).error("failed to download", { url, status: response.status })
           return false
         }
         if (response.body) {
@@ -47,7 +48,7 @@ export namespace Discovery {
         return true
       })
       .catch((err) => {
-        log.error("failed to download", { url, err })
+        getLog(context).error("failed to download", { url, err })
         return false
       })
   }
@@ -59,34 +60,34 @@ export namespace Discovery {
     const cache = dir(context)
     const host = base.slice(0, -1)
 
-    log.info("fetching index", { url: index })
+    getLog(context).info("fetching index", { url: index })
     const data = await fetch(index)
       .then(async (response) => {
         if (!response.ok) {
-          log.error("failed to fetch index", { url: index, status: response.status })
+          getLog(context).error("failed to fetch index", { url: index, status: response.status })
           return undefined
         }
         return response
           .json()
           .then((json) => json as Index)
           .catch((err: Error): any => {
-            log.error("failed to parse index", { url: index, err })
+            getLog(context).error("failed to parse index", { url: index, err })
             return undefined
           })
       })
       .catch((err: Error): any => {
-        log.error("failed to fetch index", { url: index, err })
+        getLog(context).error("failed to fetch index", { url: index, err })
         return undefined
       })
 
     if (!data?.skills || !Array.isArray(data.skills)) {
-      log.warn("invalid index format", { url: index })
+      getLog(context).warn("invalid index format", { url: index })
       return result
     }
 
     const list = data.skills.filter((skill: any) => {
       if (!skill?.name || !Array.isArray(skill.files)) {
-        log.warn("invalid skill entry", { url: index, skill })
+        getLog(context).warn("invalid skill entry", { url: index, skill })
         return false
       }
       return true
@@ -116,7 +117,9 @@ export namespace Discovery {
 // ── Skill ───────────────────────────────────────────────────────────────────
 
 export namespace Skill {
-  const log = Log.create({ service: "skill" })
+  function getLog(context: AgentContext) {
+    return context.log.create({ service: "skill" })
+  }
   export const Info = z.object({
     name: z.string(),
     description: z.string(),
@@ -183,7 +186,7 @@ export namespace Skill {
 
     const addSkill = async (match: string) => {
       const md = await ConfigMarkdown.parse(context, match).catch((err: Error | null): any => {
-        log.error("failed to load skill", { skill: match, err })
+        getLog(context).error("failed to load skill", { skill: match, err })
         return undefined
       })
 
@@ -194,7 +197,7 @@ export namespace Skill {
 
       // Warn on duplicate skill names
       if (skills[parsed.data.name]) {
-        log.warn("duplicate skill name", {
+        getLog(context).warn("duplicate skill name", {
           name: parsed.data.name,
           existing: skills[parsed.data.name].location,
           duplicate: match,
@@ -221,7 +224,7 @@ export namespace Skill {
       })
         .then((matches) => Promise.all(matches.map(addSkill)))
         .catch((error) => {
-          log.error(`failed to scan ${scope} skills`, { dir: root, error })
+          getLog(context).error(`failed to scan ${scope} skills`, { dir: root, error })
         })
     }
 
@@ -244,7 +247,7 @@ export namespace Skill {
     for (const skillPath of config.skills?.paths ?? []) {
       const resolved = path.isAbsolute(skillPath) ? skillPath : path.join(context.directory, skillPath)
       if (!(await Filesystem.isDir(context, resolved))) {
-        log.warn("skill path not found", { path: resolved })
+        getLog(context).warn("skill path not found", { path: resolved })
         continue
       }
       const matches = await Glob.scan(context, SKILL_PATTERN, {

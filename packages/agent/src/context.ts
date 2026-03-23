@@ -3,6 +3,7 @@ import { VFS } from "./util/vfs"
 import { SearchProvider } from "./util/search"
 import type { GitProvider } from "./util/git"
 import type { EnvService } from "./util/env"
+import type { Log } from "./util/log"
 
 import type { SchedulerService } from "./util/scheduler"
 import type { FileTimeService } from "./project"
@@ -125,4 +126,6 @@ export interface AgentContext {
   /** User settings loaded from ~/.anycode/settings.json */
   settings: Settings.Info
 
+  /** Multi-instance logger — each CodeAgent owns its own Log */
+  log: Log
 }

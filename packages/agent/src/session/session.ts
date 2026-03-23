@@ -5,7 +5,6 @@ import z from "zod"
 import { Filesystem } from "../util/filesystem"
 import { SessionID, MessageID, PartID } from "./schema"
 import { MessageV2 } from "../memory/message-v2"
-import { Log } from "../util/log"
 
 import { Session, SessionService } from "."
 import { Agent } from "../agent"
@@ -65,7 +64,9 @@ IMPORTANT:
 const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested structured output. You MUST use the StructuredOutput tool to provide your final response. Do NOT respond with plain text - you MUST call the StructuredOutput tool with your answer formatted according to the schema.`
 
 export namespace SessionPrompt {
-  const log = Log.create({ service: "session.prompt" })
+  function getLog(context: AgentContext) {
+    return context.log.create({ service: "session.prompt" })
+  }
 
   /**
    * SessionPromptService — manages active prompt session (single session).
@@ -224,7 +225,7 @@ export namespace SessionPrompt {
     agentContext: AgentContext
     onToolEvent?: (event: string, data?: any) => void
   }) {
-    using _ = log.time("resolveTools")
+    using _ = getLog(input.agentContext).time("resolveTools")
     const tools: Record<string, AITool> = {}
 
 
@@ -401,7 +402,7 @@ export namespace SessionPrompt {
               }
               break
             case "file:":
-              log.info("file", { mime: part.mime })
+              getLog(context).info("file", { mime: part.mime })
               // have to normalize, symbol search returns absolute paths
               // Decode the pathname since URL constructor doesn't automatically decode it
               const filepath = fileURLToPath(part.url)
@@ -500,7 +501,7 @@ export namespace SessionPrompt {
                     }
                   })
                   .catch((error) => {
-                    log.error("failed to read file", { error })
+                    getLog(context).error("failed to read file", { error })
                     const message = error instanceof Error ? error.message : error.toString()
                     errors.push(new NamedError.Unknown({ message }).toObject())
                     pieces.push({
@@ -824,7 +825,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           : MessageV2.toModelMessages(contextMessages, model)),
       ],
     })
-    const text = await result.text.catch((err) => log.error("failed to generate title", { error: err }))
+    const text = await result.text.catch((err) => getLog(input.context).error("failed to generate title", { error: err }))
     if (text) {
       const cleaned = text
         .replace(/<think>[\s\S]*?<\/think>\s*/g, "")

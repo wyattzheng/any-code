@@ -15,7 +15,6 @@ import { NotFoundError } from "../storage"
 import type { Filter } from "../storage"
 
 import { Storage } from "../storage"
-import { Log } from "../util/log"
 import { MessageV2 } from "../memory/message-v2"
 
 import { fn } from "../util/fn"
@@ -38,7 +37,6 @@ const WorkspaceID = { zod: z.string() }
 // WorkspaceContext stub (control-plane removed)
 const WorkspaceContext = { workspaceID: undefined as string | undefined }
 
-const log = Log.create({ service: "session" })
 
 const parentTitlePrefix = "New session - "
 const childTitlePrefix = "Child session - "
@@ -164,7 +162,7 @@ export class SessionService extends EventEmitter {
         updated: Date.now(),
       },
     }
-    log.info("created", result)
+    this.ctx.log.create({ service: "session" }).info("created", result)
     {
       this.ctx.db.insert("session", toRow(result))
       this.emit("session.created", { info: result })

@@ -35,6 +35,9 @@ importers:
       '@ai-sdk/provider-utils':
         specifier: 3.0.21
         version: 3.0.21(zod@4.1.8)
+      '@any-code/utils':
+        specifier: workspace:*
+        version: link:../utils
       '@hono/node-server':
         specifier: ^1.13.0
         version: 1.19.11(hono@4.10.7)

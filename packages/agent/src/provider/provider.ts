@@ -3,7 +3,6 @@ import z from "zod"
 import fuzzysort from "fuzzysort"
 import { mapValues, mergeDeep, sortBy } from "remeda"
 import { NoSuchModelError, type Provider as SDK } from "ai"
-import { Log } from "../util/log"
 import { Hash } from "../util/hash"
 import { NamedError } from "../util/error"
 import { ModelsDev } from "./models"
@@ -20,7 +19,9 @@ import type { ProviderLoaderResult, ProviderModelLoader, ProviderVarsLoader } fr
 const DEFAULT_CHUNK_TIMEOUT = 120_000
 
 export namespace Provider {
-  const log = Log.create({ service: "provider" })
+  function getLog(context: AgentContext) {
+    return context.log.create({ service: "provider" })
+  }
 
 
   function wrapSSE(res: Response, ms: number, ctl: AbortController) {
@@ -370,7 +371,7 @@ export namespace Provider {
 
     private async getSDK(model: Model) {
       try {
-        using _ = log.time("getSDK", {
+        using _ = getLog(this.context).time("getSDK", {
           providerID: model.providerID,
         })
         const s = await this._promise
@@ -452,7 +453,7 @@ export namespace Provider {
 
         const bundledFn = VendorRegistry.getModelProvider({ npm: model.api.npm }).getBundledProvider()
         if (bundledFn) {
-          log.info("using bundled provider", { providerID: model.providerID, pkg: model.api.npm })
+          getLog(this.context).info("using bundled provider", { providerID: model.providerID, pkg: model.api.npm })
           const loaded = bundledFn({
             name: model.providerID,
             ...options,
@@ -468,7 +469,7 @@ export namespace Provider {
     }
 
     private async init(context: AgentContext) {
-      using _ = log.time("state")
+      using _ = getLog(context).time("state")
       const config = context.config
       const modelsDev = await ModelsDev.get(context)
       const database = mapValues(modelsDev, fromModelsDevProvider)
@@ -492,7 +493,7 @@ export namespace Provider {
       } = {}
       const sdk = new Map<string, SDK>()
 
-      log.info("init")
+      getLog(context).info("init")
 
       const configProviders = Object.entries(config.provider ?? {})
 
@@ -621,7 +622,7 @@ export namespace Provider {
         if (disabled.has(providerID)) continue
         const data = database[providerID]
         if (!data) {
-          log.error("Provider does not exist in model list " + providerID)
+          getLog(context).error("Provider does not exist in model list " + providerID)
           continue
         }
         const result = (await fn(context, data)) as ProviderLoaderResult
@@ -673,7 +674,7 @@ export namespace Provider {
           continue
         }
 
-        log.info("found", { providerID })
+        getLog(context).info("found", { providerID })
       }
 
       return {

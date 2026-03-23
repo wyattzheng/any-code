@@ -6,9 +6,7 @@
  */
 
 import { spawn } from "child_process"
-import { Log } from "./util/log"
-
-const log = Log.create({ module: "hooks" })
+import { consoleLogger } from "@any-code/utils"
 
 export namespace Hooks {
   export interface HookDef {
@@ -111,7 +109,7 @@ export namespace Hooks {
       proc.on("exit", () => clearTimeout(timer))
       proc.on("error", () => clearTimeout(timer))
     } catch (err) {
-      log.info(`Hook execution failed: ${err}`)
+      consoleLogger.info(`[hooks] Hook execution failed: ${err}`)
     }
   }
 

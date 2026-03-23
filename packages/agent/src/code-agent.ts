@@ -33,6 +33,7 @@ import { EventEmitter } from "events"
 import { SchedulerService } from "./util/scheduler"
 import { FileTimeService } from "./project"
 import { Database } from "./storage"
+import { Log } from "./util/log"
 import { ToolRegistry } from "./tool/registry"
 import { Tool } from "./tool/tool"
 import { Session, SessionService } from "./session"
@@ -56,6 +57,7 @@ import { ModelsDev } from "./provider/models"
 import { Skill } from "./skill"
 
 import z from "zod"
+import type { Logger } from "@any-code/utils"
 
 import { NamedError } from "./util/error"
 import { defer } from "./util/fn"
@@ -196,6 +198,12 @@ export interface CodeAgentOptions {
      * Passed through to ToolRegistryService for inclusion in tool list.
      */
     extraTools?: Tool.Info[]
+
+    /**
+     * Logger implementation.
+     * Optional — when not provided, falls back to console.
+     */
+    logger?: Logger
 }
 
 export interface CodeAgentSession {
@@ -282,6 +290,8 @@ export class CodeAgent extends EventEmitter {
     readonly scheduler: SchedulerService
     readonly fileTime: FileTimeService
 
+    readonly log: Log
+
     constructor(options: CodeAgentOptions) {
         super()
         this.options = options
@@ -292,6 +302,7 @@ export class CodeAgent extends EventEmitter {
         this.env = new EnvService()
         this.scheduler = new SchedulerService()
         this.fileTime = new FileTimeService()
+        this.log = new Log({ logger: options.logger })
     }
 
     /**
@@ -410,6 +421,7 @@ export class CodeAgent extends EventEmitter {
             scheduler: this.scheduler,
             fileTime: this.fileTime,
             memory: undefined as any, // will be set below after ctx is created
+            log: this.log,
         } as AgentContext
 
         // Create MemoryService (needs ctx reference)
@@ -701,7 +713,7 @@ export class CodeAgent extends EventEmitter {
                 })
 
             } catch (err: any) {
-                console.error("Error from SessionPrompt.prompt:", err)
+                this.log.create({ service: "code-agent" }).error("Error from SessionPrompt.prompt:", { error: err })
                 push({
                     type: "error",
                     error: err?.message ?? String(err),
