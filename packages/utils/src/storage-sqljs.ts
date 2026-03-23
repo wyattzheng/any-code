@@ -13,7 +13,7 @@
 import fs from "fs"
 import nodePath from "path"
 import type { StorageProvider, Migration } from "./storage"
-import type { NoSqlDb, RawSqliteDb } from "@any-code/agent"
+import { SqliteNoSqlDb, type NoSqlDb, type RawSqliteDb } from "./nosql"
 
 export class SqlJsStorage implements StorageProvider {
     private db: any = null
@@ -51,7 +51,6 @@ export class SqlJsStorage implements StorageProvider {
 
         // Wrap sql.js as RawSqliteDb
         const raw = this.createRawDb()
-        const { SqliteNoSqlDb } = await import("@any-code/agent")
         this.noSqlDb = new SqliteNoSqlDb(raw)
         return this.noSqlDb
     }

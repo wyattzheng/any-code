@@ -9,11 +9,21 @@
 export type { Logger } from "./logger"
 export { consoleLogger } from "./logger"
 
-// Interfaces
-export type { VirtualFileSystem, VFSStat, VFSDirEntry, GrepOptions, GrepMatch } from "./vfs"
+// NoSQL DB interfaces & implementation
+export type { NoSqlDb, RawSqliteDb, Filter, FindManyOptions } from "./nosql"
+export { SqliteNoSqlDb } from "./nosql"
+
+// Search interfaces
+export type { SearchProvider, GrepMatch } from "./search"
+
+// Storage interfaces
 export type { StorageProvider, Migration } from "./storage"
+
+// VFS interfaces
+export type { VirtualFileSystem, VFSStat, VFSDirEntry, GrepOptions, GrepMatch as VFSGrepMatch } from "./vfs"
 
 // Implementations
 export { NodeFS } from "./vfs-node"
 export { NodeSearchProvider } from "./search-node"
 export { SqlJsStorage } from "./storage-sqljs"
+
