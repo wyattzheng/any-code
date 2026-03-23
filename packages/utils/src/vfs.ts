@@ -57,11 +57,17 @@ export interface VirtualFileSystem {
     /** Get file/directory stats, returns undefined if not found */
     stat(path: string): Promise<VFSStat | undefined>
 
+    /** Check if a path is a directory */
+    isDir(path: string): Promise<boolean>
+
     /** Read file as UTF-8 text */
     readText(path: string): Promise<string>
 
     /** Read file as binary */
     readBytes(path: string): Promise<Uint8Array>
+
+    /** Read and parse a JSON file */
+    readJson<T = any>(path: string): Promise<T>
 
     /** List directory entries */
     readDir(path: string): Promise<VFSDirEntry[]>
@@ -70,6 +76,9 @@ export interface VirtualFileSystem {
 
     /** Write text or binary content to a file. Creates parent dirs if needed. */
     write(path: string, content: string | Uint8Array): Promise<void>
+
+    /** Write JSON data to a file (pretty-printed). Creates parent dirs if needed. */
+    writeJson(path: string, data: unknown): Promise<void>
 
     /** Create directory (and parents). No-op if already exists. */
     mkdir(path: string): Promise<void>

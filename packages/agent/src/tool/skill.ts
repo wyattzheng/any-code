@@ -6,7 +6,7 @@ import { Skill } from "../skill"
 import { iife } from "../util/fn"
 
 export const SkillTool = Tool.define("skill", async (ctx) => {
-  const list = await ctx?.agentContext?.skill.available(ctx?.agent) ?? []
+  const list = await ctx?.agentContext?.skill.all() ?? []
 
   const description =
     list.length === 0
@@ -27,7 +27,7 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
         ].join("\n")
 
   const examples = list
-    .map((skill) => `'${skill.name}'`)
+    .map((skill: Skill.Info) => `'${skill.name}'`)
     .slice(0, 3)
     .join(", ")
   const hint = examples.length > 0 ? ` (e.g., ${examples}, ...)` : ""
