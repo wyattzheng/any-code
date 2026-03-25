@@ -24,10 +24,9 @@ export namespace Provider {
   }
 
 
-  function wrapSSE(res: Response, ms: number, ctl: AbortController) {
+  function wrapStreamTimeout(res: Response, ms: number, ctl: AbortController) {
     if (typeof ms !== "number" || ms <= 0) return res
     if (!res.body) return res
-    if (!res.headers.get("content-type")?.includes("text/event-stream")) return res
 
     const reader = res.body.getReader()
     const body = new ReadableStream<Uint8Array>({
@@ -448,7 +447,7 @@ export namespace Provider {
           })
 
           if (!chunkAbortCtl) return res
-          return wrapSSE(res, chunkTimeout, chunkAbortCtl)
+          return wrapStreamTimeout(res, chunkTimeout, chunkAbortCtl)
         }
 
         const bundledFn = VendorRegistry.getModelProvider({ npm: model.api.npm }).getBundledProvider()
