@@ -150,7 +150,7 @@ export class SessionService extends EventEmitter {
     directory: string
   }) {
     const result: Session.Info = {
-      id: SessionID.descending(input.id),
+      id: input.id ?? SessionID.descending(),
       slug: Slug.create(),
       version: Installation.VERSION,
       projectID: this.ctx.project.id,
