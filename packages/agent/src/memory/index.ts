@@ -125,6 +125,25 @@ export class MemoryService extends EventEmitter {
       })
     }
   }
+
+  /**
+   * Remove all messages tagged with a specific chatId.
+   * Queries from DB so this works even after process restart.
+   */
+  async clearMessagesByChatId(chatId: string) {
+    const rows = this.context.db.findMany("message", {})
+    for (const row of rows) {
+      if (row.data?.chatId === chatId) {
+        this.context.db.remove("message", {
+          op: "and",
+          conditions: [
+            { op: "eq", field: "id", value: row.id },
+            { op: "eq", field: "session_id", value: row.session_id },
+          ],
+        })
+      }
+    }
+  }
 }
 
 /**

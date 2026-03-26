@@ -87,6 +87,7 @@ export namespace SessionPrompt {
   export const PromptInput = z.object({
     sessionID: SessionID.zod,
     messageID: MessageID.zod.optional(),
+    chatId: z.string().optional(),
     model: z
       .object({
         providerID: ProviderID.zod,
@@ -333,7 +334,7 @@ export namespace SessionPrompt {
     const model = input.model ?? (await lastModel(context, input.sessionID))
     const variant = input.variant ?? undefined
 
-    const info: MessageV2.Info = {
+    const info: MessageV2.Info & { chatId?: string } = {
       id: input.messageID ?? MessageID.ascending(),
       role: "user",
       sessionID: input.sessionID,
@@ -346,6 +347,7 @@ export namespace SessionPrompt {
       system: input.system,
       format: input.format,
       variant,
+      ...(input.chatId ? { chatId: input.chatId } : {}),
     }
 
 
