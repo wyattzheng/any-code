@@ -542,6 +542,11 @@ export class CodeAgent extends EventEmitter {
         const sessionId = this._currentSessionId!
         const ephemeral = options?.ephemeral ?? false
 
+        // Ephemeral mode: snapshot existing message IDs before this chat
+        const existingMessageIds = ephemeral
+            ? new Set(this._context.memory.getMessageIds(sessionId))
+            : null
+
         // Set up event stream
         const events: CodeAgentEvent[] = []
         let resolve: (() => void) | null = null
@@ -732,9 +737,13 @@ export class CodeAgent extends EventEmitter {
                 for (const unsub of unsubs) {
                     unsub()
                 }
-                // Ephemeral mode: clear messages after completion
-                if (ephemeral) {
-                    await this._context.memory.clearSessionMessages(sessionId).catch(() => {})
+                // Ephemeral mode: delete only messages created during this chat call
+                if (ephemeral && existingMessageIds) {
+                    const allIds = this._context.memory.getMessageIds(sessionId)
+                    const newIds = allIds.filter(id => !existingMessageIds.has(id))
+                    if (newIds.length > 0) {
+                        await this._context.memory.removeMessagesByIds(sessionId, newIds).catch(() => {})
+                    }
                 }
                 // Release the chat mutex
                 this._chatPromise = null

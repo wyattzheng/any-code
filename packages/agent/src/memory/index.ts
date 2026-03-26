@@ -84,11 +84,26 @@ export class MemoryService extends EventEmitter {
   }
 
   /**
-   * Delete all messages (and their parts via CASCADE) for a session.
-   * Used by ephemeral chat mode to start each round with a clean slate.
+   * Get all message IDs for a session.
    */
-  async clearSessionMessages(sessionID: any) {
-    this.context.db.remove("message", { op: "eq", field: "session_id", value: sessionID })
+  getMessageIds(sessionID: any): string[] {
+    const rows = this.context.db.findMany("message", { op: "eq", field: "session_id", value: sessionID })
+    return rows.map((r: any) => r.id)
+  }
+
+  /**
+   * Remove specific messages by their IDs.
+   */
+  async removeMessagesByIds(sessionID: any, messageIds: string[]) {
+    for (const id of messageIds) {
+      this.context.db.remove("message", {
+        op: "and",
+        conditions: [
+          { op: "eq", field: "id", value: id },
+          { op: "eq", field: "session_id", value: sessionID },
+        ],
+      })
+    }
   }
 }
 
