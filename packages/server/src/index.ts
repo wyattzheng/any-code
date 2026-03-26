@@ -321,7 +321,7 @@ async function createNewWindow(cfg: ServerConfig, isDefault = false): Promise<Se
   const pp = getOrCreatePreviewProvider(cfg, tempId)
 
   const chatAgent = createChatAgent(cfg.agent, createChatAgentConfig(cfg, "", undefined, tp, pp))
-  await chatAgent.ensureInit()
+  await chatAgent.init()
 
   const sessionId = chatAgent.sessionId
   const now = Date.now()

@@ -24,23 +24,24 @@ export type { CodeAgentEvent }
  * Delegates all IChatAgent methods to the underlying CodeAgent.
  */
 export class AnyCodeAgent implements IChatAgent {
-  readonly name = "AnyCode Agent"
+  readonly name: string
   private config: ChatAgentConfig
   private _codeAgent: InstanceType<typeof CodeAgent>
   private _initialized = false
 
   constructor(config: ChatAgentConfig) {
     this.config = config
+    this.name = config.name || "AnyCode Agent"
     if (!config.codeAgentOptions) {
       throw new Error("AnyCodeAgent requires codeAgentOptions in ChatAgentConfig")
     }
     this._codeAgent = new CodeAgent(config.codeAgentOptions)
   }
 
-  async ensureInit(): Promise<void> {
+  async init(): Promise<void> {
     if (!this._initialized) {
-      await this._codeAgent.init()
       this._initialized = true
+      await this._codeAgent.init()
     }
   }
 
@@ -49,7 +50,7 @@ export class AnyCodeAgent implements IChatAgent {
   }
 
   async *chat(input: string): AsyncGenerator<ChatAgentEvent, void, unknown> {
-    await this.ensureInit()
+    await this.init()
     yield* this._codeAgent.chat(input)
   }
 

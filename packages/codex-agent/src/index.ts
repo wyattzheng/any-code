@@ -16,7 +16,7 @@ import type { IChatAgent, ChatAgentEvent, ChatAgentConfig } from "@any-code/util
 export type { IChatAgent, ChatAgentEvent, ChatAgentConfig }
 
 export class CodexAgent implements IChatAgent {
-  readonly name = "Codex Agent"
+  readonly name: string
   readonly sessionId: string
   private config: ChatAgentConfig
   private abortController: AbortController | null = null
@@ -29,10 +29,11 @@ export class CodexAgent implements IChatAgent {
 
   constructor(config: ChatAgentConfig) {
     this.config = config
+    this.name = config.name || "Codex Agent"
     this.sessionId = `codex-${Date.now()}`
   }
 
-  async ensureInit(): Promise<void> {
+  async init(): Promise<void> {
     // Codex handles initialization internally when starting a thread
   }
 

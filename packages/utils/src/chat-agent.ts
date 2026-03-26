@@ -28,6 +28,8 @@ export interface ChatAgentConfig {
   apiKey: string
   model: string
   baseUrl?: string
+  /** Override the default agent name */
+  name?: string
   /** AnyCode-specific: full CodeAgentOptions for internal CodeAgent creation */
   codeAgentOptions?: any
   /** Terminal provider for the session (used by ClaudeCodeAgent MCP tools) */
@@ -55,7 +57,7 @@ export interface IChatAgent {
   abort(): void
 
   /** Ensure agent is ready (lazy init, idempotent) */
-  ensureInit(): Promise<void>
+  init(): Promise<void>
 
   /** Listen for agent events (directory.set, session.updated, etc.) */
   on(event: string, handler: (data: any) => void): void

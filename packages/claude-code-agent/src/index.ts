@@ -11,7 +11,7 @@ import type { IChatAgent, ChatAgentEvent, ChatAgentConfig } from "@any-code/util
 export type { IChatAgent, ChatAgentEvent, ChatAgentConfig }
 
 export class ClaudeCodeAgent implements IChatAgent {
-  readonly name = "Claude Code Agent"
+  readonly name: string
   readonly sessionId: string
   private abortController: AbortController | null = null
   private config: ChatAgentConfig
@@ -21,10 +21,11 @@ export class ClaudeCodeAgent implements IChatAgent {
 
   constructor(config: ChatAgentConfig) {
     this.config = config
+    this.name = config.name || "Claude Code Agent"
     this.sessionId = `claude-${Date.now()}`
   }
 
-  async ensureInit(): Promise<void> {
+  async init(): Promise<void> {
     // No async setup needed for Claude Code Agent
   }
 
