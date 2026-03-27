@@ -788,17 +788,17 @@ export function ConversationOverlay({ sessionId, fileContext, chatHandlerRef, ch
                             <>
                                 <button
                                     className="co-float-toggle"
-                                    onClick={toggleFloating}
-                                    title="浮动窗口"
-                                >
-                                    <UndockIcon />
-                                </button>
-                                <button
-                                    className="co-float-toggle"
                                     onClick={onPopIn}
                                     title="收回到对话 Tab"
                                 >
                                     <MinimizeIcon />
+                                </button>
+                                <button
+                                    className="co-float-toggle"
+                                    onClick={toggleFloating}
+                                    title="浮动窗口"
+                                >
+                                    <UndockIcon />
                                 </button>
                             </>
                         )}
@@ -828,7 +828,7 @@ export function ConversationOverlay({ sessionId, fileContext, chatHandlerRef, ch
                             onClick={onPopOut}
                             title="弹出为侧边栏"
                         >
-                            <UndockIcon />
+                            <PinIcon />
                         </button>
                     )}
                 </div>
