@@ -1,13 +1,19 @@
 import type { AgentContext } from "../context"
 import { EventEmitter } from "events"
-import { Slug } from "../util/slug"
 import * as path from "../util/path"
 import z from "zod"
-import { Installation } from "../util/installation"
 import { getUsage } from "../memory"
 
 import { NotFoundError } from "../util/error"
 import type { Filter } from "@any-code/utils"
+
+const SLUG_ADJ = ["brave","calm","clever","cosmic","crisp","curious","eager","gentle","glowing","happy","hidden","jolly","kind","lucky","mighty","misty","neon","nimble","playful","proud","quick","quiet","shiny","silent","stellar","sunny","swift","tidy","witty"] as const
+const SLUG_NOUN = ["cabin","cactus","canyon","circuit","comet","eagle","engine","falcon","forest","garden","harbor","island","knight","lagoon","meadow","moon","mountain","nebula","orchid","otter","panda","pixel","planet","river","rocket","sailor","squid","star","tiger","wizard","wolf"] as const
+function createSlug() {
+  return `${SLUG_ADJ[Math.floor(Math.random() * SLUG_ADJ.length)]}-${SLUG_NOUN[Math.floor(Math.random() * SLUG_NOUN.length)]}`
+}
+
+const AGENT_VERSION = "local"
 import { MessageV2 } from "../memory/message-v2"
 
 import { ProjectID } from "../project"
@@ -135,8 +141,8 @@ export class SessionService extends EventEmitter {
   }) {
     const result: Session.Info = {
       id: input.id ?? SessionID.descending(),
-      slug: Slug.create(),
-      version: Installation.VERSION,
+      slug: createSlug(),
+      version: AGENT_VERSION,
       projectID: this.ctx.project.id,
       directory: input.directory,
       workspaceID: input.workspaceID,

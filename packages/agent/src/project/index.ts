@@ -4,7 +4,7 @@ import type { Brand } from "../util/schema"
 import type { AgentContext } from "../context"
 import * as path from "../util/path"
 import { Flag } from "../util/flag"
-import { Glob } from "../util/glob"
+import { minimatch } from "minimatch"
 
 export type ProjectID = Brand<string, "ProjectID">
 
@@ -73,7 +73,7 @@ export namespace FileIgnore {
     opts?: { extra?: string[]; whitelist?: string[] },
   ) {
     for (const pattern of opts?.whitelist || []) {
-      if (Glob.match(pattern, filepath)) return false
+      if (minimatch(filepath, pattern, { dot: true })) return false
     }
     const parts = filepath.split(/[/\\]/)
     for (let i = 0; i < parts.length; i++) {
@@ -81,7 +81,7 @@ export namespace FileIgnore {
     }
     const extra = opts?.extra || []
     for (const pattern of [...FILES, ...extra]) {
-      if (Glob.match(pattern, filepath)) return true
+      if (minimatch(filepath, pattern, { dot: true })) return true
     }
     return false
   }
