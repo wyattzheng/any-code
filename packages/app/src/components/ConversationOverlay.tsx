@@ -585,8 +585,15 @@ export function ConversationOverlay({ sessionId, fileContext, chatHandlerRef, ch
     }, [position]);
     const onDragMove = useCallback((cx: number, cy: number) => {
         if (!dragRef.current) return;
-        setPosition({ x: dragRef.current.origX + cx - dragRef.current.startX, y: dragRef.current.origY + cy - dragRef.current.startY });
-    }, []);
+        const headerH = 36;
+        let x = dragRef.current.origX + cx - dragRef.current.startX;
+        let y = dragRef.current.origY + cy - dragRef.current.startY;
+        // Keep header visible: at least headerH pixels on screen vertically
+        y = Math.max(0, Math.min(y, window.innerHeight - headerH));
+        // Keep at least 60px of width visible horizontally
+        x = Math.max(-size.w + 60, Math.min(x, window.innerWidth - 60));
+        setPosition({ x, y });
+    }, [size.w]);
     const onDragEnd = useCallback(() => { dragRef.current = null; }, []);
 
     const handleMouseDown = (e: React.MouseEvent) => {
