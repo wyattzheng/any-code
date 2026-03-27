@@ -189,7 +189,7 @@ export function ConversationOverlay({ sessionId, fileContext, chatHandlerRef, ch
     useEffect(() => {
         if (chatBusyProp !== undefined) setBusy(chatBusyProp);
     }, [chatBusyProp]);
-    const [inputNarrow, setInputNarrow] = useState(false);
+    const [inputNarrow, setInputNarrow] = useState(true);
     const inputBarRef = useRef<HTMLDivElement>(null);
     const textInputRef = useRef<HTMLInputElement>(null);
 
@@ -198,7 +198,8 @@ export function ConversationOverlay({ sessionId, fileContext, chatHandlerRef, ch
         const el = inputBarRef.current;
         if (!el) return;
         const ro = new ResizeObserver(([entry]) => {
-            setInputNarrow(entry.contentRect.width < 200);
+            const w = entry.contentRect.width;
+            if (w > 0) setInputNarrow(w < 200);
         });
         ro.observe(el);
         return () => ro.disconnect();
