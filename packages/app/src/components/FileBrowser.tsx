@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useLayoutEffect } from "react";
 import type { DirEntry, FileContext } from "../App";
 import { ChevronIcon, FileDocIcon } from "./Icons";
 import { FileIcon } from "./FileIcon";
@@ -100,7 +100,7 @@ export function FileBrowser({ topLevel, requestLs, requestFile, onFileContext }:
     const dragRef = useRef<{ startPos: number; startSize: number } | null>(null);
     const [horizontal, setHorizontal] = useState(false);
 
-    useEffect(() => {
+    useLayoutEffect(() => {
         const el = containerRef.current;
         if (!el) return;
         const ro = new ResizeObserver((entries) => {
