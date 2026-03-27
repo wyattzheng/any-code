@@ -97,11 +97,14 @@ export function TerminalTab({ sessionId }: TerminalTabProps) {
             ws.onmessage = (e) => {
                 try {
                     const msg = JSON.parse(e.data);
-                    if (msg.type === "terminal.output") {
+                    if (msg.type === "terminal.sync") {
+                        // Full buffer from server — clear and write atomically
+                        term.reset();
+                        if (msg.data) term.write(msg.data);
+                    } else if (msg.type === "terminal.output") {
+                        // Live incremental output
                         term.write(msg.data);
                     } else if (msg.type === "terminal.ready") {
-                        term.clear();
-                        term.reset();
                         setAlive(true);
                         sendResize();
                     } else if (msg.type === "terminal.none") {

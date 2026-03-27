@@ -761,7 +761,6 @@ class TerminalStateModel {
   private rawBuffer: string[] = []
   private alive = false
   private wsClients = new Set<WS>()
-  private syncedClients = new WeakSet<WS>()
 
   // Callbacks set by NodeTerminalProvider for user input
   onInput: ((data: string) => void) | null = null
@@ -790,7 +789,6 @@ class TerminalStateModel {
   /** Clear all buffered state */
   reset(): void {
     this.rawBuffer = []
-    this.syncedClients = new WeakSet()
   }
 
   /** Broadcast a message to all connected clients */
@@ -802,32 +800,24 @@ class TerminalStateModel {
   }
 
   /**
-   * Full-state sync for a single client.
-   * Called after the client's first resize so the PTY size matches.
-   */
-  private syncClient(ws: WS): void {
-    if (this.syncedClients.has(ws)) return
-    this.syncedClients.add(ws)
-    for (const chunk of this.rawBuffer) {
-      if (ws.readyState === WS.OPEN) {
-        ws.send(JSON.stringify({ type: "terminal.output", data: chunk }))
-      }
-    }
-  }
-
-  /**
    * Register a new WebSocket client and manage its lifecycle.
    *  1. Send current state (ready / none)
-   *  2. First resize → full sync (replay buffer)
-   *  3. After that, live updates via notify()
+   *  2. Send full buffer as a single terminal.sync message
+   *  3. Add to live broadcast set AFTER sync (no race condition)
    */
   handleClient(ws: WS): void {
-    this.wsClients.add(ws)
-
     // 1. Current state
     ws.send(JSON.stringify({ type: this.alive ? "terminal.ready" : "terminal.none" }))
 
-    // 2. Messages
+    // 2. Full buffer sync as single atomic message (before joining live set)
+    if (this.rawBuffer.length > 0) {
+      ws.send(JSON.stringify({ type: "terminal.sync", data: this.rawBuffer.join("") }))
+    }
+
+    // 3. NOW add to live set — all future pushOutput() will reach this client
+    this.wsClients.add(ws)
+
+    // 4. Messages
     ws.on("message", (raw: Buffer | string) => {
       try {
         const msg = JSON.parse(raw.toString())
@@ -835,12 +825,11 @@ class TerminalStateModel {
           this.onInput?.(msg.data)
         } else if (msg.type === "terminal.resize") {
           this.onResize?.(msg.cols, msg.rows)
-          this.syncClient(ws)
         }
       } catch { /* ignore */ }
     })
 
-    // 3. Cleanup
+    // 5. Cleanup
     ws.on("close", () => { this.wsClients.delete(ws) })
   }
 }
