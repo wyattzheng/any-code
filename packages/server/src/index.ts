@@ -1263,8 +1263,12 @@ function serveStatic(cfg: ServerConfig, req: http.IncomingMessage, res: http.Ser
   const filePath = path.join(cfg.appDist, url)
   if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
     const ext = path.extname(filePath)
-    res.writeHead(200, { "Content-Type": MIME_TYPES[ext] || "application/octet-stream" })
-    fs.createReadStream(filePath).pipe(res)
+    const data = fs.readFileSync(filePath)
+    res.writeHead(200, {
+      "Content-Type": MIME_TYPES[ext] || "application/octet-stream",
+      "Content-Length": data.length,
+    })
+    res.end(data)
     return true
   }
   return false
