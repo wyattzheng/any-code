@@ -5,7 +5,7 @@ import { type ProviderMetadata } from "ai"
 import { EventEmitter } from "events"
 
 import { MessageV2 } from "./message-v2"
-import type { Provider } from "../provider/provider"
+import type { Provider } from "@any-code/provider"
 import type { LanguageModelV2Usage } from "@ai-sdk/provider"
 
 import { fn } from "../util/fn"

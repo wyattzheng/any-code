@@ -10,11 +10,9 @@ import { NotFoundError } from "../storage"
 import type { Filter } from "../storage"
 import { STATUS_CODES } from "http"
 import { Storage } from "../storage"
-import { ProviderError } from "../provider/error"
+import { ProviderError, type Provider, ModelID, ProviderID } from "@any-code/provider"
 import { iife } from "../util/fn"
 interface SystemError extends Error { code?: string; errno?: number; syscall?: string; path?: string }
-import type { Provider } from "../provider/provider"
-import { ModelID, ProviderID } from "../provider/schema"
 
 export namespace MessageV2 {
   export function isMedia(mime: string) {

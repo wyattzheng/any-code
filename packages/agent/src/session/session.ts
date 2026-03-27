@@ -8,12 +8,9 @@ import { MessageV2 } from "../memory/message-v2"
 
 import { Session, SessionService } from "."
 
-import { Provider } from "../provider/provider"
-import { ModelID, ProviderID } from "../provider/schema"
+import { Provider, ModelID, ProviderID, VendorRegistry } from "@any-code/provider"
 import { type Tool as AITool, tool, jsonSchema, type ToolCallOptions, asSchema, wrapLanguageModel, type ModelMessage, type StreamTextResult, type ToolSet, streamText } from "ai"
 import { mergeDeep, pipe } from "remeda"
-
-import { VendorRegistry } from "../provider/vendors"
 import { SystemPrompt } from "../prompt"
 
 import { type AgentContext } from "../context"

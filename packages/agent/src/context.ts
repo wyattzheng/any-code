@@ -16,7 +16,7 @@ import type { SessionPrompt } from "./session/session"
 
 
 
-import type { Provider } from "./provider/provider"
+import type { Provider } from "@any-code/provider"
 import type { ToolRegistry } from "./tool/registry"
 import type { Tool } from "./tool/tool"
 import type { Skill } from "./skill"

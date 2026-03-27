@@ -41,7 +41,7 @@ import { SessionPrompt } from "./session/session"
 import { MessageV2 } from "./memory/message-v2"
 import { MemoryService } from "./memory"
 import type { Settings } from "./settings"
-import { Provider } from "./provider/provider"
+import { Provider } from "@any-code/provider"
 
 import { Skill } from "./skill"
 import type { Logger } from "@any-code/utils"

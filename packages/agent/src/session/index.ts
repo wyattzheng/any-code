@@ -23,8 +23,7 @@ import { fn } from "../util/fn"
 import { ProjectID } from "../project"
 import { SessionID, MessageID, PartID } from "./schema"
 
-import type { Provider } from "../provider/provider"
-import { ModelID, ProviderID } from "../provider/schema"
+import { type Provider, ModelID, ProviderID } from "@any-code/provider"
 
 import type { LanguageModelV2Usage } from "@ai-sdk/provider"
 import { iife } from "../util/fn"

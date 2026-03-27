@@ -1,7 +1,5 @@
 import type { AgentContext } from "../context"
-import type { Provider } from "../provider/provider"
-
-import { VendorRegistry } from "../provider/vendors"
+import { type Provider, VendorRegistry } from "@any-code/provider"
 import { Skill } from "../skill"
 
 export namespace SystemPrompt {

@@ -29,16 +29,10 @@ export { MessageV2 } from "./memory/message-v2"
 export { Tool } from "./tool/tool"
 export { ToolRegistry } from "./tool/registry"
 
-
-
 // Provider
-export { Provider } from "./provider/provider"
-export { ProviderID, ModelID } from "./provider/schema"
-
-
+export { Provider, ProviderID, ModelID } from "@any-code/provider"
 
 // Bus & logging
-
 export { Log } from "./util/log"
 
 // Storage

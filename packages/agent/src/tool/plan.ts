@@ -3,7 +3,7 @@ import * as path from "../util/path"
 import { Tool } from "./tool"
 import { Session } from "../session"
 import { MessageV2 } from "../memory/message-v2"
-import { Provider } from "../provider/provider"
+import { Provider } from "@any-code/provider"
 import { type SessionID, MessageID, PartID } from "../session/schema"
 const EXIT_DESCRIPTION = `Use this tool when you have completed the planning phase and are ready to exit plan agent.
 

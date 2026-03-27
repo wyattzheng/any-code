@@ -1,6 +1,6 @@
 import z from "zod"
 import { Tool } from "./tool"
-import { ProviderID, ModelID } from "../provider/schema"
+import { ProviderID, ModelID } from "@any-code/provider"
 const DESCRIPTION = `Executes multiple independent tool calls concurrently to reduce latency.
 
 USING THE BATCH TOOL WILL MAKE THE USER HAPPY.

@@ -2,8 +2,7 @@
 import type { AgentContext } from "../context"
 import { SessionID, MessageID, PartID } from "../session/schema"
 import { MessageV2 } from "./message-v2"
-import { Provider } from "../provider/provider"
-import { VendorRegistry } from "../provider/vendors"
+import { Provider, VendorRegistry } from "@any-code/provider"
 import { LLMRunner } from "../llm-runner"
 import PROMPT_COMPACTION from "../prompt/compaction.txt"
 

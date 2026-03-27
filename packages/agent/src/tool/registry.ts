@@ -16,7 +16,7 @@ import type { AgentContext } from "../context"
 
 import * as path from "../util/path"
 import z from "zod"
-import { ProviderID, type ModelID } from "../provider/schema"
+import { ProviderID, type ModelID } from "@any-code/provider"
 import { WebSearchTool } from "./websearch"
 import { CodeSearchTool } from "./codesearch"
 import { Flag } from "../util/flag"
