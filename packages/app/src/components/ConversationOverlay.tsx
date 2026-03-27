@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect, type MutableRefObject } from "react";
 import { flushSync } from "react-dom";
 import type { FileContext } from "../App";
-import { MicIcon, KeyboardIcon, SendIcon, CloseIcon, ChatIcon, StopIcon, UndockIcon, MinimizeIcon } from "./Icons";
+import { MicIcon, KeyboardIcon, SendIcon, CloseIcon, ChatIcon, StopIcon, PinIcon, UndockIcon, MinimizeIcon } from "./Icons";
 import { getApiBase } from "../serverUrl";
 import "./ConversationOverlay.css";
 
@@ -776,13 +776,32 @@ export function ConversationOverlay({ sessionId, fileContext, chatHandlerRef, ch
                     {floating && <div className="drag-grip" />}
                     <div className="conversation-header-content">
                         <ChatIcon /> 对话
-                        <button
-                            className="co-float-toggle"
-                            onClick={onPopIn}
-                            title="收回到对话 Tab"
-                        >
-                            <MinimizeIcon />
-                        </button>
+                        {floating ? (
+                            <button
+                                className="co-float-toggle"
+                                onClick={toggleFloating}
+                                title="固定到侧边栏"
+                            >
+                                <PinIcon />
+                            </button>
+                        ) : (
+                            <>
+                                <button
+                                    className="co-float-toggle"
+                                    onClick={toggleFloating}
+                                    title="浮动窗口"
+                                >
+                                    <UndockIcon />
+                                </button>
+                                <button
+                                    className="co-float-toggle"
+                                    onClick={onPopIn}
+                                    title="收回到对话 Tab"
+                                >
+                                    <MinimizeIcon />
+                                </button>
+                            </>
+                        )}
                     </div>
                 </div>
                 {renderMessages()}

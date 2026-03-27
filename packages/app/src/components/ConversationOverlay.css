@@ -100,12 +100,15 @@
 }
 
 .co-float-toggle {
-    margin-left: auto;
     font-size: 14px;
     line-height: 1;
     opacity: 0.5;
     transition: opacity 0.15s;
     padding: 2px;
+}
+
+.co-float-toggle:first-of-type {
+    margin-left: auto;
 }
 
 .co-float-toggle:hover {

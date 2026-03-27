@@ -199,11 +199,12 @@ export function GearIcon({ size = 14, color = "currentColor" }: IconProps) {
     );
 }
 
-/* Minimize — horizontal bar at bottom */
+/* Minimize — horizontal bar inside a box */
 export function MinimizeIcon({ size = 10, color = "currentColor" }: IconProps) {
     return (
-        <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round">
-            <line x1="3" y1="13" x2="13" y2="13" />
+        <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke={color} strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="1" y="1" width="14" height="14" rx="1.5" />
+            <line x1="4" y1="11" x2="12" y2="11" />
         </svg>
     );
 }
