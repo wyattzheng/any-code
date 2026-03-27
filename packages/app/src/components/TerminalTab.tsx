@@ -125,7 +125,9 @@ export function TerminalTab({ sessionId }: TerminalTabProps) {
 
         connect();
 
-        const resizeObserver = new ResizeObserver(() => {
+        const resizeObserver = new ResizeObserver(([entry]) => {
+            const { width, height } = entry.contentRect;
+            if (width === 0 || height === 0) return; // hidden tab
             fitAddon.fit();
             sendResize();
         });
