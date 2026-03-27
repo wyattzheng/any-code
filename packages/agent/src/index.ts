@@ -27,7 +27,7 @@ export { MessageV2 } from "./memory/message-v2"
 
 // Tools
 export { Tool } from "./tool/tool"
-export { ToolRegistry } from "./tool/registry"
+export { ToolRegistryService, type IToolRegistryService } from "./tool/registry"
 
 // Provider
 export { Provider, ProviderID, ModelID } from "@any-code/provider"

@@ -43,69 +43,59 @@ type ToolDefinition = {
   execute(args: any, context: ToolContext): Promise<string>
 }
 
-export namespace ToolRegistry {
+// ── Interface ─────────────────────────────────────────────────────────
 
-  /**
-   * ToolRegistryService — caches resolved tool list.
-   */
-  export class ToolRegistryService {
-    readonly _promise: ReturnType<typeof initTools>
-    private context: AgentContext
+export interface IToolRegistryService {
+  register(tool: Tool.Info): Promise<void>
+  ids(): Promise<string[]>
+  tools(model: { providerID: ProviderID; modelID: ModelID }): Promise<any[]>
+}
 
-    constructor(context: AgentContext) {
-      this.context = context
-      this._promise = initTools(context)
-    }
+// ── ToolRegistryService ───────────────────────────────────────────────
 
-    async register(tool: Tool.Info): Promise<void> {
-      const { custom } = await this._promise
-      const idx = custom.findIndex((t) => t.id === tool.id)
-      if (idx >= 0) {
-        custom.splice(idx, 1, tool)
-        return
-      }
-      custom.push(tool)
-    }
+function fromPlugin(id: string, def: ToolDefinition): Tool.Info {
+  return {
+    id,
+    init: async (initCtx) => ({
+      parameters: z.object(def.args),
+      description: def.description,
+      execute: async (args, ctx) => {
+        const pluginCtx = {
+          ...ctx,
+          directory: ctx.directory,
+          worktree: ctx.worktree,
+        } as unknown as ToolContext
+        const result = await def.execute(args as any, pluginCtx)
+        const out = await Truncate.output(ctx as any, result, {})
+        return {
+          title: "",
+          output: out.truncated ? out.content : result,
+          metadata: { truncated: out.truncated, outputPath: out.truncated ? out.outputPath : undefined },
+        }
+      },
+    }),
+  }
+}
 
-    async tools(
-      model: { providerID: ProviderID; modelID: ModelID },
-    ) {
-      return ToolRegistry.tools(this.context, model)
-    }
+export class ToolRegistryService implements IToolRegistryService {
+  private readonly _custom: Tool.Info[] = []
+  private readonly context: AgentContext
+
+  constructor(context: AgentContext) {
+    this.context = context
   }
 
-  async function initTools(context: AgentContext) {
-    const custom = [] as Tool.Info[]
-    return { custom }
-  }
-
-  function fromPlugin(id: string, def: ToolDefinition): Tool.Info {
-    return {
-      id,
-      init: async (initCtx) => ({
-        parameters: z.object(def.args),
-        description: def.description,
-        execute: async (args, ctx) => {
-          const pluginCtx = {
-            ...ctx,
-            directory: ctx.directory,
-            worktree: ctx.worktree,
-          } as unknown as ToolContext
-          const result = await def.execute(args as any, pluginCtx)
-          const out = await Truncate.output(ctx as any, result, {})
-          return {
-            title: "",
-            output: out.truncated ? out.content : result,
-            metadata: { truncated: out.truncated, outputPath: out.truncated ? out.outputPath : undefined },
-          }
-        },
-      }),
+  async register(tool: Tool.Info): Promise<void> {
+    const idx = this._custom.findIndex((t) => t.id === tool.id)
+    if (idx >= 0) {
+      this._custom.splice(idx, 1, tool)
+      return
     }
+    this._custom.push(tool)
   }
 
-  async function all(context: AgentContext): Promise<Tool.Info[]> {
-    const custom = await context.toolRegistry._promise.then((x) => x.custom)
-    const config = context.config
+  private all(): Tool.Info[] {
+    const config = this.context.config
     return [
       InvalidTool,
       BashTool,
@@ -121,25 +111,25 @@ export namespace ToolRegistry {
       CodeSearchTool,
       SkillTool,
       ApplyPatchTool,
-      ...(context.tools ?? []),
+      ...(this.context.tools ?? []),
       ...(config.experimental?.batch_tool === true ? [BatchTool] : []),
       ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [PlanExitTool] : []),
-      ...custom,
+      ...this._custom,
     ]
   }
 
-  export async function ids(context: AgentContext) {
-    return all(context).then((x) => x.map((t) => t.id))
+  async ids(): Promise<string[]> {
+    return this.all().map((t) => t.id)
   }
 
-  export async function tools(
-    context: AgentContext,
+  async tools(
     model: {
       providerID: ProviderID
       modelID: ModelID
     },
   ) {
-    const tools = await all(context)
+    const tools = this.all()
+    const context = this.context
     const result = await Promise.all(
       tools
         .filter((t) => {

@@ -18,7 +18,7 @@ import PROMPT_PLAN from "../prompt/plan.txt"
 import BUILD_SWITCH from "../prompt/build-switch.txt"
 import MAX_STEPS from "../prompt/max-steps.txt"
 import { defer } from "../util/fn"
-import { ToolRegistry } from "../tool/registry"
+
 // MCP module removed (agent mode)
 import { LSP } from "../util/lsp"
 import { ReadTool } from "../tool/read"
@@ -280,7 +280,7 @@ export namespace SessionPrompt {
 
           const output = {
             ...result,
-            attachments: result.attachments?.map((attachment) => ({
+            attachments: result.attachments?.map((attachment: any) => ({
               ...attachment,
               id: PartID.ascending(),
               sessionID: ctx.sessionID,

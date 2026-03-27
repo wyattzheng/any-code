@@ -34,7 +34,7 @@ import { SchedulerService } from "./util/scheduler"
 import { FileTimeService } from "./project"
 import { Database } from "./storage"
 import { Log } from "./util/log"
-import { ToolRegistry } from "./tool/registry"
+import { ToolRegistryService } from "./tool/registry"
 import { Tool } from "./tool/tool"
 import { Session, SessionService } from "./session"
 import { SessionPrompt } from "./session/session"
@@ -450,7 +450,7 @@ export class CodeAgent extends EventEmitter {
 
 
         ctx.provider = new Provider.ProviderService(ctx, this.options.provider)
-        ctx.toolRegistry = new ToolRegistry.ToolRegistryService(ctx)
+        ctx.toolRegistry = new ToolRegistryService(ctx)
         ctx.skill = new SkillService(ctx)
 
         ctx.provider.bind(ctx)
