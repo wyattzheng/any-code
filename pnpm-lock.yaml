@@ -23,9 +23,6 @@ importers:
       '@any-code/utils':
         specifier: workspace:*
         version: link:../utils
-      ai:
-        specifier: 5.0.124
-        version: 5.0.124(zod@4.1.8)
       decimal.js:
         specifier: 10.5.0
         version: 10.5.0
@@ -38,9 +35,6 @@ importers:
       minimatch:
         specifier: 10.0.3
         version: 10.0.3
-      remeda:
-        specifier: 2.26.0
-        version: 2.26.0
       turndown:
         specifier: 7.2.0
         version: 7.2.0
@@ -202,6 +196,9 @@ importers:
       '@ai-sdk/provider':
         specifier: 2.0.1
         version: 2.0.1
+      '@any-code/utils':
+        specifier: workspace:*
+        version: link:../utils
       ai:
         specifier: 5.0.124
         version: 5.0.124(zod@4.1.8)

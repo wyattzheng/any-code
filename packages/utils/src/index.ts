@@ -30,3 +30,13 @@ export { NodeFS } from "./vfs-node"
 export { NodeSearchProvider } from "./search-node"
 export { SqlJsStorage } from "./storage-sqljs"
 
+// LLM types
+export type {
+  LLMStreamChunk,
+  LLMStreamResult,
+  LLMToolDef,
+  LLMToolCallOptions,
+  LLMMessage,
+  LLMUsage,
+  LLMProviderStreamInput,
+} from "./llm"

@@ -1,15 +1,15 @@
-import { tool as aiTool, jsonSchema, wrapLanguageModel, streamText } from "ai"
-import { mergeDeep, pipe } from "remeda"
 import type { AgentContext } from "./context"
-import { Provider, VendorRegistry } from "@any-code/provider"
+import { Provider, VendorRegistry, createLLMStream } from "@any-code/provider"
 import { Auth } from "./util/auth"
 import { MessageV2 } from "./memory/message-v2"
 import { SessionService } from "./session"
 import { PartID, SessionID } from "./session/schema"
 import { SessionStatus } from "./session"
-import type { LLMStreamInput, LLMStreamResult, LLMStreamChunk, LLMToolDef, LLMMessage } from "./llm"
+import type { LLMStreamChunk, LLMToolDef, LLMMessage } from "@any-code/utils"
+import type { LLMStreamInput, LLMStreamResult } from "./llm"
 
-export type { LLMStreamInput, LLMStreamResult, LLMStreamChunk, LLMToolDef, LLMMessage }
+export type { LLMStreamChunk, LLMToolDef, LLMMessage } from "@any-code/utils"
+export type { LLMStreamInput, LLMStreamResult } from "./llm"
 
 export const LLM_OUTPUT_TOKEN_MAX = VendorRegistry.getModelProvider().getOutputTokenMax()
 
@@ -24,18 +24,12 @@ export async function llmStream(context: AgentContext, input: LLMStreamInput): P
     modelID: input.model.id,
     providerID: input.model.providerID,
   })
-  const [language, provider, auth] = await Promise.all([
-    context.provider.getLanguage(input.model),
-    context.provider.getProvider(input.model.providerID),
-    Auth.get(input.model.providerID),
-  ])
-  const cfg = context.config
-  const runtime = { model: input.model, provider, auth }
-  const modelProvider = VendorRegistry.getModelProvider(runtime)
-  const useInstructions = modelProvider.shouldUseInstructionPrompt()
+
+  const modelProvider = VendorRegistry.getModelProvider({ model: input.model })
   const includeProviderPrompt = modelProvider.shouldIncludeProviderSystemPrompt()
 
-  const system = []
+  // Agent-level: construct system prompts
+  const system: string[] = []
   system.push(
     [
       ...(input.prompt ? [input.prompt] : includeProviderPrompt ? context.systemPrompt.provider(input.model) : []),
@@ -53,137 +47,39 @@ export async function llmStream(context: AgentContext, input: LLMStreamInput): P
     system.push(header, rest.join("\n"))
   }
 
-  const base = input.small
-    ? modelProvider.getSmallOptions()
-    : modelProvider.getOptions({
-      model: input.model,
-      sessionID: input.sessionID,
-      providerOptions: provider.options,
-    })
-  const options: Record<string, any> = pipe(
-    base,
-    mergeDeep(input.model.options),
-  )
-  if (useInstructions) {
-    options.instructions = context.systemPrompt.instructions(input.model)
-  }
-
-  const params = {
-    temperature: input.model.capabilities.temperature
-      ? modelProvider.getTemperature()
-      : undefined,
-    topP: modelProvider.getTopP(),
-    topK: modelProvider.getTopK(),
-    options,
-  }
-
-  const { headers } = {
-    headers: {},
-  }
-
-  const maxOutputTokens = modelProvider.shouldDisableMaxOutputTokens()
-    ? undefined
-    : modelProvider.getMaxOutputTokens()
-
-  const resolvedToolDefs = await resolveTools(input)
+  // Agent-level: resolve and filter tools
+  const tools = await resolveTools(input)
   const isLiteLLMProxy = modelProvider.shouldAddNoopToolFallback()
 
-  if (isLiteLLMProxy && Object.keys(resolvedToolDefs).length === 0 && hasToolCalls(input.messages)) {
-    resolvedToolDefs["_noop"] = {
+  if (isLiteLLMProxy && Object.keys(tools).length === 0 && hasToolCalls(input.messages)) {
+    tools["_noop"] = {
       description: "Placeholder for LiteLLM/Anthropic proxy compatibility",
       parameters: { type: "object", properties: {} },
       execute: async () => ({ output: "", title: "", metadata: {} }),
     }
   }
 
-  // Convert LLMToolDef → AI SDK tool()
-  const tools: Record<string, any> = {}
-  for (const [name, def] of Object.entries(resolvedToolDefs)) {
-    tools[name] = aiTool({
-      id: (def as any).id ?? name as any,
-      description: def.description,
-      inputSchema: jsonSchema(def.parameters as any),
-      execute: def.execute as any,
-    })
-  }
-
-  const sdkResult = streamText({
-    onError(error) {
-      l.error("stream error", {
-        error,
-      })
+  // Delegate to provider for AI SDK call
+  return createLLMStream(
+    {
+      provider: context.provider,
+      auth: { get: Auth.get },
+      config: context.config,
+      systemPrompt: context.systemPrompt,
+      log: { info: l.info.bind(l), error: l.error.bind(l) },
     },
-    async experimental_repairToolCall(failed) {
-      const lower = failed.toolCall.toolName.toLowerCase()
-      if (lower !== failed.toolCall.toolName && tools[lower]) {
-        l.info("repairing tool call", {
-          tool: failed.toolCall.toolName,
-          repaired: lower,
-        })
-        return {
-          ...failed.toolCall,
-          toolName: lower,
-        }
-      }
-      return {
-        ...failed.toolCall,
-        input: JSON.stringify({
-          tool: failed.toolCall.toolName,
-          error: failed.error.message,
-        }),
-        toolName: "invalid",
-      }
+    {
+      model: input.model,
+      sessionID: input.sessionID,
+      system,
+      messages: input.messages,
+      tools,
+      toolChoice: input.toolChoice,
+      abort: input.abort,
+      small: input.small,
+      retries: input.retries,
     },
-    temperature: params.temperature,
-    topP: params.topP,
-    topK: params.topK,
-    providerOptions: modelProvider.wrapProviderOptions(params.options),
-    activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
-    tools,
-    toolChoice: input.toolChoice,
-    maxOutputTokens,
-    abortSignal: input.abort,
-    headers: {
-      ...input.model.headers,
-      ...headers,
-    },
-    maxRetries: input.retries ?? 0,
-    messages: [
-      ...system.map(
-        (x): LLMMessage => ({
-          role: "system",
-          content: x,
-        }),
-      ),
-      ...input.messages,
-    ] as any,
-    model: wrapLanguageModel({
-      model: language,
-      middleware: [
-        {
-          async transformParams(args) {
-            if (args.type === "stream") {
-              // @ts-expect-error
-              args.params.prompt = modelProvider.applyMessageTransforms(args.params.prompt, options)
-            }
-            return args.params
-          },
-        },
-      ],
-    }),
-    experimental_telemetry: {
-      isEnabled: cfg.experimental?.openTelemetry,
-      metadata: {
-        userId: cfg.username ?? "unknown",
-        sessionId: input.sessionID,
-      },
-    },
-  })
-
-  // Wrap AI SDK stream as LLMStreamResult
-  return {
-    fullStream: sdkResult.fullStream as AsyncIterable<LLMStreamChunk>,
-  }
+  )
 }
 
 async function resolveTools(input: Pick<LLMStreamInput, "tools" | "user">): Promise<Record<string, LLMToolDef>> {
@@ -554,24 +450,5 @@ export namespace LLM {
   export const checkToolCalls = hasToolCalls
 }
 
-// ── AI SDK helpers (exposed so other agent modules don't need to import "ai") ──
-
-import { convertToModelMessages, APICallError, LoadAPIKeyError } from "ai"
-
-/** Convert UI messages to model messages (wraps AI SDK's convertToModelMessages) */
-export function convertUIToModelMessages(
-  messages: any[],
-  tools: Record<string, { toModelOutput: (output: unknown) => any }>,
-): LLMMessage[] {
-  return convertToModelMessages(messages, { tools } as any) as LLMMessage[]
-}
-
-/** Duck-type check for AI SDK's APICallError */
-export function isAPICallError(e: unknown): e is { name: string; message: string; statusCode?: number; responseHeaders?: Record<string, string>; responseBody?: string; isRetryable: boolean } {
-  return APICallError.isInstance(e)
-}
-
-/** Duck-type check for AI SDK's LoadAPIKeyError */
-export function isLoadAPIKeyError(e: unknown): e is { name: string; message: string } {
-  return LoadAPIKeyError.isInstance(e)
-}
+// Re-export helpers from provider (so existing callers don't break)
+export { convertUIToModelMessages, isAPICallError, isLoadAPIKeyError } from "@any-code/provider"

@@ -720,7 +720,7 @@ export namespace MessageV2 {
         return new MessageV2.AuthError(
           {
             providerID: ctx.providerID,
-            message: e.message,
+            message: (e as Error).message,
           },
           { cause: e },
         ).toObject()
