@@ -698,15 +698,8 @@ export class CodeAgent extends EventEmitter {
                             }
                         }
 
-                        // LiteLLM noop fallback
+
                         const modelMessages = MessageV2.toModelMessages(msgsWithReminders, model)
-                        if (modelProvider.shouldAddNoopToolFallback() && Object.keys(filteredTools).length === 0 && hasToolCalls(modelMessages)) {
-                            filteredTools["_noop"] = {
-                                description: "Placeholder for LiteLLM/Anthropic proxy compatibility",
-                                parameters: { type: "object", properties: {} },
-                                execute: async () => ({ output: "", title: "", metadata: {} }),
-                            }
-                        }
 
                         // ── Stream from provider ──
                         const l = context.log.create({ service: "llm" })
@@ -1285,14 +1278,4 @@ export class CodeAgent extends EventEmitter {
 // ── Utilities ────────────────────────────────────────────────────────────────
 
 const DOOM_LOOP_THRESHOLD = 3
-
-function hasToolCalls(messages: LLMMessage[]): boolean {
-    for (const msg of messages) {
-        if (!Array.isArray(msg.content)) continue
-        for (const part of msg.content) {
-            if (part.type === "tool-call" || part.type === "tool-result") return true
-        }
-    }
-    return false
-}
 
