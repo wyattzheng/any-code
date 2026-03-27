@@ -84,7 +84,7 @@ export const BatchTool = Tool.define("batch", async () => {
           }
           const validatedParams = tool.parameters.parse(call.parameters)
 
-          await ctx.session.updatePart({
+          await ctx.memory.updatePart({
             id: partID,
             messageID: ctx.messageID,
             sessionID: ctx.sessionID,
@@ -108,7 +108,7 @@ export const BatchTool = Tool.define("batch", async () => {
             messageID: ctx.messageID,
           }))
 
-          await ctx.session.updatePart({
+          await ctx.memory.updatePart({
             id: partID,
             messageID: ctx.messageID,
             sessionID: ctx.sessionID,
@@ -131,7 +131,7 @@ export const BatchTool = Tool.define("batch", async () => {
 
           return { success: true as const, tool: call.tool, result }
         } catch (error) {
-          await ctx.session.updatePart({
+          await ctx.memory.updatePart({
             id: partID,
             messageID: ctx.messageID,
             sessionID: ctx.sessionID,
@@ -159,7 +159,7 @@ export const BatchTool = Tool.define("batch", async () => {
       const now = Date.now()
       for (const call of discardedCalls) {
         const partID = PartID.ascending()
-        await ctx.session.updatePart({
+        await ctx.memory.updatePart({
           id: partID,
           messageID: ctx.messageID,
           sessionID: ctx.sessionID,

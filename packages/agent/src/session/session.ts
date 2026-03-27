@@ -169,7 +169,7 @@ export namespace SessionPrompt {
       metadata: async (val: { title?: string; metadata?: any }) => {
         const match = input.processor.partFromToolCall(options.toolCallId)
         if (match && match.state.status === "running") {
-          await input.agentContext.session.updatePart({
+          await input.agentContext.memory.updatePart({
             ...match,
             state: {
               title: val.title,
@@ -529,9 +529,9 @@ export namespace SessionPrompt {
     ).then((x) => x.flat().map(assign))
 
 
-    await context.session.updateMessage(info)
+    await context.memory.updateMessage(info)
     for (const part of parts) {
-      await context.session.updatePart(part)
+      await context.memory.updatePart(part)
     }
 
     return {

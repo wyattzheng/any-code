@@ -46,8 +46,8 @@ export const PlanExitTool = Tool.define("plan_exit", {
       agent: "build",
       model,
     }
-    await ctx.session.updateMessage(userMsg)
-    await ctx.session.updatePart({
+    await ctx.memory.updateMessage(userMsg)
+    await ctx.memory.updatePart({
       id: PartID.ascending(),
       messageID: userMsg.id,
       sessionID: ctx.sessionID,

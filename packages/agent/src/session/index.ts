@@ -293,25 +293,8 @@ export class SessionService extends EventEmitter {
     }
   }
 
-  async updateMessage(msg: any) {
-    return this.ctx.memory.updateMessage(msg)
-  }
 
-  async removeMessage(input: any) {
-    return this.ctx.memory.removeMessage(input)
-  }
 
-  async removePart(input: any) {
-    return this.ctx.memory.removePart(input)
-  }
-
-  async updatePart(part: any) {
-    return this.ctx.memory.updatePart(part)
-  }
-
-  async updatePartDelta(input: any) {
-    return this.ctx.memory.updatePartDelta(input)
-  }
 
   updateTodo(input: { sessionID: SessionID; todos: Todo.Info[] }) {
     this.ctx.db.transaction((tx: any) => {
