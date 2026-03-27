@@ -1126,7 +1126,7 @@ export class CodeAgent extends EventEmitter {
 
         // LLM streaming + tool execution
         const result = await processor.process({
-            user: lastUser, abort, sessionID, system, context,
+            user: lastUser, abort, sessionID, system,
             messages: MessageV2.toModelMessages(msgs, model),
             tools: tools as any, model,
             toolChoice: format.type === "json_schema" ? "required" : undefined,

@@ -56,10 +56,10 @@ export interface LLMToolCallOptions {
   abortSignal?: AbortSignal
 }
 
-// ── Stream input (provider-level) ────────────────────────────────────────────
+// ── Stream input ─────────────────────────────────────────────────────────────
 
-/** Input for the provider-level LLM stream adapter */
-export interface LLMProviderStreamInput {
+/** Canonical input for LLM streaming */
+export interface LLMStreamInput {
   model: { id: string; providerID: string; [key: string]: any }
   sessionID: string
   system: string[]

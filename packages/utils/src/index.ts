@@ -38,5 +38,5 @@ export type {
   LLMToolCallOptions,
   LLMMessage,
   LLMUsage,
-  LLMProviderStreamInput,
+  LLMStreamInput,
 } from "./llm"

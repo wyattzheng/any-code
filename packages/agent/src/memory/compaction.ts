@@ -191,7 +191,6 @@ When constructing the summary, try to stick to this template:
       sessionID: input.sessionID,
       tools: {},
       system: [],
-      context: input.context,
       messages: [
         ...MessageV2.toModelMessages(messages, model, { stripMedia: true }),
         {

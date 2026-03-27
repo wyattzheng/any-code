@@ -5,15 +5,21 @@ import { MessageV2 } from "./memory/message-v2"
 import { SessionService } from "./session"
 import { PartID, SessionID } from "./session/schema"
 import { SessionStatus } from "./session"
-import type { LLMStreamChunk, LLMToolDef, LLMMessage } from "@any-code/utils"
-import type { LLMStreamInput, LLMStreamResult } from "./llm"
+import type { LLMStreamChunk, LLMStreamResult, LLMStreamInput, LLMToolDef, LLMMessage } from "@any-code/utils"
 
-export type { LLMStreamChunk, LLMToolDef, LLMMessage } from "@any-code/utils"
-export type { LLMStreamInput, LLMStreamResult } from "./llm"
+export type { LLMStreamChunk, LLMStreamResult, LLMStreamInput, LLMToolDef, LLMMessage } from "@any-code/utils"
+
+/** Agent-level stream input — extends the canonical LLMStreamInput with agent-specific fields */
+export type AgentStreamInput = Omit<LLMStreamInput, 'model'> & {
+  user: MessageV2.User
+  model: Provider.Model
+  /** Optional system prompt override (e.g. for compaction) */
+  prompt?: string
+}
 
 export const LLM_OUTPUT_TOKEN_MAX = VendorRegistry.getModelProvider().getOutputTokenMax()
 
-export async function llmStream(context: AgentContext, input: LLMStreamInput): Promise<LLMStreamResult> {
+export async function llmStream(context: AgentContext, input: AgentStreamInput): Promise<LLMStreamResult> {
   const l = context.log.create({ service: "llm" })
     .clone()
     .tag("providerID", input.model.providerID)
@@ -82,7 +88,7 @@ export async function llmStream(context: AgentContext, input: LLMStreamInput): P
   )
 }
 
-async function resolveTools(input: Pick<LLMStreamInput, "tools" | "user">): Promise<Record<string, LLMToolDef>> {
+async function resolveTools(input: Pick<AgentStreamInput, "tools" | "user">): Promise<Record<string, LLMToolDef>> {
   for (const name of Object.keys(input.tools)) {
     if (input.user.tools?.[name] === false) {
       delete input.tools[name]
@@ -127,7 +133,7 @@ export function createLLMRunner(input: {
     partFromToolCall(toolCallID: string) {
       return toolcalls[toolCallID]
     },
-    async process(streamInput: LLMStreamInput) {
+    async process(streamInput: AgentStreamInput) {
       input.context.log.create({ service: "session.processor" }).info("process")
       needsCompaction = false
       const shouldBreak = (input.context.config).experimental?.continue_loop_on_deny !== true

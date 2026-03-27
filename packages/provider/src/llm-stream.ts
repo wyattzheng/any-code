@@ -15,7 +15,7 @@ import type {
   LLMStreamChunk,
   LLMToolDef,
   LLMMessage,
-  LLMProviderStreamInput,
+  LLMStreamInput,
 } from "@any-code/utils"
 
 export interface StreamAdapterContext {
@@ -42,7 +42,7 @@ export interface StreamAdapterContext {
 
 export async function createLLMStream(
   ctx: StreamAdapterContext,
-  input: Omit<LLMProviderStreamInput, 'model'> & { model: Provider.Model },
+  input: Omit<LLMStreamInput, 'model'> & { model: Provider.Model },
 ): Promise<LLMStreamResult> {
   const log = ctx.log ?? { info() {}, error() {} }
 
