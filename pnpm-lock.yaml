@@ -35,9 +35,6 @@ importers:
       diff:
         specifier: 8.0.2
         version: 8.0.2
-      effect:
-        specifier: 4.0.0-beta.31
-        version: 4.0.0-beta.31
       mime-types:
         specifier: 3.0.2
         version: 3.0.2

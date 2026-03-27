@@ -1,17 +1,8 @@
-import { Schema } from "effect"
-
 /**
- * Attach static methods to a schema object. Designed to be used with `.pipe()`:
+ * Branded type utility — creates a nominal type from a base type.
  *
  * @example
- *   export const Foo = fooSchema.pipe(
- *     withStatics((schema) => ({
- *       zero: schema.makeUnsafe(0),
- *       from: Schema.decodeUnknownOption(schema),
- *     }))
- *   )
+ *   type UserID = Brand<string, "UserID">
+ *   const make = (id: string) => id as UserID
  */
-export const withStatics =
-  <S extends object, M extends Record<string, unknown>>(methods: (schema: S) => M) =>
-  (schema: S): S & M =>
-    Object.assign(schema, methods(schema))
+export type Brand<T, B extends string> = T & { readonly __brand: B }

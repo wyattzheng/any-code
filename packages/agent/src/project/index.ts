@@ -1,22 +1,17 @@
 // ── Schema ──────────────────────────────────────────────────────────────────
 
-import { Schema } from "effect"
-import { withStatics } from "../util/schema"
+import type { Brand } from "../util/schema"
 import type { AgentContext } from "../context"
 import * as path from "../util/path"
 import { Flag } from "../util/flag"
 import { Glob } from "../util/glob"
 
-const projectIdSchema = Schema.String.pipe(Schema.brand("ProjectID"))
+export type ProjectID = Brand<string, "ProjectID">
 
-export type ProjectID = typeof projectIdSchema.Type
-
-export const ProjectID = projectIdSchema.pipe(
-  withStatics((schema: typeof projectIdSchema) => ({
-    global: schema.makeUnsafe("global"),
-    make: (id: string) => schema.makeUnsafe(id),
-  })),
-)
+export const ProjectID = {
+  global: "global" as ProjectID,
+  make: (id: string) => id as ProjectID,
+}
 
 // ── Protected ───────────────────────────────────────────────────────────────
 

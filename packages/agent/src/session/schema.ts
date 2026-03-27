@@ -1,41 +1,23 @@
-import { Schema } from "effect"
-import z from "zod"
-
-import { withStatics } from "../util/schema"
+import type { Brand } from "../util/schema"
 import { Identifier } from "../util/id"
 
-const sessionIdSchema = Schema.String.pipe(Schema.brand("SessionID"))
+export type SessionID = Brand<string, "SessionID">
 
-export type SessionID = typeof sessionIdSchema.Type
+export const SessionID = {
+  make: (id: string) => id as SessionID,
+  descending: (id?: string) => Identifier.descending("session", id) as SessionID,
+}
 
-export const SessionID = sessionIdSchema.pipe(
-  withStatics((schema: typeof sessionIdSchema) => ({
-    make: (id: string) => schema.makeUnsafe(id),
-    descending: (id?: string) => schema.makeUnsafe(Identifier.descending("session", id)),
-    zod: Identifier.schema("session").pipe(z.custom<SessionID>()),
-  })),
-)
+export type MessageID = Brand<string, "MessageID">
 
-const messageIdSchema = Schema.String.pipe(Schema.brand("MessageID"))
+export const MessageID = {
+  make: (id: string) => id as MessageID,
+  ascending: (id?: string) => Identifier.ascending("message", id) as MessageID,
+}
 
-export type MessageID = typeof messageIdSchema.Type
+export type PartID = Brand<string, "PartID">
 
-export const MessageID = messageIdSchema.pipe(
-  withStatics((schema: typeof messageIdSchema) => ({
-    make: (id: string) => schema.makeUnsafe(id),
-    ascending: (id?: string) => schema.makeUnsafe(Identifier.ascending("message", id)),
-    zod: Identifier.schema("message").pipe(z.custom<MessageID>()),
-  })),
-)
-
-const partIdSchema = Schema.String.pipe(Schema.brand("PartID"))
-
-export type PartID = typeof partIdSchema.Type
-
-export const PartID = partIdSchema.pipe(
-  withStatics((schema: typeof partIdSchema) => ({
-    make: (id: string) => schema.makeUnsafe(id),
-    ascending: (id?: string) => schema.makeUnsafe(Identifier.ascending("part", id)),
-    zod: Identifier.schema("part").pipe(z.custom<PartID>()),
-  })),
-)
+export const PartID = {
+  make: (id: string) => id as PartID,
+  ascending: (id?: string) => Identifier.ascending("part", id) as PartID,
+}

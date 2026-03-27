@@ -1,17 +1,9 @@
-import { Schema } from "effect"
-import z from "zod"
-
+import type { Brand } from "../util/schema"
 import { Identifier } from "../util/id"
-import { withStatics } from "../util/schema"
 
-const toolIdSchema = Schema.String.pipe(Schema.brand("ToolID"))
+export type ToolID = Brand<string, "ToolID">
 
-export type ToolID = typeof toolIdSchema.Type
-
-export const ToolID = toolIdSchema.pipe(
-  withStatics((schema: typeof toolIdSchema) => ({
-    make: (id: string) => schema.makeUnsafe(id),
-    ascending: (id?: string) => schema.makeUnsafe(Identifier.ascending("tool", id)),
-    zod: Identifier.schema("tool").pipe(z.custom<ToolID>()),
-  })),
-)
+export const ToolID = {
+  make: (id: string) => id as ToolID,
+  ascending: (id?: string) => Identifier.ascending("tool", id) as ToolID,
+}
