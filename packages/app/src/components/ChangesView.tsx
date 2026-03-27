@@ -169,7 +169,7 @@ export function ChangesView({ changes, requestFile, requestDiff, onFileContext }
         : (listSize != null ? { height: listSize, flex: 'none' } : { flex: 1 });
 
     return (
-        <div className={`changes-view ${horizontal ? 'changes-view--horizontal' : ''}`} ref={containerRef}>
+        <div className="changes-view" ref={containerRef}>
             <div className="changes-list" style={listStyle as any}>
                 <div className="change-items">
                     {isEmpty ? (
@@ -191,7 +191,7 @@ export function ChangesView({ changes, requestFile, requestDiff, onFileContext }
                     )}
                 </div>
             </div>
-            <div className={`cv-resize-border ${horizontal ? 'cv-resize-border--horizontal' : ''}`} onMouseDown={handleMouseDown} onTouchStart={handleTouchStart} />
+            <div className="cv-resize-border" onMouseDown={handleMouseDown} onTouchStart={handleTouchStart} />
             <div className="changes-diff">
                 {selectedFile ? (
                     <>

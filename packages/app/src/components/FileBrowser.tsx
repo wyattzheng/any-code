@@ -188,7 +188,7 @@ export function FileBrowser({ topLevel, requestLs, requestFile, onFileContext }:
         : (sidebarSize != null ? { height: sidebarSize, flex: 'none' } : { flex: 1 });
 
     return (
-        <div className={`file-browser ${horizontal ? 'file-browser--horizontal' : ''}`} ref={containerRef}>
+        <div className="file-browser" ref={containerRef}>
             <div className="file-browser-sidebar" style={sidebarStyle as any}>
                 <div className="file-tree">
                     {isEmpty ? (
@@ -209,7 +209,7 @@ export function FileBrowser({ topLevel, requestLs, requestFile, onFileContext }:
                     )}
                 </div>
             </div>
-            <div className={`fb-resize-border ${horizontal ? 'fb-resize-border--horizontal' : ''}`} onMouseDown={handleMouseDown} onTouchStart={handleTouchStart} />
+            <div className="fb-resize-border" onMouseDown={handleMouseDown} onTouchStart={handleTouchStart} />
             <div className="file-browser-content">
                 {selectedFile ? (
                     <>
