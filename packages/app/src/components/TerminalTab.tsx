@@ -100,6 +100,8 @@ export function TerminalTab({ sessionId }: TerminalTabProps) {
                     if (msg.type === "terminal.output") {
                         term.write(msg.data);
                     } else if (msg.type === "terminal.ready") {
+                        term.clear();
+                        term.reset();
                         setAlive(true);
                         sendResize();
                     } else if (msg.type === "terminal.none") {
