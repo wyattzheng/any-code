@@ -1018,14 +1018,408 @@ export class CodeAgent extends EventEmitter {
             // ── Conversation done? ──
             if (lastAssistant?.finish && !["tool-calls", "unknown"].includes(lastAssistant.finish) && lastUser.id < lastAssistant.id) break
 
-            // ── Reasoning + tool execution ──
-            const result = await this.processStep({
-                context, session, sessionID, abort, model, lastUser, lastFinished, step, msgs,
-                onStructuredOutput: (v: unknown) => { structuredOutput = v },
+            // ── Prepare step: create assistant message, resolve tools ──
+            const msgsWithReminders = await SessionPrompt.insertReminders({ context, messages: msgs, session })
+
+            const assistantMessage = (await context.session.updateMessage({
+                id: MsgID.ascending(), parentID: lastUser.id, role: "assistant",
+                mode: "build", agent: "build", variant: lastUser.variant,
+                path: { cwd: context.directory, root: context.worktree },
+                modelID: model.id, providerID: model.providerID,
+                time: { created: Date.now() }, sessionID,
+                ...((lastUser as any).chatId ? { chatId: (lastUser as any).chatId } : {}),
+            })) as MessageV2.Assistant
+
+            const toolcalls: Record<string, MessageV2.ToolPart> = {}
+
+            const lastUserMsg = msgsWithReminders.findLast((m) => m.info.role === "user")
+            const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
+
+            const tools = await SessionPrompt.resolveTools({
+                session, model, tools: lastUser.tools,
+                processor: {
+                    message: assistantMessage,
+                    partFromToolCall: (id: string) => toolcalls[id],
+                } as any,
+                bypassAgentCheck, messages: msgsWithReminders, agentContext: context,
+                onToolEvent: (event, data) => this.emit(event, data),
             })
 
+            if (lastUser.format?.type === "json_schema") {
+                tools["StructuredOutput"] = SessionPrompt.createStructuredOutputTool({
+                    schema: lastUser.format.schema,
+                    onSuccess: (v: unknown) => { structuredOutput = v },
+                })
+            }
+
+            // Ephemerally wrap queued user messages
+            if (step > 1 && lastFinished) {
+                for (const msg of msgsWithReminders) {
+                    if (msg.info.role !== "user" || msg.info.id <= lastFinished.id) continue
+                    for (const part of msg.parts) {
+                        if (part.type !== "text" || part.ignored || part.synthetic) continue
+                        if (!part.text.trim()) continue
+                        part.text = [
+                            "<system-reminder>",
+                            "The user sent the following message:",
+                            part.text, "",
+                            "Please address this message and continue with your tasks.",
+                            "</system-reminder>",
+                        ].join("\n")
+                    }
+                }
+            }
+
+            // Build system prompt
+            const systemPrompts = [
+                ...(await context.systemPrompt.environment(model, context)),
+            ]
+            const format = lastUser.format ?? { type: "text" }
+            if (format.type === "json_schema") {
+                systemPrompts.push("IMPORTANT: The user has requested structured output. You MUST use the StructuredOutput tool to provide your final response. Do NOT respond with plain text - you MUST call the StructuredOutput tool with your answer formatted according to the schema.")
+            }
+
+            const modelProvider = VendorRegistry.getModelProvider({ model })
+            const includeProviderPrompt = modelProvider.shouldIncludeProviderSystemPrompt()
+
+            const system: string[] = [
+                [
+                    ...(includeProviderPrompt ? context.systemPrompt.provider(model) : []),
+                    ...systemPrompts,
+                    ...(lastUser.system ? [lastUser.system] : []),
+                ]
+                    .filter((x) => x)
+                    .join("\n"),
+            ]
+
+            // Filter tools by user permissions
+            const filteredTools = { ...tools } as Record<string, LLMToolDef>
+            for (const name of Object.keys(filteredTools)) {
+                if (lastUser.tools?.[name] === false) {
+                    delete filteredTools[name]
+                }
+            }
+
+            // LiteLLM noop fallback
+            const modelMessages = MessageV2.toModelMessages(msgsWithReminders, model)
+            if (modelProvider.shouldAddNoopToolFallback() && Object.keys(filteredTools).length === 0 && hasToolCalls(modelMessages)) {
+                filteredTools["_noop"] = {
+                    description: "Placeholder for LiteLLM/Anthropic proxy compatibility",
+                    parameters: { type: "object", properties: {} },
+                    execute: async () => ({ output: "", title: "", metadata: {} }),
+                }
+            }
+
+            // ── Stream from provider ──
+            const l = context.log.create({ service: "llm" })
+                .clone()
+                .tag("providerID", model.providerID)
+                .tag("modelID", model.id)
+                .tag("sessionID", sessionID)
+
+            let needsCompaction = false
+
+            try {
+                let currentText: MessageV2.TextPart | undefined
+                let reasoningMap: Record<string, MessageV2.ReasoningPart> = {}
+
+                const stream = await createLLMStream(
+                    {
+                        provider: context.provider,
+                        auth: { get: Auth.get },
+                        config: context.config,
+                        systemPrompt: context.systemPrompt,
+                        log: { info: l.info.bind(l), error: l.error.bind(l) },
+                    },
+                    {
+                        model,
+                        sessionID,
+                        system,
+                        messages: modelMessages,
+                        tools: filteredTools,
+                        toolChoice: format.type === "json_schema" ? "required" : undefined,
+                        abort,
+                        retries: undefined,
+                    },
+                )
+
+                // ── Process stream chunks ──
+                for await (const value of stream.fullStream) {
+                    abort.throwIfAborted()
+                    switch (value.type) {
+                        case "start":
+                            context.sessionStatus = { type: "busy" }
+                            context.session.emit("session.status", { sessionID, status: { type: "busy" } })
+                            break
+
+                        case "reasoning-start":
+                            if (value.id in reasoningMap) continue
+                            const reasoningPart = {
+                                id: PartID.ascending(),
+                                messageID: assistantMessage.id,
+                                sessionID: assistantMessage.sessionID,
+                                type: "reasoning" as const,
+                                text: "",
+                                time: { start: Date.now() },
+                                metadata: value.providerMetadata,
+                            }
+                            reasoningMap[value.id] = reasoningPart
+                            await context.session.updatePart(reasoningPart)
+                            break
+
+                        case "reasoning-delta":
+                            if (value.id in reasoningMap) {
+                                const part = reasoningMap[value.id]
+                                part.text += value.text
+                                if (value.providerMetadata) part.metadata = value.providerMetadata
+                                await context.session.updatePartDelta({
+                                    sessionID: part.sessionID,
+                                    messageID: part.messageID,
+                                    partID: part.id,
+                                    field: "text",
+                                    delta: value.text,
+                                })
+                            }
+                            break
+
+                        case "reasoning-end":
+                            if (value.id in reasoningMap) {
+                                const part = reasoningMap[value.id]
+                                part.text = part.text.trimEnd()
+                                part.time = { ...part.time, end: Date.now() }
+                                if (value.providerMetadata) part.metadata = value.providerMetadata
+                                await context.session.updatePart(part)
+                                delete reasoningMap[value.id]
+                            }
+                            break
+
+                        case "tool-input-start":
+                            const toolPart = await context.session.updatePart({
+                                id: toolcalls[value.id]?.id ?? PartID.ascending(),
+                                messageID: assistantMessage.id,
+                                sessionID: assistantMessage.sessionID,
+                                type: "tool",
+                                tool: value.toolName,
+                                callID: value.id,
+                                state: { status: "pending", input: {}, raw: "" },
+                            })
+                            toolcalls[value.id] = toolPart as MessageV2.ToolPart
+                            break
+
+                        case "tool-input-delta":
+                        case "tool-input-end":
+                            break
+
+                        case "tool-call": {
+                            const match = toolcalls[value.toolCallId]
+                            if (match) {
+                                const part = await context.session.updatePart({
+                                    ...match,
+                                    tool: value.toolName,
+                                    state: {
+                                        status: "running",
+                                        input: value.input,
+                                        time: { start: Date.now() },
+                                    },
+                                    metadata: value.providerMetadata,
+                                })
+                                toolcalls[value.toolCallId] = part as MessageV2.ToolPart
+
+                                // Doom loop detection
+                                const parts = await MessageV2.parts(context, assistantMessage.id)
+                                const lastN = (parts as any[]).slice(-DOOM_LOOP_THRESHOLD)
+                                if (
+                                    lastN.length === DOOM_LOOP_THRESHOLD &&
+                                    lastN.every(
+                                        (p) =>
+                                            p.type === "tool" &&
+                                            p.tool === value.toolName &&
+                                            p.state.status !== "pending" &&
+                                            JSON.stringify(p.state.input) === JSON.stringify(value.input),
+                                    )
+                                ) {
+                                    // Doom loop detected
+                                }
+                            }
+                            break
+                        }
+
+                        case "tool-result": {
+                            const match = toolcalls[value.toolCallId]
+                            if (match && match.state.status === "running") {
+                                await context.session.updatePart({
+                                    ...match,
+                                    state: {
+                                        status: "completed",
+                                        input: value.input ?? match.state.input,
+                                        output: context.compaction.truncateToolOutput((value.output as any).output),
+                                        metadata: (value.output as any).metadata,
+                                        title: (value.output as any).title,
+                                        time: { start: match.state.time.start, end: Date.now() },
+                                        attachments: (value.output as any).attachments,
+                                    },
+                                })
+                                delete toolcalls[value.toolCallId]
+                            }
+                            break
+                        }
+
+                        case "tool-error": {
+                            const match = toolcalls[value.toolCallId]
+                            if (match && match.state.status === "running") {
+                                await context.session.updatePart({
+                                    ...match,
+                                    state: {
+                                        status: "error",
+                                        input: value.input ?? match.state.input,
+                                        error: (value.error as any).toString(),
+                                        time: { start: match.state.time.start, end: Date.now() },
+                                    },
+                                })
+                                delete toolcalls[value.toolCallId]
+                            }
+                            break
+                        }
+
+                        case "error":
+                            throw value.error
+
+                        case "start-step":
+                            await context.session.updatePart({
+                                id: PartID.ascending(),
+                                messageID: assistantMessage.id,
+                                sessionID,
+                                type: "step-start",
+                            })
+                            break
+
+                        case "finish-step":
+                            const usage = SessionService.getUsage({
+                                model,
+                                usage: value.usage as any,
+                                metadata: value.providerMetadata,
+                            })
+                            assistantMessage.finish = value.finishReason
+                            await context.session.updatePart({
+                                id: PartID.ascending(),
+                                reason: value.finishReason,
+                                messageID: assistantMessage.id,
+                                sessionID: assistantMessage.sessionID,
+                                type: "step-finish",
+                                tokens: usage.tokens,
+                                cost: usage.cost,
+                            })
+                            await context.session.updateMessage(assistantMessage)
+
+                            if (
+                                !assistantMessage.summary &&
+                                (await context.compaction.isOverflow({ tokens: usage.tokens, model, context }))
+                            ) {
+                                needsCompaction = true
+                            }
+                            break
+
+                        case "text-start":
+                            currentText = {
+                                id: PartID.ascending(),
+                                messageID: assistantMessage.id,
+                                sessionID: assistantMessage.sessionID,
+                                type: "text",
+                                text: "",
+                                time: { start: Date.now() },
+                                metadata: value.providerMetadata,
+                            }
+                            await context.session.updatePart(currentText)
+                            break
+
+                        case "text-delta":
+                            if (currentText) {
+                                currentText.text += value.text
+                                if (value.providerMetadata) currentText.metadata = value.providerMetadata
+                                await context.session.updatePartDelta({
+                                    sessionID: currentText.sessionID,
+                                    messageID: currentText.messageID,
+                                    partID: currentText.id,
+                                    field: "text",
+                                    delta: value.text,
+                                })
+                            }
+                            break
+
+                        case "text-end":
+                            if (currentText) {
+                                currentText.text = currentText.text.trimEnd()
+                                currentText.time = { start: Date.now(), end: Date.now() }
+                                if (value.providerMetadata) currentText.metadata = value.providerMetadata
+                                await context.session.updatePart(currentText)
+                            }
+                            currentText = undefined
+                            break
+
+                        case "finish":
+                            break
+
+                        default:
+                            context.log.create({ service: "session.processor" }).info("unhandled stream chunk", {
+                                type: (value as any).type,
+                            })
+                            continue
+                    }
+                    if (needsCompaction) break
+                }
+            } catch (e: any) {
+                context.log.create({ service: "session.processor" }).error("process", {
+                    error: e,
+                    stack: JSON.stringify(e.stack),
+                })
+                const error = MessageV2.fromError(e, { providerID: model.providerID })
+                if (MessageV2.ContextOverflowError.isInstance(error)) {
+                    needsCompaction = true
+                    context.session.emit("session.error", { sessionID, error })
+                } else {
+                    assistantMessage.error = error
+                    context.session.emit("session.error", { sessionID, error: assistantMessage.error })
+                }
+            }
+
+            // Abort any pending tool calls
+            const pendingParts = await MessageV2.parts(context, assistantMessage.id)
+            for (const part of pendingParts) {
+                if (part.type === "tool" && part.state.status !== "completed" && part.state.status !== "error") {
+                    await context.session.updatePart({
+                        ...part,
+                        state: {
+                            ...part.state,
+                            status: "error",
+                            error: "Tool execution aborted",
+                            time: { start: Date.now(), end: Date.now() },
+                        },
+                    })
+                }
+            }
+            assistantMessage.time.completed = Date.now()
+            await context.session.updateMessage(assistantMessage)
+
+            context.sessionStatus = { type: "idle" }
+            context.session.emit("session.status", { sessionID, status: { type: "idle" } })
+
+            // ── Decide next action ──
+            if (needsCompaction) continue  // re-enter loop → compaction check at top
             if (structuredOutput !== undefined) break
-            if (result === "stop") break
+            if (assistantMessage.error) break
+
+            // Check structured output format failure
+            const modelFinished = assistantMessage.finish && !["tool-calls", "unknown"].includes(assistantMessage.finish)
+            if (modelFinished && format.type === "json_schema") {
+                assistantMessage.error = new MessageV2.StructuredOutputError({
+                    message: "Model did not produce structured output", retries: 0,
+                }).toObject()
+                await context.session.updateMessage(assistantMessage)
+                break
+            }
+
+            // tool-calls / unknown → continue loop; otherwise done
+            if (modelFinished) break
         }
 
         // Finalize
@@ -1036,428 +1430,6 @@ export class CodeAgent extends EventEmitter {
             return item
         }
         throw new Error("Impossible")
-    }
-
-    private async processStep(input: {
-        context: AgentContext
-        session: Session.Info
-        sessionID: SessionID
-        abort: AbortSignal
-        model: Provider.Model
-        lastUser: MessageV2.User
-        lastFinished: MessageV2.Assistant | undefined
-        step: number
-        msgs: MessageV2.WithParts[]
-        onStructuredOutput: (v: unknown) => void
-    }): Promise<"stop" | "compact" | "continue"> {
-        const { context, session, sessionID, abort, model, lastUser, lastFinished, step } = input
-
-        const msgs = await SessionPrompt.insertReminders({ context, messages: input.msgs, session })
-
-        // Create assistant message
-        const assistantMessage = (await context.session.updateMessage({
-            id: MsgID.ascending(), parentID: lastUser.id, role: "assistant",
-            mode: "build", agent: "build", variant: lastUser.variant,
-            path: { cwd: context.directory, root: context.worktree },
-            modelID: model.id, providerID: model.providerID,
-            time: { created: Date.now() }, sessionID,
-            ...((lastUser as any).chatId ? { chatId: (lastUser as any).chatId } : {}),
-        })) as MessageV2.Assistant
-
-        const toolcalls: Record<string, MessageV2.ToolPart> = {}
-
-        const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
-        const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
-
-        const tools = await SessionPrompt.resolveTools({
-            session, model, tools: lastUser.tools,
-            processor: {
-                message: assistantMessage,
-                partFromToolCall: (id: string) => toolcalls[id],
-            } as any,
-            bypassAgentCheck, messages: msgs, agentContext: context,
-            onToolEvent: (event, data) => this.emit(event, data),
-        })
-
-        if (lastUser.format?.type === "json_schema") {
-            tools["StructuredOutput"] = SessionPrompt.createStructuredOutputTool({
-                schema: lastUser.format.schema,
-                onSuccess: input.onStructuredOutput,
-            })
-        }
-
-        // Ephemerally wrap queued user messages
-        if (step > 1 && lastFinished) {
-            for (const msg of msgs) {
-                if (msg.info.role !== "user" || msg.info.id <= lastFinished.id) continue
-                for (const part of msg.parts) {
-                    if (part.type !== "text" || part.ignored || part.synthetic) continue
-                    if (!part.text.trim()) continue
-                    part.text = [
-                        "<system-reminder>",
-                        "The user sent the following message:",
-                        part.text, "",
-                        "Please address this message and continue with your tasks.",
-                        "</system-reminder>",
-                    ].join("\n")
-                }
-            }
-        }
-
-        // Build system prompt
-        const systemPrompts = [
-            ...(await context.systemPrompt.environment(model, context)),
-        ]
-        const format = lastUser.format ?? { type: "text" }
-        if (format.type === "json_schema") {
-            systemPrompts.push("IMPORTANT: The user has requested structured output. You MUST use the StructuredOutput tool to provide your final response. Do NOT respond with plain text - you MUST call the StructuredOutput tool with your answer formatted according to the schema.")
-        }
-
-        // ── Build system prompts & resolve tools for LLM ──
-        const modelProvider = VendorRegistry.getModelProvider({ model })
-        const includeProviderPrompt = modelProvider.shouldIncludeProviderSystemPrompt()
-
-        const system: string[] = [
-            [
-                ...(includeProviderPrompt ? context.systemPrompt.provider(model) : []),
-                ...systemPrompts,
-                ...(lastUser.system ? [lastUser.system] : []),
-            ]
-                .filter((x) => x)
-                .join("\n"),
-        ]
-
-        // Filter tools by user permissions
-        const filteredTools = { ...tools } as Record<string, LLMToolDef>
-        for (const name of Object.keys(filteredTools)) {
-            if (lastUser.tools?.[name] === false) {
-                delete filteredTools[name]
-            }
-        }
-
-        // LiteLLM noop fallback
-        const modelMessages = MessageV2.toModelMessages(msgs, model)
-        if (modelProvider.shouldAddNoopToolFallback() && Object.keys(filteredTools).length === 0 && hasToolCalls(modelMessages)) {
-            filteredTools["_noop"] = {
-                description: "Placeholder for LiteLLM/Anthropic proxy compatibility",
-                parameters: { type: "object", properties: {} },
-                execute: async () => ({ output: "", title: "", metadata: {} }),
-            }
-        }
-
-        // ── Stream from provider ──
-        const l = context.log.create({ service: "llm" })
-            .clone()
-            .tag("providerID", model.providerID)
-            .tag("modelID", model.id)
-            .tag("sessionID", sessionID)
-
-        let needsCompaction = false
-
-        try {
-            let currentText: MessageV2.TextPart | undefined
-            let reasoningMap: Record<string, MessageV2.ReasoningPart> = {}
-
-            const stream = await createLLMStream(
-                {
-                    provider: context.provider,
-                    auth: { get: Auth.get },
-                    config: context.config,
-                    systemPrompt: context.systemPrompt,
-                    log: { info: l.info.bind(l), error: l.error.bind(l) },
-                },
-                {
-                    model,
-                    sessionID,
-                    system,
-                    messages: modelMessages,
-                    tools: filteredTools,
-                    toolChoice: format.type === "json_schema" ? "required" : undefined,
-                    abort,
-                    retries: undefined,
-                },
-            )
-
-            // ── Process stream chunks ──
-            for await (const value of stream.fullStream) {
-                abort.throwIfAborted()
-                switch (value.type) {
-                    case "start":
-                        context.sessionStatus = { type: "busy" }
-                        context.session.emit("session.status", { sessionID, status: { type: "busy" } })
-                        break
-
-                    case "reasoning-start":
-                        if (value.id in reasoningMap) continue
-                        const reasoningPart = {
-                            id: PartID.ascending(),
-                            messageID: assistantMessage.id,
-                            sessionID: assistantMessage.sessionID,
-                            type: "reasoning" as const,
-                            text: "",
-                            time: { start: Date.now() },
-                            metadata: value.providerMetadata,
-                        }
-                        reasoningMap[value.id] = reasoningPart
-                        await context.session.updatePart(reasoningPart)
-                        break
-
-                    case "reasoning-delta":
-                        if (value.id in reasoningMap) {
-                            const part = reasoningMap[value.id]
-                            part.text += value.text
-                            if (value.providerMetadata) part.metadata = value.providerMetadata
-                            await context.session.updatePartDelta({
-                                sessionID: part.sessionID,
-                                messageID: part.messageID,
-                                partID: part.id,
-                                field: "text",
-                                delta: value.text,
-                            })
-                        }
-                        break
-
-                    case "reasoning-end":
-                        if (value.id in reasoningMap) {
-                            const part = reasoningMap[value.id]
-                            part.text = part.text.trimEnd()
-                            part.time = { ...part.time, end: Date.now() }
-                            if (value.providerMetadata) part.metadata = value.providerMetadata
-                            await context.session.updatePart(part)
-                            delete reasoningMap[value.id]
-                        }
-                        break
-
-                    case "tool-input-start":
-                        const toolPart = await context.session.updatePart({
-                            id: toolcalls[value.id]?.id ?? PartID.ascending(),
-                            messageID: assistantMessage.id,
-                            sessionID: assistantMessage.sessionID,
-                            type: "tool",
-                            tool: value.toolName,
-                            callID: value.id,
-                            state: { status: "pending", input: {}, raw: "" },
-                        })
-                        toolcalls[value.id] = toolPart as MessageV2.ToolPart
-                        break
-
-                    case "tool-input-delta":
-                    case "tool-input-end":
-                        break
-
-                    case "tool-call": {
-                        const match = toolcalls[value.toolCallId]
-                        if (match) {
-                            const part = await context.session.updatePart({
-                                ...match,
-                                tool: value.toolName,
-                                state: {
-                                    status: "running",
-                                    input: value.input,
-                                    time: { start: Date.now() },
-                                },
-                                metadata: value.providerMetadata,
-                            })
-                            toolcalls[value.toolCallId] = part as MessageV2.ToolPart
-
-                            // Doom loop detection
-                            const parts = await MessageV2.parts(context, assistantMessage.id)
-                            const lastN = (parts as any[]).slice(-DOOM_LOOP_THRESHOLD)
-                            if (
-                                lastN.length === DOOM_LOOP_THRESHOLD &&
-                                lastN.every(
-                                    (p) =>
-                                        p.type === "tool" &&
-                                        p.tool === value.toolName &&
-                                        p.state.status !== "pending" &&
-                                        JSON.stringify(p.state.input) === JSON.stringify(value.input),
-                                )
-                            ) {
-                                // Doom loop detected
-                            }
-                        }
-                        break
-                    }
-
-                    case "tool-result": {
-                        const match = toolcalls[value.toolCallId]
-                        if (match && match.state.status === "running") {
-                            await context.session.updatePart({
-                                ...match,
-                                state: {
-                                    status: "completed",
-                                    input: value.input ?? match.state.input,
-                                    output: context.compaction.truncateToolOutput((value.output as any).output),
-                                    metadata: (value.output as any).metadata,
-                                    title: (value.output as any).title,
-                                    time: { start: match.state.time.start, end: Date.now() },
-                                    attachments: (value.output as any).attachments,
-                                },
-                            })
-                            delete toolcalls[value.toolCallId]
-                        }
-                        break
-                    }
-
-                    case "tool-error": {
-                        const match = toolcalls[value.toolCallId]
-                        if (match && match.state.status === "running") {
-                            await context.session.updatePart({
-                                ...match,
-                                state: {
-                                    status: "error",
-                                    input: value.input ?? match.state.input,
-                                    error: (value.error as any).toString(),
-                                    time: { start: match.state.time.start, end: Date.now() },
-                                },
-                            })
-                            delete toolcalls[value.toolCallId]
-                        }
-                        break
-                    }
-
-                    case "error":
-                        throw value.error
-
-                    case "start-step":
-                        await context.session.updatePart({
-                            id: PartID.ascending(),
-                            messageID: assistantMessage.id,
-                            sessionID,
-                            type: "step-start",
-                        })
-                        break
-
-                    case "finish-step":
-                        const usage = SessionService.getUsage({
-                            model,
-                            usage: value.usage as any,
-                            metadata: value.providerMetadata,
-                        })
-                        assistantMessage.finish = value.finishReason
-                        await context.session.updatePart({
-                            id: PartID.ascending(),
-                            reason: value.finishReason,
-                            messageID: assistantMessage.id,
-                            sessionID: assistantMessage.sessionID,
-                            type: "step-finish",
-                            tokens: usage.tokens,
-                            cost: usage.cost,
-                        })
-                        await context.session.updateMessage(assistantMessage)
-
-                        if (
-                            !assistantMessage.summary &&
-                            (await context.compaction.isOverflow({ tokens: usage.tokens, model, context }))
-                        ) {
-                            needsCompaction = true
-                        }
-                        break
-
-                    case "text-start":
-                        currentText = {
-                            id: PartID.ascending(),
-                            messageID: assistantMessage.id,
-                            sessionID: assistantMessage.sessionID,
-                            type: "text",
-                            text: "",
-                            time: { start: Date.now() },
-                            metadata: value.providerMetadata,
-                        }
-                        await context.session.updatePart(currentText)
-                        break
-
-                    case "text-delta":
-                        if (currentText) {
-                            currentText.text += value.text
-                            if (value.providerMetadata) currentText.metadata = value.providerMetadata
-                            await context.session.updatePartDelta({
-                                sessionID: currentText.sessionID,
-                                messageID: currentText.messageID,
-                                partID: currentText.id,
-                                field: "text",
-                                delta: value.text,
-                            })
-                        }
-                        break
-
-                    case "text-end":
-                        if (currentText) {
-                            currentText.text = currentText.text.trimEnd()
-                            currentText.time = { start: Date.now(), end: Date.now() }
-                            if (value.providerMetadata) currentText.metadata = value.providerMetadata
-                            await context.session.updatePart(currentText)
-                        }
-                        currentText = undefined
-                        break
-
-                    case "finish":
-                        break
-
-                    default:
-                        context.log.create({ service: "session.processor" }).info("unhandled stream chunk", {
-                            type: (value as any).type,
-                        })
-                        continue
-                }
-                if (needsCompaction) break
-            }
-        } catch (e: any) {
-            context.log.create({ service: "session.processor" }).error("process", {
-                error: e,
-                stack: JSON.stringify(e.stack),
-            })
-            const error = MessageV2.fromError(e, { providerID: model.providerID })
-            if (MessageV2.ContextOverflowError.isInstance(error)) {
-                needsCompaction = true
-                context.session.emit("session.error", { sessionID, error })
-            } else {
-                assistantMessage.error = error
-                context.session.emit("session.error", { sessionID, error: assistantMessage.error })
-            }
-        }
-
-        // Abort any pending tool calls
-        const pendingParts = await MessageV2.parts(context, assistantMessage.id)
-        for (const part of pendingParts) {
-            if (part.type === "tool" && part.state.status !== "completed" && part.state.status !== "error") {
-                await context.session.updatePart({
-                    ...part,
-                    state: {
-                        ...part.state,
-                        status: "error",
-                        error: "Tool execution aborted",
-                        time: { start: Date.now(), end: Date.now() },
-                    },
-                })
-            }
-        }
-        assistantMessage.time.completed = Date.now()
-        await context.session.updateMessage(assistantMessage)
-
-        context.sessionStatus = { type: "idle" }
-        context.session.emit("session.status", { sessionID, status: { type: "idle" } })
-
-        if (needsCompaction) return "compact"
-
-        // Check structured output
-        if (input.onStructuredOutput && assistantMessage.structured !== undefined) {
-            assistantMessage.finish = assistantMessage.finish ?? "stop"
-            await context.session.updateMessage(assistantMessage)
-            return "stop"
-        }
-
-        const modelFinished = assistantMessage.finish && !["tool-calls", "unknown"].includes(assistantMessage.finish)
-        if (modelFinished && !assistantMessage.error && format.type === "json_schema") {
-            assistantMessage.error = new MessageV2.StructuredOutputError({
-                message: "Model did not produce structured output", retries: 0,
-            }).toObject()
-            await context.session.updateMessage(assistantMessage)
-            return "stop"
-        }
-
-        if (assistantMessage.error) return "stop"
-        return "continue"
     }
 
     // ── Private helpers ────────────────────────────────────────────────────
