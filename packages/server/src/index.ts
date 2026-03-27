@@ -1073,18 +1073,17 @@ function createPreviewServer(cfg: ServerConfig): http.Server {
       req.on("data", (c: Buffer) => chunks.push(c))
       req.on("end", () => {
         const body = Buffer.concat(chunks)
-        const MAX_RETRIES = 5
-        const RETRY_DELAY = 500
+        const RETRY_DELAY = 2000
 
-        const attempt = (n: number) => {
+        const attempt = () => {
           const proxyReq = http.request(options, (proxyRes) => {
             res.writeHead(proxyRes.statusCode || 502, proxyRes.headers)
             proxyRes.pipe(res)
           })
 
           proxyReq.on("error", (err: NodeJS.ErrnoException) => {
-            if (err.code === "ECONNREFUSED" && n < MAX_RETRIES) {
-              setTimeout(() => attempt(n + 1), RETRY_DELAY)
+            if (err.code === "ECONNREFUSED" && !res.destroyed) {
+              setTimeout(attempt, RETRY_DELAY)
             } else {
               if (!res.headersSent) res.writeHead(502, { "Content-Type": "text/plain" })
               res.end(`Preview proxy error: ${err.message}`)
@@ -1093,7 +1092,7 @@ function createPreviewServer(cfg: ServerConfig): http.Server {
 
           proxyReq.end(body)
         }
-        attempt(0)
+        attempt()
       })
     } catch (err: any) {
       res.writeHead(502, { "Content-Type": "text/plain" })
