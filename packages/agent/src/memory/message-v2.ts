@@ -18,18 +18,18 @@ export namespace MessageV2 {
 
   // --- Error types (NamedError with plain generics) ---
 
-  export const OutputLengthError = NamedError.create<"MessageOutputLengthError", {}>("MessageOutputLengthError")
-  export const AbortedError = NamedError.create<"MessageAbortedError", { message: string }>("MessageAbortedError")
+  const OutputLengthError = NamedError.create<"MessageOutputLengthError", {}>("MessageOutputLengthError")
+  const AbortedError = NamedError.create<"MessageAbortedError", { message: string }>("MessageAbortedError")
   export const StructuredOutputError = NamedError.create<"StructuredOutputError", {
     message: string
     retries: number
   }>("StructuredOutputError")
-  export const AuthError = NamedError.create<"ProviderAuthError", {
+  const AuthError = NamedError.create<"ProviderAuthError", {
     providerID: string
     message: string
   }>("ProviderAuthError")
 
-  export interface APIErrorData {
+  interface APIErrorData {
     message: string
     statusCode?: number
     isRetryable: boolean
@@ -37,7 +37,7 @@ export namespace MessageV2 {
     responseBody?: string
     metadata?: Record<string, string>
   }
-  export const APIError = NamedError.create<"APIError", APIErrorData>("APIError")
+  const APIError = NamedError.create<"APIError", APIErrorData>("APIError")
 
   export const ContextOverflowError = NamedError.create<"ContextOverflowError", {
     message: string
@@ -46,17 +46,7 @@ export namespace MessageV2 {
 
   // --- Output format ---
 
-  export interface OutputFormatText {
-    type: "text"
-  }
-
-  export interface OutputFormatJsonSchema {
-    type: "json_schema"
-    schema: Record<string, any>
-    retryCount?: number
-  }
-
-  export type OutputFormat = OutputFormatText | OutputFormatJsonSchema
+  export type OutputFormat = { type: "text" } | { type: "json_schema"; schema: Record<string, any>; retryCount?: number }
 
   // --- File diffs ---
 
@@ -79,7 +69,7 @@ export namespace MessageV2 {
 
   // --- Parts ---
 
-  export interface PatchPart extends PartBase {
+  interface PatchPart extends PartBase {
     type: "patch"
     hash: string
     files: string[]
@@ -115,13 +105,13 @@ export namespace MessageV2 {
     end: number
   }
 
-  export interface FileSource {
+  interface FileSource {
     type: "file"
     path: string
     text: FilePartSourceText
   }
 
-  export interface SymbolSource {
+  interface SymbolSource {
     type: "symbol"
     path: string
     range: {
@@ -133,14 +123,14 @@ export namespace MessageV2 {
     text: FilePartSourceText
   }
 
-  export interface ResourceSource {
+  interface ResourceSource {
     type: "resource"
     clientName: string
     uri: string
     text: FilePartSourceText
   }
 
-  export type FilePartSource = FileSource | SymbolSource | ResourceSource
+  type FilePartSource = FileSource | SymbolSource | ResourceSource
 
   export interface FilePart extends PartBase {
     type: "file"
@@ -160,7 +150,7 @@ export namespace MessageV2 {
     }
   }
 
-  export interface CompactionPart extends PartBase {
+  interface CompactionPart extends PartBase {
     type: "compaction"
     auto: boolean
     overflow?: boolean
@@ -178,7 +168,7 @@ export namespace MessageV2 {
     command?: string
   }
 
-  export interface StepStartPart extends PartBase {
+  interface StepStartPart extends PartBase {
     type: "step-start"
   }
 
@@ -200,13 +190,13 @@ export namespace MessageV2 {
 
   // --- Tool states ---
 
-  export interface ToolStatePending {
+  interface ToolStatePending {
     status: "pending"
     input: Record<string, any>
     raw: string
   }
 
-  export interface ToolStateRunning {
+  interface ToolStateRunning {
     status: "running"
     input: Record<string, any>
     title?: string
@@ -216,7 +206,7 @@ export namespace MessageV2 {
     }
   }
 
-  export interface ToolStateCompleted {
+  interface ToolStateCompleted {
     status: "completed"
     input: Record<string, any>
     output: string
@@ -230,7 +220,7 @@ export namespace MessageV2 {
     attachments?: FilePart[]
   }
 
-  export interface ToolStateError {
+  interface ToolStateError {
     status: "error"
     input: Record<string, any>
     error: string
@@ -241,7 +231,7 @@ export namespace MessageV2 {
     }
   }
 
-  export type ToolState = ToolStatePending | ToolStateRunning | ToolStateCompleted | ToolStateError
+  type ToolState = ToolStatePending | ToolStateRunning | ToolStateCompleted | ToolStateError
 
   export interface ToolPart extends PartBase {
     type: "tool"
@@ -349,7 +339,7 @@ export namespace MessageV2 {
     time: number
   }
 
-  export const cursor = {
+  const cursor = {
     encode(input: Cursor) {
       return Buffer.from(JSON.stringify(input)).toString("base64url")
     },
@@ -511,7 +501,7 @@ export namespace MessageV2 {
         if (
           msg.info.error &&
           !(
-            MessageV2.AbortedError.isInstance(msg.info.error) &&
+            AbortedError.isInstance(msg.info.error) &&
             msg.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
           )
         ) {
@@ -675,16 +665,7 @@ export namespace MessageV2 {
     )
   }
 
-  export async function get(context: import("../context").AgentContext, input: { sessionID: any; messageID: any }): Promise<WithParts> {
-    const row = context.db.findOne("message",
-      { op: "and", conditions: [{ op: "eq", field: "id", value: input.messageID }, { op: "eq", field: "session_id", value: input.sessionID }] },
-    )
-    if (!row) throw new NotFoundError({ message: `Message not found: ${input.messageID}` })
-    return {
-      info: info(row),
-      parts: await parts(context, input.messageID),
-    }
-  }
+
 
   export async function filterCompacted(stream: AsyncIterable<MessageV2.WithParts>) {
     const result = [] as MessageV2.WithParts[]
@@ -707,16 +688,16 @@ export namespace MessageV2 {
   export function fromError(e: unknown, ctx: { providerID: ProviderID }): NonNullable<Assistant["error"]> {
     switch (true) {
       case e instanceof DOMException && e.name === "AbortError":
-        return new MessageV2.AbortedError(
+        return new AbortedError(
           { message: e.message },
           {
             cause: e,
           },
         ).toObject()
-      case MessageV2.OutputLengthError.isInstance(e):
+      case OutputLengthError.isInstance(e):
         return e
       case isLoadAPIKeyError(e):
-        return new MessageV2.AuthError(
+        return new AuthError(
           {
             providerID: ctx.providerID,
             message: (e as Error).message,
@@ -724,7 +705,7 @@ export namespace MessageV2 {
           { cause: e },
         ).toObject()
       case (e as SystemError)?.code === "ECONNRESET":
-        return new MessageV2.APIError(
+        return new APIError(
           {
             message: "Connection reset by server",
             isRetryable: true,
@@ -751,7 +732,7 @@ export namespace MessageV2 {
           ).toObject()
         }
 
-        return new MessageV2.APIError(
+        return new APIError(
           {
             message: parsed.message,
             statusCode: parsed.statusCode,
@@ -777,7 +758,7 @@ export namespace MessageV2 {
                 { cause: e },
               ).toObject()
             }
-            return new MessageV2.APIError(
+            return new APIError(
               {
                 message: parsed.message,
                 isRetryable: parsed.isRetryable,
