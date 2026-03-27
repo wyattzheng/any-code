@@ -85,6 +85,7 @@
 }
 
 .file-browser--horizontal .fb-resize-border.dragging::after {
+    top: 0;
     left: -1px;
     bottom: 0;
     width: 2px;
