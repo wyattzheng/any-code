@@ -536,146 +536,7 @@ export class CodeAgent extends EventEmitter {
 
         // Start the agent loop in the background
         const promptPromise = (async () => {
-            // Subscribe to message part events
-            const unsubs: (() => void)[] = []
-
             try {
-                // Track partID → part type for routing deltas
-                const partTypeMap = new Map<string, "reasoning" | "text">()
-
-                // Subscribe to all events on this instance's bus
-                const globalHandler = (payload: any) => {
-                    if (!payload) return
-                    const type = payload.type
-                    const props = payload.properties
-
-                    // ── PartDelta: route to thinking.delta or text.delta ──
-                    if (type === "message.part.delta") {
-                        const partType = partTypeMap.get(props.partID)
-                        if (partType === "reasoning") {
-                            push({
-                                type: "thinking.delta",
-                                thinkingContent: props.delta,
-                            })
-                        } else {
-                            push({
-                                type: "text.delta",
-                                content: props.delta,
-                            })
-                        }
-                    }
-
-                    // ── PartUpdated: reasoning / text / tool / step-finish ──
-                    if (type === "message.part.updated") {
-                        const part = props?.part
-                        if (!part) return
-
-                        // Reasoning parts
-                        if (part.type === "reasoning") {
-                            partTypeMap.set(part.id, "reasoning")
-                            if (!part.time?.end) {
-                                push({ type: "thinking.start" })
-                            } else {
-                                const duration = part.time.end - part.time.start
-                                push({
-                                    type: "thinking.end",
-                                    thinkingDuration: duration,
-                                })
-                                partTypeMap.delete(part.id)
-                            }
-                        }
-
-                        // Text parts — register for delta routing
-                        if (part.type === "text") {
-                            partTypeMap.set(part.id, "text")
-                        }
-
-                        // Tool parts
-                        if (part.type === "tool" && part.state.status === "running") {
-                            push({
-                                type: "tool.start",
-                                toolCallId: part.callID,
-                                toolName: part.tool,
-                                toolArgs: part.state.input as Record<string, unknown>,
-                                toolTitle: part.state.title,
-                            })
-                        }
-                        if (part.type === "tool" && part.state.status === "completed") {
-                            const duration = part.state.time?.end && part.state.time?.start
-                                ? part.state.time.end - part.state.time.start
-                                : undefined
-                            push({
-                                type: "tool.done",
-                                toolCallId: part.callID,
-                                toolName: part.tool,
-                                toolOutput: part.state.output,
-                                toolTitle: part.state.title,
-                                toolMetadata: part.state.metadata,
-                                toolDuration: duration,
-                            })
-                        }
-                        if (part.type === "tool" && part.state.status === "error") {
-                            const duration = part.state.time?.end && part.state.time?.start
-                                ? part.state.time.end - part.state.time.start
-                                : undefined
-                            push({
-                                type: "tool.error",
-                                toolCallId: part.callID,
-                                toolName: part.tool,
-                                error: part.state.error,
-                                toolDuration: duration,
-                            })
-                        }
-
-                        // Step finish — token usage and cost
-                        if (part.type === "step-finish") {
-                            push({
-                                type: "message.done",
-                                usage: {
-                                    inputTokens: part.tokens.input,
-                                    outputTokens: part.tokens.output,
-                                    reasoningTokens: part.tokens.reasoning,
-                                    cost: part.cost,
-                                },
-                            })
-                        }
-                    }
-
-
-                    // ── Session status ──
-                    if (type === "session.status") {
-                        push({
-                            type: "session.status",
-                            status: props.status?.type ?? "idle",
-                        })
-                    }
-
-                    // ── Session error ──
-                    if (type === "session.error") {
-                        const errorMsg = props.error?.data?.message || props.error?.message || "Unknown error";
-                        push({
-                            type: "error",
-                            error: errorMsg,
-                        })
-                    }
-                }
-
-                const h1 = (data: any) => globalHandler({ type: "message.part.delta", properties: data })
-                const h2 = (data: any) => globalHandler({ type: "message.part.updated", properties: data })
-                const h3 = (data: any) => globalHandler({ type: "session.status", properties: data })
-                const h4 = (data: any) => globalHandler({ type: "session.error", properties: data })
-                this._context.memory.on("message.part.delta", h1)
-                this._context.memory.on("message.part.updated", h2)
-                this._context.session.on("session.status", h3)
-                this._context.session.on("session.error", h4)
-                unsubs.push(() => {
-                    this._context.memory.removeListener("message.part.delta", h1)
-                    this._context.memory.removeListener("message.part.updated", h2)
-                    this._context.session.removeListener("session.status", h3)
-                    this._context.session.removeListener("session.error", h4)
-                })
-
-
                 // ── Create user message ──
                 const sessionID = sessionId as SessionID
                 const context = this.agentContext
@@ -694,7 +555,8 @@ export class CodeAgent extends EventEmitter {
 
                 const userMsg = await SessionPrompt.createUserMessage(context, userInput)
                 for (const error of userMsg.errors) {
-                    this._context.session.emit("session.error", { sessionID, error })
+                    const errorMsg = (error as any)?.data?.message || "Unknown error"
+                    push({ type: "error", error: errorMsg })
                 }
                 await context.session.touch(sessionID)
 
@@ -712,7 +574,7 @@ export class CodeAgent extends EventEmitter {
 
                     while (true) {
                         context.sessionStatus = { type: "busy" }
-                        this._context.session.emit("session.status", { sessionID, status: { type: "busy" } })
+                        push({ type: "session.status", status: "busy" })
                         if (abort.aborted) break
 
                         let msgs = await MessageV2.filterCompacted(MessageV2.stream(context, sessionID))
@@ -899,7 +761,7 @@ export class CodeAgent extends EventEmitter {
                                 switch (value.type) {
                                     case "start":
                                         context.sessionStatus = { type: "busy" }
-                                        context.session.emit("session.status", { sessionID, status: { type: "busy" } })
+                                        push({ type: "session.status", status: "busy" })
                                         break
 
                                     case "reasoning-start":
@@ -915,6 +777,7 @@ export class CodeAgent extends EventEmitter {
                                         }
                                         reasoningMap[value.id] = reasoningPart
                                         await context.session.updatePart(reasoningPart)
+                                        push({ type: "thinking.start" })
                                         break
 
                                     case "reasoning-delta":
@@ -929,6 +792,7 @@ export class CodeAgent extends EventEmitter {
                                                 field: "text",
                                                 delta: value.text,
                                             })
+                                            push({ type: "thinking.delta", thinkingContent: value.text })
                                         }
                                         break
 
@@ -939,6 +803,7 @@ export class CodeAgent extends EventEmitter {
                                             part.time = { ...part.time, end: Date.now() }
                                             if (value.providerMetadata) part.metadata = value.providerMetadata
                                             await context.session.updatePart(part)
+                                            push({ type: "thinking.end", thinkingDuration: part.time.end - part.time.start })
                                             delete reasoningMap[value.id]
                                         }
                                         break
@@ -974,6 +839,12 @@ export class CodeAgent extends EventEmitter {
                                                 metadata: value.providerMetadata,
                                             })
                                             toolcalls[value.toolCallId] = part as MessageV2.ToolPart
+                                            push({
+                                                type: "tool.start",
+                                                toolCallId: value.toolCallId,
+                                                toolName: value.toolName,
+                                                toolArgs: value.input as Record<string, unknown>,
+                                            })
 
                                             // Doom loop detection
                                             const parts = await MessageV2.parts(context, assistantMessage.id)
@@ -997,6 +868,7 @@ export class CodeAgent extends EventEmitter {
                                     case "tool-result": {
                                         const match = toolcalls[value.toolCallId]
                                         if (match && match.state.status === "running") {
+                                            const endTime = Date.now()
                                             await context.session.updatePart({
                                                 ...match,
                                                 state: {
@@ -1005,9 +877,18 @@ export class CodeAgent extends EventEmitter {
                                                     output: context.compaction.truncateToolOutput((value.output as any).output),
                                                     metadata: (value.output as any).metadata,
                                                     title: (value.output as any).title,
-                                                    time: { start: match.state.time.start, end: Date.now() },
+                                                    time: { start: match.state.time.start, end: endTime },
                                                     attachments: (value.output as any).attachments,
                                                 },
+                                            })
+                                            push({
+                                                type: "tool.done",
+                                                toolCallId: value.toolCallId,
+                                                toolName: match.tool,
+                                                toolOutput: (value.output as any).output,
+                                                toolTitle: (value.output as any).title,
+                                                toolMetadata: (value.output as any).metadata,
+                                                toolDuration: endTime - match.state.time.start,
                                             })
                                             delete toolcalls[value.toolCallId]
                                         }
@@ -1017,14 +898,22 @@ export class CodeAgent extends EventEmitter {
                                     case "tool-error": {
                                         const match = toolcalls[value.toolCallId]
                                         if (match && match.state.status === "running") {
+                                            const endTime = Date.now()
                                             await context.session.updatePart({
                                                 ...match,
                                                 state: {
                                                     status: "error",
                                                     input: value.input ?? match.state.input,
                                                     error: (value.error as any).toString(),
-                                                    time: { start: match.state.time.start, end: Date.now() },
+                                                    time: { start: match.state.time.start, end: endTime },
                                                 },
+                                            })
+                                            push({
+                                                type: "tool.error",
+                                                toolCallId: value.toolCallId,
+                                                toolName: match.tool,
+                                                error: (value.error as any).toString(),
+                                                toolDuration: endTime - match.state.time.start,
                                             })
                                             delete toolcalls[value.toolCallId]
                                         }
@@ -1060,6 +949,15 @@ export class CodeAgent extends EventEmitter {
                                             cost: usage.cost,
                                         })
                                         await context.session.updateMessage(assistantMessage)
+                                        push({
+                                            type: "message.done",
+                                            usage: {
+                                                inputTokens: usage.tokens.input,
+                                                outputTokens: usage.tokens.output,
+                                                reasoningTokens: usage.tokens.reasoning,
+                                                cost: usage.cost,
+                                            },
+                                        })
 
                                         if (
                                             !assistantMessage.summary &&
@@ -1093,6 +991,7 @@ export class CodeAgent extends EventEmitter {
                                                 field: "text",
                                                 delta: value.text,
                                             })
+                                            push({ type: "text.delta", content: value.text })
                                         }
                                         break
 
@@ -1125,10 +1024,12 @@ export class CodeAgent extends EventEmitter {
                             const error = MessageV2.fromError(e, { providerID: model.providerID })
                             if (MessageV2.ContextOverflowError.isInstance(error)) {
                                 needsCompaction = true
-                                context.session.emit("session.error", { sessionID, error })
+                                const errorMsg = (error as any)?.data?.message || "Context overflow"
+                                push({ type: "error", error: errorMsg })
                             } else {
                                 assistantMessage.error = error
-                                context.session.emit("session.error", { sessionID, error: assistantMessage.error })
+                                const errorMsg = (error as any)?.data?.message || "Unknown error"
+                                push({ type: "error", error: errorMsg })
                             }
                         }
 
@@ -1151,7 +1052,7 @@ export class CodeAgent extends EventEmitter {
                         await context.session.updateMessage(assistantMessage)
 
                         context.sessionStatus = { type: "idle" }
-                        context.session.emit("session.status", { sessionID, status: { type: "idle" } })
+                        push({ type: "session.status", status: "idle" })
 
                         // ── Decide next action ──
                         if (needsCompaction) continue
@@ -1177,7 +1078,7 @@ export class CodeAgent extends EventEmitter {
                         sp.callbacks = []
                     }
                     context.sessionStatus = { type: "idle" }
-                    this._context.session.emit("session.status", { sessionID, status: { type: "idle" } })
+                    push({ type: "session.status", status: "idle" })
                 }
 
             } catch (err: any) {
@@ -1187,15 +1088,8 @@ export class CodeAgent extends EventEmitter {
                     error: err?.message ?? String(err),
                 })
             } finally {
-
                 done = true
                 push({ type: "done" })
-                // Cleanup subscriptions
-                for (const unsub of unsubs) {
-                    unsub()
-                }
-                // (chatId is persisted in message data, no mutable state to clear)
-                // Release the chat mutex
                 this._chatPromise = null
                 chatResolve()
             }
