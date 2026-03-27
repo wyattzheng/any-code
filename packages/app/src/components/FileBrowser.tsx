@@ -103,11 +103,12 @@ export function FileBrowser({ topLevel, requestLs, requestFile, onFileContext }:
     useLayoutEffect(() => {
         const el = containerRef.current;
         if (!el) return;
-        // Synchronous initial measurement
-        setHorizontal(el.getBoundingClientRect().width >= HORIZONTAL_BREAKPOINT);
+        // Synchronous initial measurement (skip if not laid out yet)
+        const initW = el.getBoundingClientRect().width;
+        if (initW > 0) setHorizontal(initW >= HORIZONTAL_BREAKPOINT);
         const ro = new ResizeObserver((entries) => {
             const w = entries[0]?.contentRect.width ?? 0;
-            setHorizontal(w >= HORIZONTAL_BREAKPOINT);
+            if (w > 0) setHorizontal(w >= HORIZONTAL_BREAKPOINT);
         });
         ro.observe(el);
         return () => ro.disconnect();
