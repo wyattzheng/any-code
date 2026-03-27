@@ -21,7 +21,7 @@ import { pathToFileURL, fileURLToPath } from "url"
 import { ConfigMarkdown } from "../util/markdown"
 import { NamedError } from "../util/error"
 import { Tool } from "../tool/tool"
-import { LLMRunner, LLM } from "../llm-runner"
+import type { LLMRunnerInfo } from "../llm-runner"
 import { decodeDataUrl } from "../util/data-url"
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -147,7 +147,7 @@ export namespace SessionPrompt {
     model: Provider.Model
     session: Session.Info
     tools?: Record<string, boolean>
-    processor: LLMRunner.Info
+    processor: LLMRunnerInfo
     bypassAgentCheck: boolean
     messages: MessageV2.WithParts[]
     agentContext: AgentContext

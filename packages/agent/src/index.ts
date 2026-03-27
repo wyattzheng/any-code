@@ -20,7 +20,8 @@ export { SessionPrompt, SessionPromptService, type ISessionPromptService } from 
 export { SessionID, MessageID, PartID } from "./session/schema"
 
 // LLM
-export { LLMRunner, LLM } from "./llm-runner"
+export { createLLMRunner } from "./llm-runner"
+export type { LLMRunnerInfo, LLMRunnerResult, AgentStreamInput } from "./llm-runner"
 
 // Memory
 export { MessageV2 } from "./memory/message-v2"

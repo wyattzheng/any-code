@@ -51,7 +51,7 @@ import { ulid } from "ulid"
 import { MessageID as MsgID, SessionID } from "./session/schema"
 import { SystemPrompt } from "./prompt"
 import { CompactionService } from "./memory/compaction"
-import { LLMRunner } from "./llm-runner"
+import { createLLMRunner } from "./llm-runner"
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -1056,7 +1056,7 @@ export class CodeAgent extends EventEmitter {
 
         const msgs = await SessionPrompt.insertReminders({ context, messages: input.msgs, session })
 
-        const processor = LLMRunner.create({
+        const processor = createLLMRunner({
             assistantMessage: (await context.session.updateMessage({
                 id: MsgID.ascending(), parentID: lastUser.id, role: "assistant",
                 mode: "build", agent: "build", variant: lastUser.variant,

@@ -3,7 +3,7 @@ import type { AgentContext } from "../context"
 import { SessionID, MessageID, PartID } from "../session/schema"
 import { MessageV2 } from "./message-v2"
 import { Provider, VendorRegistry } from "@any-code/provider"
-import { LLMRunner } from "../llm-runner"
+import { createLLMRunner } from "../llm-runner"
 import PROMPT_COMPACTION from "../prompt/compaction.txt"
 
 const COMPACTION_BUFFER = 20_000
@@ -147,7 +147,7 @@ export class CompactionService implements ICompactionService {
         created: Date.now(),
       },
     })) as MessageV2.Assistant
-    const processor = LLMRunner.create({
+    const processor = createLLMRunner({
       assistantMessage: msg,
       sessionID: input.sessionID,
       model,
