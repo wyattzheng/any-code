@@ -40,6 +40,8 @@ export function ChangesView({ changes, requestFile, requestDiff, onFileContext }
     useLayoutEffect(() => {
         const el = containerRef.current;
         if (!el) return;
+        // Synchronous initial measurement
+        setHorizontal(el.getBoundingClientRect().width >= HORIZONTAL_BREAKPOINT);
         const ro = new ResizeObserver((entries) => {
             const w = entries[0]?.contentRect.width ?? 0;
             setHorizontal(w >= HORIZONTAL_BREAKPOINT);
