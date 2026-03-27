@@ -366,7 +366,7 @@ export function ConversationOverlay({ sessionId, fileContext, chatHandlerRef, ch
         return () => el.removeEventListener('scroll', onScroll);
     }, []);
 
-    // Auto-scroll: initial load always scrolls; subsequent updates re-check 30px threshold
+    // Auto-scroll: initial load always scrolls; subsequent updates respect scrollLocked
     const prevMsgCountRef = useRef(0);
     useEffect(() => {
         const el = msgsRef.current;
@@ -379,10 +379,12 @@ export function ConversationOverlay({ sessionId, fileContext, chatHandlerRef, ch
             el.scrollTo(0, el.scrollHeight);
             return;
         }
-        // Re-check position before scrolling
-        const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 30;
-        scrollLocked.current = atBottom;
-        if (atBottom) {
+        // If not already locked, re-check if user scrolled back to bottom
+        if (!scrollLocked.current) {
+            const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 30;
+            scrollLocked.current = atBottom;
+        }
+        if (scrollLocked.current) {
             el.scrollTo(0, el.scrollHeight);
         }
     }, [messages]);
