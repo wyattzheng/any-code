@@ -417,7 +417,7 @@ export namespace MessageV2 {
       root: z.string(),
     }),
     summary: z.boolean().optional(),
-    cost: z.number(),
+    cost: z.number().optional(),
     tokens: z.object({
       total: z.number().optional(),
       input: z.number(),
@@ -427,7 +427,7 @@ export namespace MessageV2 {
         read: z.number(),
         write: z.number(),
       }),
-    }),
+    }).optional(),
     structured: z.any().optional(),
     variant: z.string().optional(),
     finish: z.string().optional(),

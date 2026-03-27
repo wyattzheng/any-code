@@ -1538,11 +1538,11 @@ function createMainServer(cfg: ServerConfig): http.Server {
     }
 
     if (req.method === "GET" && req.url === "/api/status") {
-      const list = Array.from(sessions.values()).map((s) => ({
+      const list = await Promise.all(Array.from(sessions.values()).map(async (s) => ({
         id: s.id, directory: s.directory,
-        stats: s.chatAgent.getStats(),
+        stats: await s.chatAgent.getUsage(),
         sessionId: s.chatAgent.sessionId,
-      }))
+      })))
       res.writeHead(200, { "Content-Type": "application/json" })
       res.end(JSON.stringify({ sessions: list }))
       return

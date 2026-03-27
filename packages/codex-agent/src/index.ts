@@ -47,7 +47,11 @@ export class CodexAgent implements IChatAgent {
     this._workingDirectory = dir
   }
 
-  getStats(): any {
+  async getUsage(): Promise<any> {
+    return null
+  }
+
+  async getContext(): Promise<any> {
     return null
   }
 

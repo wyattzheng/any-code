@@ -4,82 +4,93 @@ import { SessionID, MessageID, PartID } from "../session/schema"
 import { MessageV2 } from "./message-v2"
 import { Provider } from "../provider/provider"
 import { VendorRegistry } from "../provider/vendors"
-import { Token } from "../util/fn"
 import { LLMRunner } from "../llm-runner"
 import PROMPT_COMPACTION from "../prompt/compaction.txt"
 
 export namespace ContextCompaction {
 
   const COMPACTION_BUFFER = 20_000
+  const MAX_TOOL_OUTPUT_TOKENS = 40_000
+  const CHARS_PER_TOKEN = 4
 
-  export async function isOverflow(input: { tokens: MessageV2.Assistant["tokens"]; model: Provider.Model; context: AgentContext }) {
-    const config = input.context.config
-    if (config.compaction?.auto === false) return false
-    const contextLimit = input.model.limit.context
-    if (contextLimit === 0) return false
-
-    const count =
-      input.tokens.total ||
-      input.tokens.input + input.tokens.output + input.tokens.cache.read + input.tokens.cache.write
-    const modelProvider = VendorRegistry.getModelProvider({ model: input.model })
-
-    const reserved =
-      config.compaction?.reserved ?? Math.min(COMPACTION_BUFFER, modelProvider.getMaxOutputTokens())
-    const usable = input.model.limit.input
-      ? input.model.limit.input - reserved
-      : contextLimit - modelProvider.getMaxOutputTokens()
-    return count >= usable
+  /** Truncate tool output at write time if it exceeds the max size */
+  export function truncateToolOutput(output: string): string {
+    const maxChars = MAX_TOOL_OUTPUT_TOKENS * CHARS_PER_TOKEN
+    if (output.length <= maxChars) return output
+    return output.slice(0, maxChars) + "\n\n[TRUNCATED - Content exceeds " + MAX_TOOL_OUTPUT_TOKENS.toLocaleString() + " token limit]"
   }
 
-  export const PRUNE_MINIMUM = 20_000
-  export const PRUNE_PROTECT = 40_000
+  /** Shared: compute context limits and compaction threshold for a model */
+  function getLimits(model: Provider.Model, config: any) {
+    const contextLimit = model.limit.context ?? 0
+    const modelProvider = VendorRegistry.getModelProvider({ model })
+    const reserved =
+      config.compaction?.reserved ?? Math.min(COMPACTION_BUFFER, modelProvider.getMaxOutputTokens())
+    const compactionThreshold = model.limit.input
+      ? model.limit.input - reserved
+      : contextLimit - modelProvider.getMaxOutputTokens()
+    return { contextLimit, compactionThreshold }
+  }
 
-  const PRUNE_PROTECTED_TOOLS = ["skill"]
+  /** Count input tokens from a step (= context window consumption) */
+  function countInputTokens(tokens: MessageV2.Assistant["tokens"]) {
+    return tokens.total || tokens.input + tokens.output + tokens.cache.read + tokens.cache.write
+  }
 
-  // goes backwards through parts until there are 40_000 tokens worth of tool
-  // calls. then erases output of previous tool calls. idea is to throw away old
-  // tool calls that are no longer relevant.
-  export async function prune(context: AgentContext, input: { sessionID: SessionID }) {
-    const config = context.config
-    if (config.compaction?.prune === false) return
-    context.log.create({ service: "context.compaction" }).info("pruning")
-    const msgs = await context.memory.messages({ sessionID: input.sessionID })
-    let total = 0
-    let pruned = 0
-    const toPrune = []
-    let turns = 0
+  export async function isOverflow(input: { tokens: MessageV2.StepFinishPart["tokens"]; model: Provider.Model; context: AgentContext }) {
+    if (input.context.config.compaction?.auto === false) return false
+    const { contextLimit, compactionThreshold } = getLimits(input.model, input.context.config)
+    if (contextLimit === 0) return false
+    return countInputTokens(input.tokens) >= compactionThreshold
+  }
 
-    loop: for (let msgIndex = msgs.length - 1; msgIndex >= 0; msgIndex--) {
-      const msg = msgs[msgIndex]
-      if (msg.info.role === "user") turns++
-      if (turns < 2) continue
-      if (msg.info.role === "assistant" && msg.info.summary) break loop
-      for (let partIndex = msg.parts.length - 1; partIndex >= 0; partIndex--) {
-        const part = msg.parts[partIndex]
-        if (part.type === "tool")
-          if (part.state.status === "completed") {
-            if (PRUNE_PROTECTED_TOOLS.includes(part.tool)) continue
-
-            if (part.state.time.compacted) break loop
-            const estimate = Token.estimate(part.state.output)
-            total += estimate
-            if (total > PRUNE_PROTECT) {
-              pruned += estimate
-              toPrune.push(part)
-            }
-          }
-      }
+  /** Get the last step-finish part's tokens for a session (from DB) */
+  function getLastStepTokens(context: AgentContext, sessionID: string) {
+    const parts = context.db.findMany("part", {
+      filter: { op: "eq", field: "session_id", value: sessionID },
+      orderBy: [{ field: "id", direction: "desc" }],
+    })
+    for (const row of parts) {
+      if (row.data?.type === "step-finish" && row.data.tokens) return row.data.tokens
     }
-    context.log.create({ service: "context.compaction" }).info("found", { pruned, total })
-    if (pruned > PRUNE_MINIMUM) {
-      for (const part of toPrune) {
-        if (part.state.status === "completed") {
-          part.state.time.compacted = Date.now()
-          await context.memory.updatePart(part)
-        }
-      }
-      context.log.create({ service: "context.compaction" }).info("pruned", { count: toPrune.length })
+    return undefined
+  }
+
+  /** Check overflow for a session (reads last step-finish from DB) */
+  export async function isOverflowForSession(context: AgentContext, sessionID: string, model: Provider.Model) {
+    const tokens = getLastStepTokens(context, sessionID)
+    if (!tokens) return false
+    return isOverflow({ tokens, model, context })
+  }
+
+  /**
+   * Get current context window status for a session.
+   */
+  export async function getStatus(context: AgentContext, sessionID: string) {
+    const msgs = await context.memory.messages({ sessionID: sessionID as any })
+
+    let compactions = 0
+    for (const msg of msgs) {
+      if (msg.info.role === "assistant" && (msg.info as any).summary) compactions++
     }
+
+    // Context used = last step-finish's input tokens (from DB)
+    const tokens = getLastStepTokens(context, sessionID)
+    const contextUsed = tokens
+      ? (tokens.input ?? 0) + (tokens.cache?.read ?? 0) + (tokens.cache?.write ?? 0)
+      : 0
+
+    let contextLimit = 0
+    let compactionThreshold = 0
+    const lastUser = msgs.findLast(m => m.info.role === "user") as any
+    if (lastUser?.info?.model) {
+      try {
+        const model = await context.provider.getModel(lastUser.info.model.providerID, lastUser.info.model.modelID)
+        ;({ contextLimit, compactionThreshold } = getLimits(model, context.config))
+      } catch { /* model not found */ }
+    }
+
+    return { contextUsed, contextLimit, compactionThreshold, compactions }
   }
 
   export async function process(context: AgentContext, input: {
@@ -128,13 +139,6 @@ export namespace ContextCompaction {
       path: {
         cwd: input.context.directory,
         root: input.context.worktree,
-      },
-      cost: 0,
-      tokens: {
-        output: 0,
-        input: 0,
-        reasoning: 0,
-        cache: { read: 0, write: 0 },
       },
       modelID: model.id,
       providerID: model.providerID,

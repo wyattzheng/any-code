@@ -38,36 +38,21 @@ import { ToolRegistry } from "./tool/registry"
 import { Tool } from "./tool/tool"
 import { Session, SessionService } from "./session"
 import { SessionPrompt } from "./session/session"
-
-
 import { MessageV2 } from "./memory/message-v2"
 import { MemoryService } from "./memory"
-
-import { Truncate } from "./tool/truncation"
-
-
-
-import { SessionStatus } from "./session"
 import type { Settings } from "./settings"
-
-
-
+import z from "zod"
 import { Provider } from "./provider/provider"
 import { ModelsDev } from "./provider/models"
 import { Skill } from "./skill"
-
-import z from "zod"
 import type { Logger } from "@any-code/utils"
-
 import { NamedError } from "./util/error"
 import { defer } from "./util/fn"
 import { ulid } from "ulid"
-import { PartID, MessageID as MsgID, SessionID } from "./session/schema"
+import { MessageID as MsgID, SessionID } from "./session/schema"
 import { SystemPrompt } from "./prompt"
-
 import { ContextCompaction } from "./memory/compaction"
 import { LLMRunner } from "./llm-runner"
-import MAX_STEPS from "./prompt/max-steps.txt"
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -337,8 +322,8 @@ export class CodeAgent extends EventEmitter {
             this.options.directory = ""
             this.options.worktree = ""
             if (this._context) {
-                ;(this._context as any).directory = ""
-                ;(this._context as any).worktree = ""
+                ; (this._context as any).directory = ""
+                    ; (this._context as any).worktree = ""
             }
             return
         }
@@ -349,14 +334,14 @@ export class CodeAgent extends EventEmitter {
         this.options.directory = dir
         this.options.worktree = dir
         if (this._context) {
-            ;(this._context as any).directory = dir
-            ;(this._context as any).worktree = dir
-            ;(this._context as any).project = { ...this._context.project, worktree: dir }
-            ;(this._context as any).containsPath = (filepath: string) => {
-                const normalized = path.resolve(filepath)
-                return normalized.startsWith(path.resolve(dir)) ||
-                    normalized.startsWith(path.resolve(this.options.dataPath))
-            }
+            ; (this._context as any).directory = dir
+                ; (this._context as any).worktree = dir
+                ; (this._context as any).project = { ...this._context.project, worktree: dir }
+                ; (this._context as any).containsPath = (filepath: string) => {
+                    const normalized = path.resolve(filepath)
+                    return normalized.startsWith(path.resolve(dir)) ||
+                        normalized.startsWith(path.resolve(this.options.dataPath))
+                }
         }
     }
 
@@ -749,7 +734,6 @@ export class CodeAgent extends EventEmitter {
             while (!done || events.length > 0) {
                 if (events.length > 0) {
                     const event = events.shift()!
-                    this.recordEvent(event)
                     yield event
                     if (event.type === "done") return
                 } else {
@@ -785,7 +769,7 @@ export class CodeAgent extends EventEmitter {
             this._context.session.emit("session.status", { sessionID: this._currentSessionId, status: { type: "idle" } })
         }
         // Wait for the in-flight chat to fully drain
-        await this._chatPromise.catch(() => {})
+        await this._chatPromise.catch(() => { })
     }
 
     /**
@@ -824,46 +808,50 @@ export class CodeAgent extends EventEmitter {
         return this.options
     }
 
-    // ── In-memory Stats ────────────────────────────────────────────
-
-    private _stats = {
-        startedAt: Date.now(),
-        totalMessages: 0,
-        totalTokens: { input: 0, output: 0, reasoning: 0 },
-        totalCost: 0,
-        errors: [] as { time: number; message: string }[],
-    }
-
-    /** Record stats from a chat event (called internally) */
-    private recordEvent(event: CodeAgentEvent) {
-        if (event.type === "message.done" && event.usage) {
-            this._stats.totalMessages++
-            this._stats.totalTokens.input += event.usage.inputTokens
-            this._stats.totalTokens.output += event.usage.outputTokens
-            this._stats.totalTokens.reasoning += event.usage.reasoningTokens
-            this._stats.totalCost += event.usage.cost
-        }
-        if (event.type === "error" && event.error) {
-            this._stats.errors.push({ time: Date.now(), message: event.error })
-            // Keep last 20 errors
-            if (this._stats.errors.length > 20) this._stats.errors.shift()
-        }
-    }
-
-    // ── Debug APIs ─────────────────────────────────────────────────
+    // ── Stats ──────────────────────────────────────────────────────
 
     /**
-     * Get runtime stats (uptime, tokens, cost, errors).
+     * Get usage stats aggregated from step-finish parts in DB.
      */
-    getStats() {
-        const uptimeMs = Date.now() - this._stats.startedAt
-        return {
-            uptimeMs,
-            totalMessages: this._stats.totalMessages,
-            totalTokens: { ...this._stats.totalTokens },
-            totalCost: this._stats.totalCost,
-            errors: [...this._stats.errors],
+    async getUsage() {
+        const totals = { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
+        let totalCost = 0
+        let totalSteps = 0
+
+        if (this._currentSessionId) {
+            const parts = this._dbClient.findMany("part", {
+                op: "eq", field: "session_id", value: this._currentSessionId,
+            })
+            for (const part of parts) {
+                if (part.data?.type !== "step-finish") continue
+                totalSteps++
+                totalCost += part.data.cost ?? 0
+                const t = part.data.tokens
+                if (t) {
+                    totals.input += t.input ?? 0
+                    totals.output += t.output ?? 0
+                    totals.reasoning += t.reasoning ?? 0
+                    totals.cache.read += t.cache?.read ?? 0
+                    totals.cache.write += t.cache?.write ?? 0
+                }
+            }
         }
+
+        return {
+            totalSteps,
+            totalTokens: totals,
+            totalCost,
+        }
+    }
+
+    /**
+     * Get current context window status.
+     */
+    async getContext() {
+        if (!this._currentSessionId) {
+            return { contextUsed: 0, contextLimit: 0, compactionThreshold: 0, compactions: 0 }
+        }
+        return ContextCompaction.getStatus(this.agentContext, this._currentSessionId)
     }
 
     /**
@@ -1010,7 +998,7 @@ export class CodeAgent extends EventEmitter {
             if (recentUser && recentAssistant && !recentAssistant.summary) {
                 const userInfo = recentUser.info as MessageV2.User
                 const model = await context.provider.getModel(userInfo.model.providerID, userInfo.model.modelID).catch((): null => null)
-                const tokenOverflow = model && recentAssistant.tokens && await ContextCompaction.isOverflow({ tokens: recentAssistant.tokens, model, context })
+                const tokenOverflow = model && await ContextCompaction.isOverflowForSession(context, sessionID, model)
                 if (tokenOverflow || msgs.length > 200) {
                     const compactResult = await ContextCompaction.process(context, {
                         messages: msgs, parentID: recentUser.info.id, abort, sessionID,
@@ -1066,7 +1054,6 @@ export class CodeAgent extends EventEmitter {
         }
 
         // Finalize
-        ContextCompaction.prune(context, { sessionID })
         for await (const item of MessageV2.stream(context, sessionID)) {
             if (item.info.role === "user") continue
             const queued = context.sessionPrompt.callbacks ?? []
@@ -1100,7 +1087,6 @@ export class CodeAgent extends EventEmitter {
                 id: MsgID.ascending(), parentID: lastUser.id, role: "assistant",
                 mode: "build", agent: "build", variant: lastUser.variant,
                 path: { cwd: context.directory, root: context.worktree },
-                cost: 0, tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
                 modelID: model.id, providerID: model.providerID,
                 time: { created: Date.now() }, sessionID,
                 ...((lastUser as any).chatId ? { chatId: (lastUser as any).chatId } : {}),

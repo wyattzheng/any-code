@@ -3,24 +3,13 @@ import { mergeDeep, pipe } from "remeda"
 import type { AgentContext } from "./context"
 import { Provider } from "./provider/provider"
 import { VendorRegistry } from "./provider/vendors"
-
 import { SystemPrompt } from "./prompt"
-import { Flag } from "./util/flag"
-import { Installation } from "./util/installation"
 import { Auth } from "./util/auth"
 import { MessageV2 } from "./memory/message-v2"
-import { Session, SessionService } from "./session"
+import { SessionService } from "./session"
 import { PartID, SessionID } from "./session/schema"
 import { SessionStatus } from "./session"
-
 import { ContextCompaction } from "./memory/compaction"
-import { NamedError } from "./util/error"
-import { iife } from "./util/fn"
-
-
-
-
-
 
 export namespace LLM {
   export const OUTPUT_TOKEN_MAX = VendorRegistry.getModelProvider().getOutputTokenMax()
@@ -394,7 +383,7 @@ export namespace LLMRunner {
                       state: {
                         status: "completed",
                         input: value.input ?? match.state.input,
-                        output: (value.output as any).output,
+                        output: ContextCompaction.truncateToolOutput((value.output as any).output),
                         metadata: (value.output as any).metadata,
                         title: (value.output as any).title,
                         time: {
@@ -449,8 +438,6 @@ export namespace LLMRunner {
                     metadata: value.providerMetadata,
                   })
                   input.assistantMessage.finish = value.finishReason
-                  input.assistantMessage.cost += usage.cost
-                  input.assistantMessage.tokens = usage.tokens
                   await input.context.session.updatePart({
                     id: PartID.ascending(),
                     reason: value.finishReason,

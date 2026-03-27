@@ -66,8 +66,12 @@ export class AnyCodeAgent implements IChatAgent {
     this._codeAgent.setWorkingDirectory(dir)
   }
 
-  getStats(): any {
-    return this._codeAgent.getStats()
+  async getUsage(): Promise<any> {
+    return this._codeAgent.getUsage()
+  }
+
+  async getContext(): Promise<any> {
+    return this._codeAgent.getContext()
   }
 
   getSessionMessages(opts: { limit: number }): Promise<any> {

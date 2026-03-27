@@ -65,8 +65,11 @@ export interface IChatAgent {
   /** Set the working directory for this session */
   setWorkingDirectory(dir: string): void
 
-  /** Get agent stats */
-  getStats(): any
+  /** Get cumulative token/cost usage */
+  getUsage(): Promise<any>
+
+  /** Get current context window status (utilization, compaction info) */
+  getContext(): Promise<any>
 
   /** Get session message history */
   getSessionMessages(opts: { limit: number }): Promise<any>

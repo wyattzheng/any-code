@@ -39,7 +39,11 @@ export class ClaudeCodeAgent implements IChatAgent {
     // Claude Code manages its own working directory
   }
 
-  getStats(): any {
+  async getUsage(): Promise<any> {
+    return null
+  }
+
+  async getContext(): Promise<any> {
     return null
   }
 
