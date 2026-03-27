@@ -17,6 +17,7 @@ COPY packages/cli/package.json packages/cli/
 COPY packages/codex-agent/package.json packages/codex-agent/
 COPY packages/claude-code-agent/package.json packages/claude-code-agent/
 COPY packages/server/package.json packages/server/
+COPY packages/provider/package.json packages/provider/
 COPY packages/utils/package.json packages/utils/
 
 RUN pnpm install --frozen-lockfile --registry https://registry.npmmirror.com
