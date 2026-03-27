@@ -363,20 +363,6 @@ export class CodeAgent extends EventEmitter {
         this._providerId = p.id
         this._modelId = p.model
 
-        // Set provider API key via environment variable (opencode convention)
-        const envKey = this.getProviderEnvKey(p.id)
-        if (envKey) {
-            this.env.set(envKey, p.apiKey)
-        }
-
-        // Set base URL if provided
-        if (p.baseUrl) {
-            const baseUrlEnv = this.getProviderBaseUrlEnv(p.id)
-            if (baseUrlEnv) {
-                this.env.set(baseUrlEnv, p.baseUrl)
-            }
-        }
-
         const migrations = Database.getMigrations()
 
         if (!this.options.storage) {
@@ -1293,31 +1279,7 @@ export class CodeAgent extends EventEmitter {
         }
     }
 
-    private getProviderEnvKey(providerId: string): string | undefined {
-        const map: Record<string, string> = {
-            anthropic: "ANTHROPIC_API_KEY",
-            openai: "OPENAI_API_KEY",
-            google: "GOOGLE_API_KEY",
-            groq: "GROQ_API_KEY",
-            mistral: "MISTRAL_API_KEY",
-            xai: "XAI_API_KEY",
-            deepinfra: "DEEPINFRA_API_KEY",
-            cerebras: "CEREBRAS_API_KEY",
-            cohere: "COHERE_API_KEY",
-            perplexity: "PERPLEXITY_API_KEY",
-            togetherai: "TOGETHER_API_KEY",
-        }
-        return map[providerId]
-    }
 
-    private getProviderBaseUrlEnv(providerId: string): string | undefined {
-        const map: Record<string, string> = {
-            anthropic: "ANTHROPIC_BASE_URL",
-            openai: "OPENAI_BASE_URL",
-            google: "GOOGLE_GENERATIVE_AI_BASE_URL",
-        }
-        return map[providerId]
-    }
 }
 
 // ── Utilities ────────────────────────────────────────────────────────────────
@@ -1325,12 +1287,12 @@ export class CodeAgent extends EventEmitter {
 const DOOM_LOOP_THRESHOLD = 3
 
 function hasToolCalls(messages: LLMMessage[]): boolean {
-  for (const msg of messages) {
-    if (!Array.isArray(msg.content)) continue
-    for (const part of msg.content) {
-      if (part.type === "tool-call" || part.type === "tool-result") return true
+    for (const msg of messages) {
+        if (!Array.isArray(msg.content)) continue
+        for (const part of msg.content) {
+            if (part.type === "tool-call" || part.type === "tool-result") return true
+        }
     }
-  }
-  return false
+    return false
 }
 
