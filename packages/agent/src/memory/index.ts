@@ -4,7 +4,7 @@ import { EventEmitter } from "events"
 
 import { MessageV2 } from "./message-v2"
 import type { Provider } from "@any-code/provider"
-import type { LLMUsage } from "../llm"
+import type { LLMUsage } from "@any-code/utils"
 
 import { iife } from "../util/fn"
 import { NotFoundError } from "../storage"

@@ -8,7 +8,7 @@ import { MessageV2 } from "../memory/message-v2"
 import { Session, SessionService } from "."
 
 import { Provider, ModelID, ProviderID, VendorRegistry } from "@any-code/provider"
-import type { LLMToolDef, LLMToolCallOptions } from "../llm"
+import type { LLMToolDef, LLMToolCallOptions } from "@any-code/utils"
 
 import { type AgentContext } from "../context"
 

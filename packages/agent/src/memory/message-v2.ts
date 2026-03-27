@@ -2,7 +2,7 @@
 import { SessionID, MessageID, PartID } from "../session/schema"
 import { NamedError } from "../util/error"
 import { convertUIToModelMessages, isAPICallError, isLoadAPIKeyError } from "../llm-runner"
-import type { LLMMessage } from "../llm"
+import type { LLMMessage } from "@any-code/utils"
 
 import { NotFoundError } from "../storage"
 import type { Filter } from "../storage"
