@@ -760,6 +760,8 @@ const MAX_RAW_BUFFER = 200
 class TerminalStateModel {
   private rawBuffer: string[] = []
   private alive = false
+  private cols = 80
+  private rows = 24
   private wsClients = new Set<WS>()
 
   // Callbacks set by NodeTerminalProvider for user input
@@ -809,9 +811,9 @@ class TerminalStateModel {
     // 1. Current state
     ws.send(JSON.stringify({ type: this.alive ? "terminal.ready" : "terminal.none" }))
 
-    // 2. Full buffer sync as single atomic message (before joining live set)
+    // 2. Full buffer sync with PTY dimensions (before joining live set)
     if (this.rawBuffer.length > 0) {
-      ws.send(JSON.stringify({ type: "terminal.sync", data: this.rawBuffer.join("") }))
+      ws.send(JSON.stringify({ type: "terminal.sync", data: this.rawBuffer.join(""), cols: this.cols, rows: this.rows }))
     }
 
     // 3. NOW add to live set — all future pushOutput() will reach this client
@@ -824,6 +826,8 @@ class TerminalStateModel {
         if (msg.type === "terminal.input") {
           this.onInput?.(msg.data)
         } else if (msg.type === "terminal.resize") {
+          this.cols = msg.cols
+          this.rows = msg.rows
           this.onResize?.(msg.cols, msg.rows)
         }
       } catch { /* ignore */ }

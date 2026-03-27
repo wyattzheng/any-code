@@ -98,9 +98,11 @@ export function TerminalTab({ sessionId }: TerminalTabProps) {
                 try {
                     const msg = JSON.parse(e.data);
                     if (msg.type === "terminal.sync") {
-                        // Full buffer from server — clear and write atomically
+                        // Match PTY dimensions, write buffer, then fit to container
                         term.reset();
+                        if (msg.cols && msg.rows) term.resize(msg.cols, msg.rows);
                         if (msg.data) term.write(msg.data);
+                        fitAddon.fit();
                     } else if (msg.type === "terminal.output") {
                         // Live incremental output
                         term.write(msg.data);
