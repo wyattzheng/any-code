@@ -32,8 +32,8 @@
 /* ── Floating mode ── */
 .conversation-floating {
     position: fixed;
-    top: 20px;
-    right: 20px;
+    top: 0;
+    left: 0;
     z-index: 200;
     background: rgba(26, 29, 39, 0.35);
     backdrop-filter: blur(12px);

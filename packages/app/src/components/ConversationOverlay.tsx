@@ -163,11 +163,11 @@ function loadStoredRect() {
         const pos = JSON.parse(localStorage.getItem(STORAGE_KEY_POS) || "null");
         const size = JSON.parse(localStorage.getItem(STORAGE_KEY_SIZE) || "null");
         return {
-            pos: pos && typeof pos.x === "number" ? pos as { x: number; y: number } : { x: 0, y: 0 },
+            pos: pos && typeof pos.x === "number" ? pos as { x: number; y: number } : { x: Math.max(0, window.innerWidth - 220 - 20), y: 20 },
             size: size && typeof size.w === "number" ? size as { w: number; h: number } : { w: 220, h: 280 },
         };
     } catch {
-        return { pos: { x: 0, y: 0 }, size: { w: 220, h: 280 } };
+        return { pos: { x: Math.max(0, window.innerWidth - 220 - 20), y: 20 }, size: { w: 220, h: 280 } };
     }
 }
 
