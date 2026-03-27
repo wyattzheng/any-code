@@ -89,7 +89,7 @@ function LazyTreeItem({
     );
 }
 
-const HORIZONTAL_BREAKPOINT = 700;
+const HORIZONTAL_BREAKPOINT = 360;
 
 export function FileBrowser({ topLevel, requestLs, requestFile, onFileContext }: FileBrowserProps) {
     const [sidebarSize, setSidebarSize] = useState<number | null>(() => {

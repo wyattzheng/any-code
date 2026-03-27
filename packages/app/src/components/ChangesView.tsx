@@ -29,7 +29,7 @@ function statusLabel(status: string): string {
     }
 }
 
-const HORIZONTAL_BREAKPOINT = 700;
+const HORIZONTAL_BREAKPOINT = 360;
 
 export function ChangesView({ changes, requestFile, requestDiff, onFileContext }: ChangesViewProps) {
     const [listSize, setListSize] = useState<number | null>(null);
