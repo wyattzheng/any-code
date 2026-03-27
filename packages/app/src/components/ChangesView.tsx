@@ -170,7 +170,7 @@ export function ChangesView({ changes, requestFile, requestDiff, onFileContext }
     const isEmpty = changes.length === 0;
 
     const listStyle = horizontal
-        ? (listSize != null ? { width: listSize, flex: 'none' } : { flex: '0 0 35%' })
+        ? (listSize != null ? { width: listSize, flex: 'none' } : { flex: '0 0 30%' })
         : (listSize != null ? { height: listSize, flex: 'none' } : { flex: 1 });
 
     return (

@@ -190,7 +190,7 @@ export function FileBrowser({ topLevel, requestLs, requestFile, onFileContext }:
     const isEmpty = topLevel.length === 0;
 
     const sidebarStyle = horizontal
-        ? (sidebarSize != null ? { width: sidebarSize, flex: 'none' } : { flex: '0 0 35%' })
+        ? (sidebarSize != null ? { width: sidebarSize, flex: 'none' } : { flex: '0 0 30%' })
         : (sidebarSize != null ? { height: sidebarSize, flex: 'none' } : { flex: 1 });
 
     return (
