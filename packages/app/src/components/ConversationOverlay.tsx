@@ -366,10 +366,20 @@ export function ConversationOverlay({ sessionId, fileContext, chatHandlerRef, ch
         return () => el.removeEventListener('scroll', onScroll);
     }, []);
 
-    // Auto-scroll only when locked
+    // Auto-scroll only when locked, or on initial load
+    const prevMsgCountRef = useRef(0);
     useEffect(() => {
         const el = msgsRef.current;
         if (!el) return;
+        const isInitialLoad = prevMsgCountRef.current === 0 && messages.length > 0;
+        prevMsgCountRef.current = messages.length;
+
+        if (isInitialLoad) {
+            // First load from history — always scroll to bottom
+            scrollLocked.current = true;
+            el.scrollTo(0, el.scrollHeight);
+            return;
+        }
         // Re-check position before scrolling (scroll events may lag during fast updates)
         const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 30;
         scrollLocked.current = atBottom;
