@@ -3,3 +3,4 @@ dist/
 *.tsbuildinfo
 packages/app/ios/
 .dev
+.DS_Store
