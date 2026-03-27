@@ -14,11 +14,8 @@
 }
 
 .cv-resize-border {
-    position: absolute;
-    bottom: -8px;
-    left: 0;
-    right: 0;
-    height: 16px;
+    position: relative;
+    height: 0;
     cursor: row-resize;
     z-index: 10;
     touch-action: none;
@@ -28,11 +25,10 @@
 .cv-resize-border::after {
     content: '';
     position: absolute;
-    top: 50%;
+    top: -8px;
     left: 0;
     right: 0;
-    height: 2px;
-    transform: translateY(-50%);
+    height: 16px;
     transition: background 0.15s;
 }
 

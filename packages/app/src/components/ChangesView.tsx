@@ -161,8 +161,8 @@ export function ChangesView({ changes, requestFile, requestDiff, onFileContext }
                         ))
                     )}
                 </div>
-                <div className="cv-resize-border" onMouseDown={handleMouseDown} onTouchStart={handleTouchStart} />
             </div>
+            <div className="cv-resize-border" onMouseDown={handleMouseDown} onTouchStart={handleTouchStart} />
             <div className="changes-diff">
                 {selectedFile ? (
                     <>

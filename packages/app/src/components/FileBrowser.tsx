@@ -180,8 +180,8 @@ export function FileBrowser({ topLevel, requestLs, requestFile, onFileContext }:
                         ))
                     )}
                 </div>
-                <div className="fb-resize-border" onMouseDown={handleMouseDown} onTouchStart={handleTouchStart} />
             </div>
+            <div className="fb-resize-border" onMouseDown={handleMouseDown} onTouchStart={handleTouchStart} />
             <div className="file-browser-content">
                 {selectedFile ? (
                     <>

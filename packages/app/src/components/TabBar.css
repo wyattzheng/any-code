@@ -65,9 +65,6 @@
     flex: 1;
 }
 
-.tab-chat.active {
-    color: var(--color-accent);
-}
 
 .tab-busy-dot {
     position: absolute;
@@ -77,10 +74,15 @@
     height: 6px;
     border-radius: 50%;
     background: var(--color-accent);
-    animation: tab-busy-glow 1.5s ease-in-out infinite;
+    animation: tab-busy-glow 3s ease-in-out infinite;
 }
 
 @keyframes tab-busy-glow {
-    0%, 100% { opacity: 1; box-shadow: 0 0 3px var(--color-accent); }
-    50% { opacity: 0.35; box-shadow: none; }
+    0%,
+    100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.3;
+    }
 }
