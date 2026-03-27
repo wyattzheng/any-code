@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect, type MutableRefObject } from "react";
 import { flushSync } from "react-dom";
 import type { FileContext } from "../App";
-import { MicIcon, KeyboardIcon, SendIcon, CloseIcon, ChatIcon, StopIcon, PinIcon, UndockIcon } from "./Icons";
+import { MicIcon, KeyboardIcon, SendIcon, CloseIcon, ChatIcon, StopIcon, UndockIcon, MinimizeIcon } from "./Icons";
 import { getApiBase } from "../serverUrl";
 import "./ConversationOverlay.css";
 
@@ -781,14 +781,7 @@ export function ConversationOverlay({ sessionId, fileContext, chatHandlerRef, ch
                             onClick={onPopIn}
                             title="收回到对话 Tab"
                         >
-                            <PinIcon />
-                        </button>
-                        <button
-                            className="co-float-toggle"
-                            onClick={toggleFloating}
-                            title={floating ? "固定到侧边栏" : "浮动窗口"}
-                        >
-                            {floating ? <PinIcon /> : <UndockIcon />}
+                            <MinimizeIcon />
                         </button>
                     </div>
                 </div>

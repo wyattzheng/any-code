@@ -198,3 +198,12 @@ export function GearIcon({ size = 14, color = "currentColor" }: IconProps) {
         </svg>
     );
 }
+
+/* Minimize — horizontal bar at bottom */
+export function MinimizeIcon({ size = 10, color = "currentColor" }: IconProps) {
+    return (
+        <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round">
+            <line x1="3" y1="13" x2="13" y2="13" />
+        </svg>
+    );
+}

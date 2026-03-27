@@ -7,23 +7,26 @@ interface TabBarProps {
     onTabChange: (tab: TabId) => void;
     changeCount?: number;
     chatBusy?: boolean;
+    hideChatTab?: boolean;
 }
 
-export function TabBar({ activeTab, onTabChange, changeCount, chatBusy }: TabBarProps) {
+export function TabBar({ activeTab, onTabChange, changeCount, chatBusy, hideChatTab }: TabBarProps) {
     return (
         <nav className="tab-bar">
             <div className="tab-spacer" />
 
-            <button
-                className={`tab-item ${activeTab === "chat" ? "active" : ""} tab-chat`}
-                onClick={() => onTabChange("chat")}
-            >
-                <span className="tab-icon">
-                    <ChatIcon />
-                    {chatBusy && <span className="tab-busy-dot" />}
-                </span>
-                <span className="tab-label">对话</span>
-            </button>
+            {!hideChatTab && (
+                <button
+                    className={`tab-item ${activeTab === "chat" ? "active" : ""} tab-chat`}
+                    onClick={() => onTabChange("chat")}
+                >
+                    <span className="tab-icon">
+                        <ChatIcon />
+                        {chatBusy && <span className="tab-busy-dot" />}
+                    </span>
+                    <span className="tab-label">对话</span>
+                </button>
+            )}
 
             <button
                 className={`tab-item ${activeTab === "preview" ? "active" : ""}`}
