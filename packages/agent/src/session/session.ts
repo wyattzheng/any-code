@@ -60,22 +60,26 @@ IMPORTANT:
 
 const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested structured output. You MUST use the StructuredOutput tool to provide your final response. Do NOT respond with plain text - you MUST call the StructuredOutput tool with your answer formatted according to the schema.`
 
+export interface ISessionPromptService {
+  abort?: AbortController
+  callbacks: {
+    resolve(input: MessageV2.WithParts): void
+    reject(reason?: any): void
+  }[]
+}
+
+export class SessionPromptService implements ISessionPromptService {
+  abort?: AbortController
+  callbacks: {
+    resolve(input: MessageV2.WithParts): void
+    reject(reason?: any): void
+  }[] = []
+}
+
 export namespace SessionPrompt {
   function getLog(context: AgentContext) {
     return context.log.create({ service: "session.prompt" })
   }
-
-  /**
-   * SessionPromptService — manages active prompt session (single session).
-   */
-  export class SessionPromptService {
-    abort?: AbortController
-    callbacks: {
-      resolve(input: MessageV2.WithParts): void
-      reject(reason?: any): void
-    }[] = []
-  }
-
 
   export function assertNotBusy(context: AgentContext) {
     if (context.sessionPrompt.abort) throw new Session.BusyError("session")

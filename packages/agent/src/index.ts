@@ -16,7 +16,7 @@ export {
 
 // Session & schema
 export { Session, SessionService } from "./session"
-export { SessionPrompt } from "./session/session"
+export { SessionPrompt, SessionPromptService, type ISessionPromptService } from "./session/session"
 export { SessionID, MessageID, PartID } from "./session/schema"
 
 // LLM

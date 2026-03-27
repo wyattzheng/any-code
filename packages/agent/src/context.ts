@@ -13,7 +13,7 @@ import type { ICompactionService } from "./memory/compaction"
 import type { SessionStatus } from "./session"
 import type { SessionService } from "./session"
 
-import type { SessionPrompt } from "./session/session"
+import type { ISessionPromptService } from "./session/session"
 import type { ISystemPrompt } from "./prompt"
 
 
@@ -116,7 +116,7 @@ export interface AgentContext {
   config: Record<string, any>
   sessionStatus: SessionStatus.Info
 
-  sessionPrompt: SessionPrompt.SessionPromptService
+  sessionPrompt: ISessionPromptService
   systemPrompt: ISystemPrompt
 
   provider: Provider.ProviderService

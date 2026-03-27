@@ -37,7 +37,7 @@ import { Log } from "./util/log"
 import { ToolRegistryService } from "./tool/registry"
 import { Tool } from "./tool/tool"
 import { Session, SessionService } from "./session"
-import { SessionPrompt } from "./session/session"
+import { SessionPrompt, SessionPromptService } from "./session/session"
 import { MessageV2 } from "./memory/message-v2"
 import { MemoryService } from "./memory"
 import type { Settings } from "./settings"
@@ -444,7 +444,7 @@ export class CodeAgent extends EventEmitter {
         ctx.settings = this.options.settings ?? {}
         ctx.sessionStatus = { type: "idle" }
 
-        ctx.sessionPrompt = new SessionPrompt.SessionPromptService()
+        ctx.sessionPrompt = new SessionPromptService()
         ctx.systemPrompt = new SystemPrompt()
         ctx.compaction = new CompactionService()
 
