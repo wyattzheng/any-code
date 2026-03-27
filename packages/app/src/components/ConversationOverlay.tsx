@@ -371,8 +371,13 @@ export function ConversationOverlay({ sessionId, fileContext, chatHandlerRef, ch
 
     // Auto-scroll only when locked
     useEffect(() => {
-        if (scrollLocked.current) {
-            msgsRef.current?.scrollTo(0, msgsRef.current.scrollHeight);
+        const el = msgsRef.current;
+        if (!el) return;
+        // Re-check position before scrolling (scroll events may lag during fast updates)
+        const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 30;
+        scrollLocked.current = atBottom;
+        if (atBottom) {
+            el.scrollTo(0, el.scrollHeight);
         }
     }, [messages]);
 
