@@ -1,7 +1,6 @@
 // ── Schema ──────────────────────────────────────────────────────────────────
 
 import { Schema } from "effect"
-import z from "zod"
 import { withStatics } from "../util/schema"
 import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core"
 import { Timestamps } from "../storage"
@@ -18,7 +17,6 @@ export const ProjectID = projectIdSchema.pipe(
   withStatics((schema: typeof projectIdSchema) => ({
     global: schema.makeUnsafe("global"),
     make: (id: string) => schema.makeUnsafe(id),
-    zod: z.string().pipe(z.custom<ProjectID>()),
   })),
 )
 
@@ -39,8 +37,6 @@ export const ProjectTable = sqliteTable("project", {
 
 // ── Protected ───────────────────────────────────────────────────────────────
 
-
-
 const DARWIN_HOME = [
   "Music", "Pictures", "Movies", "Downloads", "Desktop", "Documents",
   "Public", "Applications", "Library",
@@ -52,7 +48,7 @@ const DARWIN_LIBRARY = [
   "PersonalizationPortrait", "Metadata/CoreSpotlight", "Suggestions",
 ]
 
-const DARWIN_ROOT = ["/.DocumentRevisions-V100", "/.Spotlight-V100", "/.Trashes", "/.fseventsd"]
+const DARWIN_ROOT = ["/. DocumentRevisions-V100", "/.Spotlight-V100", "/.Trashes", "/.fseventsd"]
 const WIN32_HOME = ["AppData", "Downloads", "Desktop", "Documents", "Pictures", "Music", "Videos", "OneDrive"]
 
 export namespace Protected {
@@ -144,7 +140,7 @@ export class FileTimeService {
 
   async withLock<T>(filepath: string, fn: () => Promise<T>): Promise<T> {
     const currentLock = this.locks.get(filepath) ?? Promise.resolve()
-    let release: () => void = () => { }
+    let release: () => void = () => {}
     const nextLock = new Promise<void>((resolve) => { release = resolve })
     const chained = currentLock.then(() => nextLock)
     this.locks.set(filepath, chained)
@@ -187,12 +183,9 @@ export namespace FileTime {
 }
 
 
-
-
 // ── Project ─────────────────────────────────────────────────────────────────
 
 export namespace Project {
-
   export interface Info {
     id: ProjectID
     worktree: string
@@ -213,55 +206,5 @@ export namespace Project {
       initialized?: number
     }
     sandboxes: string[]
-  }
-
-
-  type Row = Record<string, any>
-
-  export function fromRow(row: Row): Info {
-    const icon =
-      row.icon_url || row.icon_color
-        ? { url: row.icon_url ?? undefined, color: row.icon_color ?? undefined }
-        : undefined
-    return {
-      id: ProjectID.make(row.id),
-      worktree: row.worktree,
-      vcs: row.vcs === "git" ? "git" : undefined,
-      name: row.name ?? undefined,
-      icon,
-      time: {
-        created: row.time_created,
-        updated: row.time_updated,
-        initialized: row.time_initialized ?? undefined,
-      },
-      sandboxes: row.sandboxes,
-      commands: row.commands ?? undefined,
-    }
-  }
-
-  export function setInitialized(context: AgentContext, id: ProjectID) {
-    context.db.update("project", { op: "eq", field: "id", value: id }, { time_initialized: Date.now() })
-  }
-
-  export function list(context: AgentContext) {
-    return context.db.findMany("project").map((row: any) => fromRow(row))
-  }
-
-  export function get(context: AgentContext, id: ProjectID): Info | undefined {
-    const row = context.db.findOne("project", { op: "eq", field: "id", value: id })
-    if (!row) return undefined
-    return fromRow(row)
-  }
-
-  export async function sandboxes(context: AgentContext, id: ProjectID) {
-    const row = context.db.findOne("project", { op: "eq", field: "id", value: id })
-    if (!row) return []
-    const data = fromRow(row)
-    const valid: string[] = []
-    for (const dir of data.sandboxes) {
-      const s = await context.fs.stat(dir)
-      if (s?.isDirectory) valid.push(dir)
-    }
-    return valid
   }
 }

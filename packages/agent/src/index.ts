@@ -52,7 +52,7 @@ export {
 
 // Project
 export {
-  Project,
+  type Project,
   FileTimeService,
   type ProjectID,
   Protected,
