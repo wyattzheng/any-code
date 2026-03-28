@@ -2,12 +2,46 @@
  * NodeSearchProvider — Node.js implementation of SearchProvider.
  *
  * - grep(): spawns system `grep -rnH` (always available on Unix/macOS)
+ * - Respects .gitignore via post-filtering with the `ignore` package
  */
 import { spawn } from "child_process"
 import fs from "fs/promises"
 import path from "path"
 import { minimatch } from "minimatch"
+import ignore, { type Ignore } from "ignore"
 import type { SearchProvider, GrepMatch } from "./search"
+
+/** Walk up from `dir` to find and parse all .gitignore files into an Ignore instance */
+async function loadGitignore(dir: string): Promise<Ignore> {
+    const ig = ignore()
+    let current = path.resolve(dir)
+    const root = path.parse(current).root
+
+    while (current !== root) {
+        try {
+            const content = await fs.readFile(path.join(current, ".gitignore"), "utf-8")
+            // Make patterns relative to the search dir
+            const prefix = path.relative(dir, current)
+            if (prefix) {
+                // Prefix each pattern with relative path for nested .gitignore
+                for (const line of content.split("\n")) {
+                    const trimmed = line.trim()
+                    if (trimmed && !trimmed.startsWith("#")) {
+                        ig.add(path.join(prefix, trimmed))
+                    }
+                }
+            } else {
+                ig.add(content)
+            }
+        } catch {
+            // No .gitignore at this level, continue
+        }
+        const parent = path.dirname(current)
+        if (parent === current) break
+        current = parent
+    }
+    return ig
+}
 
 export class NodeSearchProvider implements SearchProvider {
     async grep(options: {
@@ -18,6 +52,9 @@ export class NodeSearchProvider implements SearchProvider {
         signal?: AbortSignal
     }): Promise<GrepMatch[]> {
         options.signal?.throwIfAborted()
+
+        // Load .gitignore for post-filtering
+        const ig = await loadGitignore(options.path)
 
         return new Promise((resolve, reject) => {
             // Use system grep: -r (recursive), -n (line numbers), -H (filenames)
@@ -54,6 +91,10 @@ export class NodeSearchProvider implements SearchProvider {
                     // grep output format: file:line:content
                     const match = line.match(/^(.+?):(\d+):(.*)$/)
                     if (match) {
+                        // Post-filter: skip files matching .gitignore
+                        const rel = path.relative(options.path, match[1])
+                        if (rel && !rel.startsWith("..") && ig.ignores(rel)) continue
+
                         let content = match[3]
                         if (options.maxLineLength !== undefined && content.length > options.maxLineLength) {
                             content = content.slice(0, options.maxLineLength) + "..."
@@ -90,6 +131,9 @@ export class NodeSearchProvider implements SearchProvider {
         const results: string[] = []
         const limit = options.limit ?? Infinity
 
+        // Load .gitignore for filtering
+        const ig = await loadGitignore(options.cwd)
+
         // Parse glob patterns into include/exclude
         const excludePatterns: string[] = [".git"]
         const includePatterns: string[] = []
@@ -124,10 +168,12 @@ export class NodeSearchProvider implements SearchProvider {
                 const fullPath = path.join(dir, name)
                 const relativePath = path.relative(options.cwd, fullPath)
 
-                // Check excludes
+                // Check excludes (explicit patterns)
                 if (excludePatterns.some((p: string) => relativePath.startsWith(p) || name === p)) continue
 
+                // Check .gitignore
                 const isDir = entry.isDirectory() || (options.follow && entry.isSymbolicLink())
+                if (ig.ignores(isDir ? relativePath + "/" : relativePath)) continue
 
                 if (isDir) {
                     await walk(fullPath, depth + 1)

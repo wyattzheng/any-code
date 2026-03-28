@@ -11,6 +11,7 @@
         "build": "tsup"
     },
     "dependencies": {
+        "ignore": "^7.0.5",
         "minimatch": "10.0.3",
         "sql.js": "^1.12.0"
     },
