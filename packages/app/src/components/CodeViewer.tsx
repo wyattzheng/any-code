@@ -1,57 +1,57 @@
-import { useEffect, useLayoutEffect, useState, useMemo, useRef, useCallback, memo } from "react";
+import { useEffect, useLayoutEffect, useState, useMemo, useRef, useCallback, memo, createContext, useContext } from "react";
 import { createHighlighter, type Highlighter } from "shiki";
 import "./CodeViewer.css";
 
-class CodeHighlighter {
-    instance: Highlighter | null = null;
-    private _ready = false;
-    private _listeners: (() => void)[] = [];
-
-    async init() {
-        if (this.instance) return;
-        this.instance = await createHighlighter({
-            themes: ["github-dark"],
-            langs: [
-                "text", "typescript", "tsx", "javascript", "jsx",
-                "json", "markdown", "css", "scss", "html", "xml",
-                "python", "ruby", "rust", "go", "java", "kotlin", "swift",
-                "c", "cpp", "bash", "sql", "yaml", "toml",
-                "dockerfile", "makefile", "vue", "svelte",
-                "graphql", "lua", "php", "r",
-            ],
-        });
-        this._ready = true;
-        this._listeners.forEach(fn => fn());
-        this._listeners = [];
-    }
-
-    get ready() { return this._ready; }
-
-    /** Subscribe to ready event. Returns unsubscribe. */
-    onReady(fn: () => void): () => void {
-        if (this._ready) { fn(); return () => {}; }
-        this._listeners.push(fn);
-        return () => { this._listeners = this._listeners.filter(f => f !== fn); };
-    }
-
-    highlight(code: string, filePath: string): string {
-        if (!this.instance) {
-            const escaped = code.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-            const lines = escaped.split("\n").map(l => `<span class="line">${l}</span>`).join("\n");
-            return `<pre class="shiki github-dark" style="background-color:#24292e;color:#e1e4e8"><code>${lines}</code></pre>`;
-        }
-        const lang = extToLang(filePath);
-        const effectiveLang = this.instance.getLoadedLanguages().includes(lang) ? lang : "text";
-        return this.instance.codeToHtml(code, { lang: effectiveLang, theme: "github-dark" });
-    }
+export interface CodeHighlighter {
+    ready: boolean;
+    onReady(fn: () => void): () => void;
+    highlight(code: string, filePath: string): string;
 }
 
-export const highlighter = new CodeHighlighter();
+export function createCodeHighlighter(): CodeHighlighter {
+    let instance: Highlighter | null = null;
+    let ready = false;
+    let listeners: (() => void)[] = [];
 
-/** Call this once at app startup */
-export function initHighlighter() {
-    highlighter.init();
+    // Start loading immediately
+    createHighlighter({
+        themes: ["github-dark"],
+        langs: [
+            "text", "typescript", "tsx", "javascript", "jsx",
+            "json", "markdown", "css", "scss", "html", "xml",
+            "python", "ruby", "rust", "go", "java", "kotlin", "swift",
+            "c", "cpp", "bash", "sql", "yaml", "toml",
+            "dockerfile", "makefile", "vue", "svelte",
+            "graphql", "lua", "php", "r",
+        ],
+    }).then(hl => {
+        instance = hl;
+        ready = true;
+        listeners.forEach(fn => fn());
+        listeners = [];
+    });
+
+    return {
+        get ready() { return ready; },
+        onReady(fn: () => void) {
+            if (ready) { fn(); return () => {}; }
+            listeners.push(fn);
+            return () => { listeners = listeners.filter(f => f !== fn); };
+        },
+        highlight(code: string, filePath: string): string {
+            if (!instance) {
+                const escaped = code.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                const lines = escaped.split("\n").map(l => `<span class="line">${l}</span>`).join("\n");
+                return `<pre class="shiki github-dark" style="background-color:#24292e;color:#e1e4e8"><code>${lines}</code></pre>`;
+            }
+            const lang = extToLang(filePath);
+            const effectiveLang = instance.getLoadedLanguages().includes(lang) ? lang : "text";
+            return instance.codeToHtml(code, { lang: effectiveLang, theme: "github-dark" });
+        },
+    };
 }
+
+export const HighlighterContext = createContext<CodeHighlighter | null>(null);
 
 /** Map file extension to shiki language id */
 function extToLang(filePath: string): string {
@@ -125,7 +125,8 @@ export interface CodeViewerProps {
 }
 
 export const CodeViewer = memo(function CodeViewer({ code, filePath, addedLines, removedLines, onSelectionChange, scrollToLine, wordWrap }: CodeViewerProps) {
-    const [ready, setReady] = useState(highlighter.ready);
+    const hl = useContext(HighlighterContext);
+    const [ready, setReady] = useState(hl?.ready ?? false);
     const [selectedLines, setSelectedLines] = useState<Set<number>>(new Set());
     const containerRef = useRef<HTMLDivElement>(null);
     const wrapperRef = useRef<HTMLDivElement>(null);
@@ -150,13 +151,13 @@ export const CodeViewer = memo(function CodeViewer({ code, filePath, addedLines,
     const handleAtTopRef = useRef(false);
 
     // Subscribe to highlighter ready
-    useEffect(() => highlighter.onReady(() => setReady(true)), []);
+    useEffect(() => hl?.onReady(() => setReady(true)), [hl]);
 
     // Synchronous highlight
     const rawHtml = useMemo(() => {
-        if (!ready) return null;
-        return highlighter.highlight(code, filePath);
-    }, [code, filePath, ready]);
+        if (!ready || !hl) return null;
+        return hl.highlight(code, filePath);
+    }, [code, filePath, ready, hl]);
 
     // Clear selection when file changes
     useEffect(() => {

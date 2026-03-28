@@ -5,7 +5,7 @@ import { TabBar } from "./components/TabBar";
 import { MainView } from "./components/MainView";
 import { ConversationOverlay } from "./components/ConversationOverlay";
 import { WindowSwitcher } from "./components/WindowSwitcher";
-import { initHighlighter } from "./components/CodeViewer";
+import { createCodeHighlighter, HighlighterContext } from "./components/CodeViewer";
 import type { WindowInfo } from "./components/WindowSwitcher";
 
 export type TabId = "files" | "changes" | "terminal" | "preview" | string;
@@ -325,7 +325,7 @@ function ServerSetup({ onDone }: { onDone: () => void }) {
 // ── App shell — manages windows list and renders all WindowViews ─────────
 
 export function App() {
-    useState(() => initHighlighter()); // Run once on first render
+    const [codeHighlighter] = useState(() => createCodeHighlighter());
     const [setupDone, setSetupDone] = useState(!needsSetup());
     const [activeWindowId, setActiveWindowId] = useState<string | null>(null);
     const [windows, setWindows] = useState<WindowInfo[]>([]);
@@ -443,6 +443,7 @@ export function App() {
     }
 
     return (
+        <HighlighterContext.Provider value={codeHighlighter}>
         <div className="app-root">
             <WindowSwitcher
                 windows={windows}
@@ -461,5 +462,6 @@ export function App() {
                 />
             ))}
         </div>
+        </HighlighterContext.Provider>
     );
 }
