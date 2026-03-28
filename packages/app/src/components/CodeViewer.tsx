@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useState, useMemo, useRef, useCallback, memo, createContext, useContext } from "react";
 import { createHighlighter, type Highlighter } from "shiki";
-import { useFileReadCache } from "../fileReadCache";
+import { useFileReadCache } from "../file-cache";
 import "./CodeViewer.css";
 
 export interface CodeHighlighter {

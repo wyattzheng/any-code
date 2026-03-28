@@ -6,8 +6,8 @@ import { MainView } from "./components/MainView";
 import { ConversationOverlay } from "./components/ConversationOverlay";
 import { WindowSwitcher } from "./components/WindowSwitcher";
 import { createCodeHighlighter, HighlighterContext } from "./components/CodeViewer";
-import { FileTreeModel, FileTreeContext } from "./fileTree";
-import { FileReadCache, FileReadCacheContext, PreloadEngine, type BatchFileResult } from "./fileReadCache";
+import { FileTreeModel, FileTreeContext } from "./file-tree";
+import { FileReadCache, FileReadCacheContext, PreloadEngine, type BatchFileResult } from "./file-cache";
 import type { WindowInfo } from "./components/WindowSwitcher";
 
 export type TabId = "files" | "changes" | "terminal" | "preview" | string;

@@ -5,7 +5,7 @@ import type { FileContext } from "../App";
 import { ChevronIcon } from "./Icons";
 import { FileIcon } from "./FileIcon";
 import { CodeViewer } from "./CodeViewer";
-import { useFileTree, useFileTreeSnapshot } from "../fileTree";
+import { useFileTree, useFileTreeSnapshot } from "../file-tree";
 import "./FileBrowser.css";
 
 interface FileBrowserProps {
