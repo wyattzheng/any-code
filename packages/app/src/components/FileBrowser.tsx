@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect, useLayoutEffect } from "react";
 import { flushSync } from "react-dom";
+import { useResizePanel } from "../hooks/useResizePanel";
 import type { DirEntry, FileContext } from "../App";
 import { ChevronIcon, FileDocIcon } from "./Icons";
 import { FileIcon } from "./FileIcon";
@@ -98,7 +99,6 @@ export function FileBrowser({ topLevel, requestLs, requestFile, onFileContext }:
         return saved ? Number(saved) : null;
     });
     const containerRef = useRef<HTMLDivElement>(null);
-    const dragRef = useRef<{ startPos: number; startSize: number } | null>(null);
     const [horizontal, setHorizontal] = useState(true);
 
     useLayoutEffect(() => {
@@ -118,48 +118,19 @@ export function FileBrowser({ topLevel, requestLs, requestFile, onFileContext }:
     const [selectedFile, setSelectedFile] = useState<string | null>(null);
     const [fileContent, setFileContent] = useState<string | null>(null);
     const [fileLoading, setFileLoading] = useState(false);
-    const resizeBorderRef = useRef<HTMLDivElement>(null);
-
-    const onDragMove = useCallback((clientPos: number) => {
-        if (!dragRef.current || !containerRef.current) return;
-        const containerRect = containerRef.current.getBoundingClientRect();
-        const delta = clientPos - dragRef.current.startPos;
-        const maxSize = horizontal ? containerRect.width - 60 : containerRect.height - 60;
-        const newSize = Math.max(60, Math.min(dragRef.current.startSize + delta, maxSize));
-        setSidebarSize(newSize);
-        localStorage.setItem('fb-sidebar-height', String(newSize));
-    }, [horizontal]);
-
-    const onDragEnd = useCallback(() => {
-        dragRef.current = null;
-        resizeBorderRef.current?.classList.remove('dragging');
-    }, []);
-
     const sidebarRef = useRef<HTMLDivElement>(null);
 
-    const handleMouseDown = (e: React.MouseEvent) => {
-        e.preventDefault();
-        resizeBorderRef.current?.classList.add('dragging');
-        const pos = horizontal ? e.clientX : e.clientY;
-        const rect = sidebarRef.current!.getBoundingClientRect();
-        dragRef.current = { startPos: pos, startSize: horizontal ? rect.width : rect.height };
-        const onMove = (ev: MouseEvent) => onDragMove(horizontal ? ev.clientX : ev.clientY);
-        const onUp = () => { onDragEnd(); window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
-        window.addEventListener("mousemove", onMove);
-        window.addEventListener("mouseup", onUp);
-    };
+    const handleResize = useCallback((size: number) => {
+        setSidebarSize(size);
+        localStorage.setItem('fb-sidebar-height', String(size));
+    }, []);
 
-    const handleTouchStart = (e: React.TouchEvent) => {
-        const touch = e.touches[0];
-        resizeBorderRef.current?.classList.add('dragging');
-        const pos = horizontal ? touch.clientX : touch.clientY;
-        const rect = sidebarRef.current!.getBoundingClientRect();
-        dragRef.current = { startPos: pos, startSize: horizontal ? rect.width : rect.height };
-        const onMove = (ev: TouchEvent) => { ev.preventDefault(); onDragMove(horizontal ? ev.touches[0].clientX : ev.touches[0].clientY); };
-        const onUp = () => { onDragEnd(); window.removeEventListener("touchmove", onMove); window.removeEventListener("touchend", onUp); };
-        window.addEventListener("touchmove", onMove, { passive: false });
-        window.addEventListener("touchend", onUp);
-    };
+    const { borderRef: resizeBorderRef, handleMouseDown, handleTouchStart } = useResizePanel({
+        horizontal,
+        panelRef: sidebarRef,
+        containerRef,
+        onResize: handleResize,
+    });
 
     const handleFileClick = async (filePath: string) => {
         setSelectedFile(filePath);

@@ -4,6 +4,7 @@ import type { GitChange, FileContext } from "../App";
 import { DiffIcon } from "./Icons";
 import { FileIcon } from "./FileIcon";
 import { CodeViewer } from "./CodeViewer";
+import { useResizePanel } from "../hooks/useResizePanel";
 import "./ChangesView.css";
 
 interface ChangesViewProps {
@@ -35,7 +36,6 @@ const HORIZONTAL_BREAKPOINT = 360;
 export function ChangesView({ changes, requestFile, requestDiff, onFileContext }: ChangesViewProps) {
     const [listSize, setListSize] = useState<number | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
-    const dragRef = useRef<{ startPos: number; startSize: number } | null>(null);
     const [horizontal, setHorizontal] = useState(true);
 
     useLayoutEffect(() => {
@@ -57,7 +57,6 @@ export function ChangesView({ changes, requestFile, requestDiff, onFileContext }
     const [addedLines, setAddedLines] = useState<Set<number>>(new Set());
     const [scrollToLine, setScrollToLine] = useState<number | null>(null);
     const contentBodyRef = useRef<HTMLDivElement>(null);
-    const resizeBorderRef = useRef<HTMLDivElement>(null);
 
     // React to changes list updates: close if file gone, refresh if still present
     useEffect(() => {
@@ -83,45 +82,14 @@ export function ChangesView({ changes, requestFile, requestDiff, onFileContext }
         return () => { cancelled = true; };
     }, [changes, selectedFile, onFileContext, requestFile, requestDiff]);
 
-    const onDragMove = useCallback((clientPos: number) => {
-        if (!dragRef.current || !containerRef.current) return;
-        const containerRect = containerRef.current.getBoundingClientRect();
-        const delta = clientPos - dragRef.current.startPos;
-        const maxSize = horizontal ? containerRect.width - 60 : containerRect.height - 60;
-        const newSize = Math.max(60, Math.min(dragRef.current.startSize + delta, maxSize));
-        setListSize(newSize);
-    }, [horizontal]);
-
-    const onDragEnd = useCallback(() => {
-        dragRef.current = null;
-        resizeBorderRef.current?.classList.remove('dragging');
-    }, []);
-
     const listRef = useRef<HTMLDivElement>(null);
 
-    const handleMouseDown = (e: React.MouseEvent) => {
-        e.preventDefault();
-        resizeBorderRef.current?.classList.add('dragging');
-        const pos = horizontal ? e.clientX : e.clientY;
-        const rect = listRef.current!.getBoundingClientRect();
-        dragRef.current = { startPos: pos, startSize: horizontal ? rect.width : rect.height };
-        const onMove = (ev: MouseEvent) => onDragMove(horizontal ? ev.clientX : ev.clientY);
-        const onUp = () => { onDragEnd(); window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
-        window.addEventListener("mousemove", onMove);
-        window.addEventListener("mouseup", onUp);
-    };
-
-    const handleTouchStart = (e: React.TouchEvent) => {
-        const touch = e.touches[0];
-        resizeBorderRef.current?.classList.add('dragging');
-        const pos = horizontal ? touch.clientX : touch.clientY;
-        const rect = listRef.current!.getBoundingClientRect();
-        dragRef.current = { startPos: pos, startSize: horizontal ? rect.width : rect.height };
-        const onMove = (ev: TouchEvent) => { ev.preventDefault(); onDragMove(horizontal ? ev.touches[0].clientX : ev.touches[0].clientY); };
-        const onUp = () => { onDragEnd(); window.removeEventListener("touchmove", onMove); window.removeEventListener("touchend", onUp); };
-        window.addEventListener("touchmove", onMove, { passive: false });
-        window.addEventListener("touchend", onUp);
-    };
+    const { borderRef: resizeBorderRef, handleMouseDown, handleTouchStart } = useResizePanel({
+        horizontal,
+        panelRef: listRef,
+        containerRef,
+        onResize: setListSize,
+    });
 
     const handleFileClick = async (filePath: string) => {
         setSelectedFile(filePath);
