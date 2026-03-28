@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo, useContext } from "react";
 import { createChannel, type Channel } from "./channel";
-import { getApiBase, getServerUrl, setServerUrl, isConfigured } from "./serverUrl";
+import { getApiBase, getServerUrl, setServerUrl, isConfigured } from "./server-url";
 import { TabBar } from "./components/TabBar";
 import { MainView } from "./components/MainView";
 import { ConversationOverlay } from "./components/ConversationOverlay";

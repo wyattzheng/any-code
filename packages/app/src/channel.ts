@@ -81,7 +81,7 @@ export class WebSocketChannel implements Channel {
     }
 }
 
-import { getWsUrl } from "./serverUrl";
+import { getWsUrl } from "./server-url";
 
 export function createChannel(sessionId: string): Channel {
     return new WebSocketChannel(getWsUrl(`/?sessionId=${sessionId}`));

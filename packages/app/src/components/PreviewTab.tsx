@@ -1,5 +1,5 @@
 import { MonitorIcon } from "./Icons";
-import { getServerUrl } from "../serverUrl";
+import { getServerUrl } from "../server-url";
 import "./PreviewTab.css";
 
 interface PreviewTabProps {

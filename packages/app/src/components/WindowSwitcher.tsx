@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { GearIcon, CloseIcon } from "./Icons";
-import { getServerUrl, setServerUrl } from "../serverUrl";
+import { getServerUrl, setServerUrl } from "../server-url";
 import "./WindowSwitcher.css";
 
 export interface WindowInfo {

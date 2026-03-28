@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect, type MutableRefObject } from 
 import { flushSync } from "react-dom";
 import type { FileContext } from "../App";
 import { MicIcon, KeyboardIcon, SendIcon, CloseIcon, ChatBubbleIcon, StopIcon, PinIcon, UndockIcon, MinimizeIcon } from "./Icons";
-import { getApiBase } from "../serverUrl";
+import { getApiBase } from "../server-url";
 import "./ConversationOverlay.css";
 
 // ── Context Ring ──────────────────────────────────────────────────────────────

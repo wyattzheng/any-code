@@ -1,6 +1,6 @@
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
-import { getWsUrl } from "../serverUrl";
+import { getWsUrl } from "../server-url";
 
 const TERMINAL_OPTIONS: ConstructorParameters<typeof Terminal>[0] = {
     fontSize: 11,
