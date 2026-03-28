@@ -185,11 +185,9 @@ function WindowView({ sessionId, visible, onWindowsChanged }: WindowViewProps) {
 
     return (
         <div className="app-content" style={{ display: visible ? "flex" : "none" }}>
-            {directory && (
-                <div className="main-path-bar">
-                    <span className="main-path-text">{directory.split("/").filter(Boolean).pop() || directory}</span>
-                </div>
-            )}
+            <div className="main-path-bar">
+                {directory && <span className="main-path-text">{directory.split("/").filter(Boolean).pop() || directory}</span>}
+            </div>
             <div className="app-middle">
                 <div className="app-main">
                     {directory ? (
