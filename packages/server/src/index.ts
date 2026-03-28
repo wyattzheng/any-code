@@ -758,6 +758,7 @@ const MAX_BUFFER_LINES = 5000
 class TerminalStateModel {
   private headless: InstanceType<typeof xtermHeadless.Terminal>
   private serializer: InstanceType<typeof SerializeAddon>
+  private pendingWrites = 0
   private alive = false
   private wsClients = new Set<WS>()
 
@@ -779,8 +780,8 @@ class TerminalStateModel {
 
   /** Feed output to headless terminal and broadcast to clients */
   pushOutput(data: string): void {
-    console.log(`[term-debug] pushOutput: ${data.length} bytes`)
-    this.headless.write(data)
+    this.pendingWrites++
+    this.headless.write(data, () => { this.pendingWrites-- })
     this.notify({ type: "terminal.output", data })
   }
 
@@ -792,13 +793,13 @@ class TerminalStateModel {
   /** Resize the headless terminal to match PTY */
   resize(cols: number, rows: number): void {
     if (cols > 0 && rows > 0) {
-      console.log(`[term-debug] headless resize: ${cols}x${rows}`)
       this.headless.resize(cols, rows)
     }
   }
 
   /** Reset: dispose old headless terminal and create a fresh one */
   reset(): void {
+    this.pendingWrites = 0
     this.headless.dispose()
     this.headless = new xtermHeadless.Terminal({ cols: 80, rows: 24, scrollback: 5000 })
     this.serializer = new SerializeAddon()
@@ -813,11 +814,19 @@ class TerminalStateModel {
     }
   }
 
+  /** Serialize and send snapshot to a client */
+  private sendSnapshot(ws: WS): void {
+    const snapshot = this.serializer.serialize()
+    if (snapshot) {
+      ws.send(JSON.stringify({ type: "terminal.sync", data: snapshot }))
+    }
+  }
+
   /**
    * Register a new WebSocket client.
    *  1. Send current state (ready / none)
    *  2. Join live broadcast immediately
-   *  3. Flush + serialize + send snapshot
+   *  3. Send snapshot (directly if idle, via write callback if active)
    */
   handleClient(ws: WS): void {
     // 1. Current state
@@ -826,14 +835,12 @@ class TerminalStateModel {
     // 2. Join live broadcast immediately (no data gap)
     this.wsClients.add(ws)
 
-    // 3. Serialize snapshot on next tick (let pending writes flush)
-    setTimeout(() => {
-      const snapshot = this.serializer.serialize()
-      console.log(`[term-debug] sync snapshot length: ${snapshot?.length ?? 0}`)
-      if (snapshot) {
-        ws.send(JSON.stringify({ type: "terminal.sync", data: snapshot }))
-      }
-    }, 50)
+    // 3. Snapshot: idle → direct, active → wait for write queue
+    if (this.pendingWrites === 0) {
+      this.sendSnapshot(ws)
+    } else {
+      this.headless.write("", () => this.sendSnapshot(ws))
+    }
 
     // 4. Messages
     ws.on("message", (raw: Buffer | string) => {
