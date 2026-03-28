@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useLayoutEffect } from "react";
+import { useState, useRef, useCallback, useLayoutEffect, useEffect } from "react";
 import { flushSync } from "react-dom";
 import { useResizePanel } from "../hooks/useResizePanel";
 import type { FileContext } from "../App";
@@ -130,6 +130,22 @@ export function FileBrowser({ requestFile, onFileContext }: FileBrowserProps) {
         setFileContent(content);
         setFileLoading(false);
     };
+
+    // Auto-refresh the currently viewed file when fs changes occur
+    // (tree model notifies after onFsChanged re-fetches directory listings)
+    const selectedFileRef = useRef(selectedFile);
+    selectedFileRef.current = selectedFile;
+    useEffect(() => {
+        return model.subscribe(async () => {
+            const file = selectedFileRef.current;
+            if (!file) return;
+            const content = await requestFile(file);
+            // Only update if still viewing the same file
+            if (selectedFileRef.current === file) {
+                setFileContent(content);
+            }
+        });
+    }, [model, requestFile]);
 
     const handleSelectionChange = useCallback((lines: number[]) => {
         if (!selectedFile) return;
