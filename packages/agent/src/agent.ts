@@ -373,8 +373,7 @@ export class CodeAgent extends EventEmitter {
             git: this._git as any,
             shell: this.options.shell,
             terminal: this.options.terminal ?? {
-                create() { throw new Error("Terminal not available in this environment.") },
-                destroy() { throw new Error("Terminal not available in this environment.") },
+                ensureRunning() { throw new Error("Terminal not available in this environment.") },
                 write() { throw new Error("Terminal not available in this environment.") },
                 read() { throw new Error("Terminal not available in this environment.") },
                 exists() { return false },
