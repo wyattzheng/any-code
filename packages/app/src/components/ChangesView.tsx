@@ -97,15 +97,14 @@ export function ChangesView({ changes, requestFile, requestDiff, onFileContext }
         resizeBorderRef.current?.classList.remove('dragging');
     }, []);
 
+    const listRef = useRef<HTMLDivElement>(null);
+
     const handleMouseDown = (e: React.MouseEvent) => {
         e.preventDefault();
         resizeBorderRef.current?.classList.add('dragging');
-        const defaultSize = containerRef.current
-            ? (horizontal ? containerRef.current.getBoundingClientRect().width : containerRef.current.getBoundingClientRect().height) / 2
-            : 200;
-        const currentSize = listSize ?? defaultSize;
         const pos = horizontal ? e.clientX : e.clientY;
-        dragRef.current = { startPos: pos, startSize: currentSize };
+        const rect = listRef.current!.getBoundingClientRect();
+        dragRef.current = { startPos: pos, startSize: horizontal ? rect.width : rect.height };
         const onMove = (ev: MouseEvent) => onDragMove(horizontal ? ev.clientX : ev.clientY);
         const onUp = () => { onDragEnd(); window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
         window.addEventListener("mousemove", onMove);
@@ -115,12 +114,9 @@ export function ChangesView({ changes, requestFile, requestDiff, onFileContext }
     const handleTouchStart = (e: React.TouchEvent) => {
         const touch = e.touches[0];
         resizeBorderRef.current?.classList.add('dragging');
-        const defaultSize = containerRef.current
-            ? (horizontal ? containerRef.current.getBoundingClientRect().width : containerRef.current.getBoundingClientRect().height) / 2
-            : 200;
-        const currentSize = listSize ?? defaultSize;
         const pos = horizontal ? touch.clientX : touch.clientY;
-        dragRef.current = { startPos: pos, startSize: currentSize };
+        const rect = listRef.current!.getBoundingClientRect();
+        dragRef.current = { startPos: pos, startSize: horizontal ? rect.width : rect.height };
         const onMove = (ev: TouchEvent) => { ev.preventDefault(); onDragMove(horizontal ? ev.touches[0].clientX : ev.touches[0].clientY); };
         const onUp = () => { onDragEnd(); window.removeEventListener("touchmove", onMove); window.removeEventListener("touchend", onUp); };
         window.addEventListener("touchmove", onMove, { passive: false });
@@ -175,7 +171,7 @@ export function ChangesView({ changes, requestFile, requestDiff, onFileContext }
 
     return (
         <div className={`changes-view${horizontal ? ' changes-view--horizontal' : ''}`} ref={containerRef}>
-            <div className="changes-list" style={listStyle as any}>
+            <div className="changes-list" ref={listRef} style={listStyle as any}>
                 <div className="change-items">
                     {isEmpty ? (
                         <div className="changes-empty">
