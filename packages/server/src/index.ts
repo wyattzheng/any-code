@@ -292,6 +292,7 @@ async function resumeSession(cfg: ServerConfig, row: Record<string, unknown>): P
   const pp = getOrCreatePreviewProvider(cfg, sessionId)
 
   const chatAgent = createChatAgent(cfg.agent, createChatAgentConfig(cfg, dir, sessionId, tp, pp))
+  await chatAgent.init()
 
   const entry = registerSession(cfg, sessionId, chatAgent, dir, row.time_created as number)
   if (dir) {
