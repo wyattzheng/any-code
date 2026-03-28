@@ -1,9 +1,8 @@
-import { useState, useRef, useCallback, useEffect, useLayoutEffect } from "react";
+import { useState, useRef, useEffect, useLayoutEffect } from "react";
 import { flushSync } from "react-dom";
 import type { GitChange, FileContext } from "../App";
-import { DiffIcon } from "./Icons";
 import { FileIcon } from "./FileIcon";
-import { CodeViewer } from "./CodeViewer";
+import { FileContentPanel } from "./FileContentPanel";
 import { useResizePanel } from "../hooks/useResizePanel";
 import "./ChangesView.css";
 
@@ -97,8 +96,7 @@ export function ChangesView({ changes, requestFile, requestDiff, onFileContext }
         setAddedLines(new Set());
         setScrollToLine(null);
         setFileLoading(true);
-        onFileContext?.(null); // clear selection on file switch
-        // Reset scroll position immediately so the old file's position doesn't linger
+        onFileContext?.(null);
         if (contentBodyRef.current) {
             contentBodyRef.current.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
         }
@@ -112,24 +110,11 @@ export function ChangesView({ changes, requestFile, requestDiff, onFileContext }
         setAddedLines(new Set(diff.added));
         setFileLoading(false);
 
-        // Scroll to first changed line
         const allChanged = [...diff.added].sort((a, b) => a - b);
         if (allChanged.length > 0) {
             setScrollToLine(allChanged[0]);
         }
     };
-
-    const handleSelectionChange = useCallback((lines: number[]) => {
-        if (!selectedFile) return;
-        if (lines.length === 0) {
-            onFileContext?.(null);
-        } else {
-            onFileContext?.({ file: selectedFile, lines });
-        }
-    }, [selectedFile, onFileContext]);
-
-    const [wordWrap, setWordWrap] = useState(true);
-    const [menuOpen, setMenuOpen] = useState(false);
 
     const isEmpty = changes.length === 0;
 
@@ -162,45 +147,15 @@ export function ChangesView({ changes, requestFile, requestDiff, onFileContext }
             </div>
             <div className="cv-resize-border" ref={resizeBorderRef} onMouseDown={handleMouseDown} onTouchStart={handleTouchStart} />
             <div className="changes-diff">
-                {selectedFile ? (
-                    <>
-                        <div className="file-content-header">
-                            <FileIcon filename={selectedFile.split('/').pop() || selectedFile} />
-                            <span className="file-content-path">{selectedFile}</span>
-                            <div className="file-content-menu">
-                                <button className="file-content-menu-btn" onClick={() => setMenuOpen(!menuOpen)}>
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                                        <circle cx="12" cy="4" r="1.5" fill="currentColor" /><circle cx="12" cy="12" r="1.5" fill="currentColor" /><circle cx="12" cy="20" r="1.5" fill="currentColor" />
-                                    </svg>
-                                </button>
-                                {menuOpen && (
-                                    <div className="file-content-dropdown">
-                                        <div className="file-content-dropdown-item" onClick={() => { setWordWrap(!wordWrap); setMenuOpen(false); }}>
-                                            <input type="checkbox" checked={wordWrap} readOnly />
-                                            <span>自动换行</span>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                        <div className="file-content-body" ref={contentBodyRef}>
-                            {fileLoading ? (
-                                <div className="file-content-loading">加载中…</div>
-                            ) : fileContent !== null ? (
-                                <CodeViewer
-                                    code={fileContent}
-                                    filePath={selectedFile}
-                                    addedLines={addedLines}
-                                    onSelectionChange={handleSelectionChange}
-                                    scrollToLine={scrollToLine}
-                                    wordWrap={wordWrap}
-                                />
-                            ) : (
-                                <div className="file-content-error">无法读取文件</div>
-                            )}
-                        </div>
-                    </>
-                ) : null}
+                <FileContentPanel
+                    selectedFile={selectedFile}
+                    fileContent={fileContent}
+                    fileLoading={fileLoading}
+                    addedLines={addedLines}
+                    scrollToLine={scrollToLine}
+                    onFileContext={onFileContext}
+                    contentBodyRef={contentBodyRef}
+                />
             </div>
         </div>
     );

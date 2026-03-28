@@ -4,7 +4,7 @@ import { useResizePanel } from "../hooks/useResizePanel";
 import type { FileContext } from "../App";
 import { ChevronIcon } from "./Icons";
 import { FileIcon } from "./FileIcon";
-import { CodeViewer } from "./CodeViewer";
+import { FileContentPanel } from "./FileContentPanel";
 import { useFileTree, useFileTreeSnapshot } from "../file-tree";
 import "./FileBrowser.css";
 
@@ -132,7 +132,6 @@ export function FileBrowser({ requestFile, onFileContext }: FileBrowserProps) {
     };
 
     // Auto-refresh the currently viewed file when fs changes occur
-    // (tree model notifies after onFsChanged re-fetches directory listings)
     const selectedFileRef = useRef(selectedFile);
     selectedFileRef.current = selectedFile;
     useEffect(() => {
@@ -140,24 +139,11 @@ export function FileBrowser({ requestFile, onFileContext }: FileBrowserProps) {
             const file = selectedFileRef.current;
             if (!file) return;
             const content = await requestFile(file);
-            // Only update if still viewing the same file
             if (selectedFileRef.current === file) {
                 setFileContent(content);
             }
         });
     }, [model, requestFile]);
-
-    const handleSelectionChange = useCallback((lines: number[]) => {
-        if (!selectedFile) return;
-        if (lines.length === 0) {
-            onFileContext?.(null);
-        } else {
-            onFileContext?.({ file: selectedFile, lines });
-        }
-    }, [selectedFile, onFileContext]);
-
-    const [wordWrap, setWordWrap] = useState(true);
-    const [menuOpen, setMenuOpen] = useState(false);
 
     const isEmpty = topLevel.length === 0;
 
@@ -189,42 +175,12 @@ export function FileBrowser({ requestFile, onFileContext }: FileBrowserProps) {
             </div>
             <div className="fb-resize-border" ref={resizeBorderRef} onMouseDown={handleMouseDown} onTouchStart={handleTouchStart} />
             <div className="file-browser-content">
-                {selectedFile ? (
-                    <>
-                        <div className="file-content-header">
-                            <FileIcon filename={selectedFile.split('/').pop() || selectedFile} />
-                            <span className="file-content-path">{selectedFile}</span>
-                            <div className="file-content-menu">
-                                <button className="file-content-menu-btn" onClick={() => setMenuOpen(!menuOpen)}>
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                                        <circle cx="12" cy="4" r="1.5" fill="currentColor" /><circle cx="12" cy="12" r="1.5" fill="currentColor" /><circle cx="12" cy="20" r="1.5" fill="currentColor" />
-                                    </svg>
-                                </button>
-                                {menuOpen && (
-                                    <div className="file-content-dropdown">
-                                        <div className="file-content-dropdown-item" onClick={() => { setWordWrap(!wordWrap); setMenuOpen(false); }}>
-                                            <input type="checkbox" checked={wordWrap} readOnly />
-                                            <span>自动换行</span>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                        <div className="file-content-body">
-                            {fileLoading ? (
-                                <div className="file-content-loading">加载中…</div>
-                            ) : fileContent !== null ? (
-                                <CodeViewer code={fileContent} filePath={selectedFile} onSelectionChange={handleSelectionChange} wordWrap={wordWrap} />
-                            ) : (
-                                <div className="file-content-error">无法读取文件</div>
-                            )}
-                        </div>
-                    </>
-                ) : (
-                    <div className="file-empty">
-                        <p>选择文件查看内容</p>
-                    </div>
-                )}
+                <FileContentPanel
+                    selectedFile={selectedFile}
+                    fileContent={fileContent}
+                    fileLoading={fileLoading}
+                    onFileContext={onFileContext}
+                />
             </div>
         </div>
     );
