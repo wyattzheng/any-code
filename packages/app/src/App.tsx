@@ -139,7 +139,7 @@ function WindowView({ sessionId, visible, onWindowsChanged }: WindowViewProps) {
     }, [sessionId]);
 
     // FileTreeModel: owns all file tree state
-    const fileTree = useMemo(() => new FileTreeModel(requestLs), [requestLs]);
+    const fileTree = useMemo(() => new FileTreeModel(requestLs, sendMessage), [requestLs, sendMessage]);
     const fileTreeRef = useRef(fileTree);
     fileTreeRef.current = fileTree;
 

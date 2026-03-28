@@ -546,6 +546,22 @@ async function handleClientMessage(sessionId: string, client: ClientLike, msg: a
     return
   }
 
+  // Per-directory file watching: subscribe/unsubscribe
+  if (msg.type === "watch.dir") {
+    const manager = dirWatchManagers.get(sessionId)
+    if (manager && typeof msg.path === "string") {
+      manager.watchDir(msg.path)
+    }
+    return
+  }
+  if (msg.type === "unwatch.dir") {
+    const manager = dirWatchManagers.get(sessionId)
+    if (manager && typeof msg.path === "string") {
+      manager.unwatchDir(msg.path)
+    }
+    return
+  }
+
   if (msg.type === "ls") {
     const session = getSession(sessionId)!
     const dir = session.directory
@@ -623,62 +639,101 @@ async function handleClientMessage(sessionId: string, client: ClientLike, msg: a
   }
 }
 
-// ── Directory watcher (chokidar) ─────────────────────────────────────────
+/**
+ * Per-directory watcher manager.
+ * Only watches directories the client is actively viewing (expanded in file tree).
+ * Each directory gets a non-recursive chokidar watcher with polling.
+ */
+class DirectoryWatchManager {
+  private watchers = new Map<string, ChokidarWatcher>()
+  private sessionId: string
+  private rootDir: string
+  private cfg: ServerConfig
+  private batchTimer: ReturnType<typeof setTimeout> | undefined
+  private pendingDirs = new Set<string>()
 
-const watchers = new Map<string, ChokidarWatcher>()
-
-function watchDirectory(cfg: ServerConfig, sessionId: string, dir: string) {
-  // Clean up existing watcher for this session
-  const existing = watchers.get(sessionId)
-  if (existing) {
-    existing.close()
-    watchers.delete(sessionId)
+  constructor(cfg: ServerConfig, sessionId: string, rootDir: string) {
+    this.cfg = cfg
+    this.sessionId = sessionId
+    this.rootDir = rootDir
+    // Always watch the top-level directory
+    if (rootDir) this.watchDir("")
   }
 
-  // If dir is empty (cleared), just stop watching
-  if (!dir) return
+  /** Watch a single directory (relative path from rootDir). Non-recursive. */
+  watchDir(relPath: string) {
+    if (this.watchers.has(relPath)) return
+    const absPath = relPath ? path.join(this.rootDir, relPath) : this.rootDir
 
-  // Collect changed paths and broadcast in batches
-  let pendingPaths = new Set<string>()
-  let batchTimer: ReturnType<typeof setTimeout> | undefined
+    const watcher = chokidarWatch(absPath, {
+      ignored: /(^|[\/\\])(\.git|node_modules)([\/\\]|$)/,
+      ignoreInitial: true,
+      depth: 0, // non-recursive: only this directory level
+      usePolling: true,
+      interval: 3000,
+    })
 
-  const flushChanges = () => {
-    batchTimer = undefined
-    if (pendingPaths.size === 0) return
-    const paths = [...pendingPaths]
-    pendingPaths = new Set()
+    watcher.on("all", () => {
+      this.pendingDirs.add(relPath)
+      if (!this.batchTimer) {
+        this.batchTimer = setTimeout(() => this._flush(), 500)
+      }
+    })
+    watcher.on("error", (err) => console.error(`❌  watch error ${absPath}:`, err))
 
-    // Broadcast changed paths to frontend
-    const clients = getSessionClients(sessionId)
-    const msg = JSON.stringify({ type: "fs.changed", paths })
+    this.watchers.set(relPath, watcher)
+  }
+
+  /** Stop watching a directory */
+  unwatchDir(relPath: string) {
+    // Don't unwatch root
+    if (relPath === "") return
+    const watcher = this.watchers.get(relPath)
+    if (watcher) {
+      watcher.close()
+      this.watchers.delete(relPath)
+    }
+  }
+
+  /** Flush batched changes: broadcast fs.changed + trigger state refresh */
+  private _flush() {
+    this.batchTimer = undefined
+    if (this.pendingDirs.size === 0) return
+    const dirs = [...this.pendingDirs]
+    this.pendingDirs = new Set()
+
+    const clients = getSessionClients(this.sessionId)
+    const msg = JSON.stringify({ type: "fs.changed", dirs })
     for (const c of clients) {
       if (c.readyState === WS.OPEN) c.send(msg)
     }
 
-    // Also trigger state refresh (top-level + git changes)
-    scheduleStatePush(cfg, sessionId, 0)
+    // Also refresh top-level + git status
+    scheduleStatePush(this.cfg, this.sessionId, 0)
   }
 
-  const watcher = chokidarWatch(dir, {
-    ignored: /(^|[\/\\])(\.git|node_modules)([\/\\]|$)/,
-    ignoreInitial: true,
-    // Always use polling since native watchers often fail in Docker bind mounts
-    usePolling: true,
-    interval: 3000,
-  })
+  /** Close all watchers */
+  destroy() {
+    if (this.batchTimer) clearTimeout(this.batchTimer)
+    for (const w of this.watchers.values()) w.close()
+    this.watchers.clear()
+  }
+}
 
-  watcher.on("all", (_event: string, filePath: string) => {
-    // Convert to relative path from watched dir
-    const rel = path.relative(dir, filePath)
-    if (rel && !rel.startsWith("..")) {
-      pendingPaths.add(rel)
-    }
-    if (!batchTimer) {
-      batchTimer = setTimeout(flushChanges, 500)
-    }
-  })
-  watcher.on("error", (err) => console.error(`❌  chokidar error for ${dir}:`, err))
-  watchers.set(sessionId, watcher)
+const dirWatchManagers = new Map<string, DirectoryWatchManager>()
+
+function watchDirectory(cfg: ServerConfig, sessionId: string, dir: string) {
+  // Clean up existing
+  const existing = dirWatchManagers.get(sessionId)
+  if (existing) {
+    existing.destroy()
+    dirWatchManagers.delete(sessionId)
+  }
+
+  if (!dir) return
+
+  const manager = new DirectoryWatchManager(cfg, sessionId, dir)
+  dirWatchManagers.set(sessionId, manager)
   console.log(`👁  Watching directory: ${dir}`)
 }
 

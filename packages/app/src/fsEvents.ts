@@ -6,6 +6,7 @@ export interface DirEntry {
 }
 
 type RequestLs = (path: string) => Promise<DirEntry[]>;
+type SendMessage = (data: any) => void;
 
 /**
  * FileTreeModel — owns all file tree state outside React.
@@ -14,6 +15,7 @@ type RequestLs = (path: string) => Promise<DirEntry[]>;
  *   - Stores top-level entries and expanded directory children
  *   - Fetches subdirectory contents on expand
  *   - Re-fetches all expanded directories on fs change events
+ *   - Sends watch/unwatch messages to server for per-directory watching
  *   - Notifies React subscribers to re-render
  */
 export class FileTreeModel {
@@ -22,9 +24,11 @@ export class FileTreeModel {
     private _loading = new Set<string>();
     private _listeners = new Set<() => void>();
     private _requestLs: RequestLs;
+    private _send: SendMessage;
 
-    constructor(requestLs: RequestLs) {
+    constructor(requestLs: RequestLs, send: SendMessage) {
         this._requestLs = requestLs;
+        this._send = send;
     }
 
     // ── Getters ──────────────────────────────────────────────
@@ -42,15 +46,14 @@ export class FileTreeModel {
     }
 
     async expand(path: string) {
-        if (this._expanded.has(path)) {
-            // Already expanded — collapse
-            return;
-        }
+        if (this._expanded.has(path)) return;
         this._loading.add(path);
         this._notify();
         const children = await this._requestLs(path);
         this._loading.delete(path);
         this._expanded.set(path, children);
+        // Tell server to watch this directory
+        this._send({ type: "watch.dir", path });
         this._notify();
     }
 
@@ -60,6 +63,8 @@ export class FileTreeModel {
         for (const key of this._expanded.keys()) {
             if (key === path || key.startsWith(prefix)) {
                 this._expanded.delete(key);
+                // Tell server to stop watching
+                this._send({ type: "unwatch.dir", path: key });
             }
         }
         this._notify();
