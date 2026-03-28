@@ -15,6 +15,7 @@
     background: var(--color-surface);
     border-bottom: 1px solid var(--color-border);
     flex-shrink: 0;
+    height: 30px;
 }
 
 .main-path-text {
