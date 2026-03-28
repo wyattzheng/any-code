@@ -5,33 +5,6 @@ const DESCRIPTION = `Lists files and directories in a given path. The path param
 `
 import { assertExternalDirectory } from "./external-directory"
 
-export const IGNORE_PATTERNS = [
-  "node_modules/",
-  "__pycache__/",
-  ".git/",
-  "dist/",
-  "build/",
-  "target/",
-  "vendor/",
-  "bin/",
-  "obj/",
-  ".idea/",
-  ".vscode/",
-  ".zig-cache/",
-  "zig-out",
-  ".coverage",
-  "coverage/",
-  "vendor/",
-  "tmp/",
-  "temp/",
-  ".cache/",
-  "cache/",
-  "logs/",
-  ".venv/",
-  "venv/",
-  "env/",
-]
-
 const LIMIT = 100
 
 export const ListTool = Tool.define("list", {
@@ -53,12 +26,14 @@ export const ListTool = Tool.define("list", {
       },
     })
 
-    const ignoreGlobs = IGNORE_PATTERNS.map((p) => `!${p}*`).concat(params.ignore?.map((p) => `!${p}`) || [])
+    // .gitignore filtering is handled by listFiles() internally.
+    // Only pass user-provided ignore patterns here.
+    const ignoreGlobs = params.ignore?.map((p) => `!${p}`) || []
     
     if (!ctx.search) throw new Error("Search is not available.")
     const filePaths = await ctx.search.listFiles({
       cwd: searchPath,
-      glob: ignoreGlobs,
+      glob: ignoreGlobs.length > 0 ? ignoreGlobs : undefined,
       limit: LIMIT,
       signal: ctx.abort
     })
