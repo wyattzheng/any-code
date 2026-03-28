@@ -697,7 +697,36 @@ class DirectoryWatchManager {
     this.sessionId = sessionId
     this.rootDir = rootDir
     // Always watch the top-level directory
-    if (rootDir) this.watchDir("")
+    if (rootDir) {
+      this.watchDir("")
+      // Watch .git for commit/checkout/merge etc. — these change git status
+      this._watchGitDir()
+    }
+  }
+
+  /** Watch .git internals (index, HEAD, refs) to detect commits/checkouts. */
+  private _watchGitDir() {
+    const gitDir = path.join(this.rootDir, ".git")
+    try {
+      fs.accessSync(gitDir)
+    } catch {
+      return // no .git directory — not a git repo
+    }
+    const gitWatcher = chokidarWatch(gitDir, {
+      ignored: /(objects|logs|hooks|info)/,
+      ignoreInitial: true,
+      depth: 2, // covers refs/heads/*
+      usePolling: true,
+      interval: 3000,
+    })
+    gitWatcher.on("all", () => {
+      // Debounce: only schedule state push (git status refresh), not fs.changed
+      if (!this.batchTimer) {
+        this.batchTimer = setTimeout(() => this._flush(), 500)
+      }
+    })
+    gitWatcher.on("error", () => {}) // silently ignore
+    this.watchers.set("__git__", gitWatcher)
   }
 
   /** Watch a single directory (relative path from rootDir). Non-recursive. */
