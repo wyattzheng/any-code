@@ -110,6 +110,22 @@ export class FileReadCache {
         }
     }
 
+    /** Invalidate all cached entries under a directory (including the dir itself). */
+    invalidateDir(dirPath: string): void {
+        // dirPath "" means root — invalidate everything
+        if (dirPath === "") {
+            this.clear();
+            return;
+        }
+        const prefix = dirPath + "/";
+        for (const [key, entry] of this._map) {
+            if (key === dirPath || key.startsWith(prefix)) {
+                this._totalSize -= entry.size;
+                this._map.delete(key);
+            }
+        }
+    }
+
     clear(): void {
         this._map.clear();
         this._totalSize = 0;

@@ -97,7 +97,13 @@ function WindowView({ sessionId, visible, onWindowsChanged }: WindowViewProps) {
                     if (data.contextUsed !== undefined) setContextUsed(data.contextUsed);
                     if (data.compactionThreshold !== undefined) setCompactionThreshold(data.compactionThreshold);
                 } else if (data.type === "fs.changed") {
+                    // Invalidate cached files in changed directories
+                    const dirs: string[] = data.dirs ?? [];
+                    for (const dir of dirs) {
+                        fileCacheRef.current.invalidateDir(dir);
+                    }
                     fileTreeRef.current?.onFsChanged();
+                    // Re-trigger preload after invalidation (subscribe fires via onFsChanged)
                 } else if (data.type === "windows.updated") {
                     onWindowsChanged();
                 } else if (data.type?.startsWith("chat.")) {
@@ -164,6 +170,7 @@ function WindowView({ sessionId, visible, onWindowsChanged }: WindowViewProps) {
     // ── FileReadCache + PreloadEngine ──
     const codeHighlighter = useContext(HighlighterContext);
     const [fileCache] = useState(() => new FileReadCache());
+    const fileCacheRef = useRef(fileCache);
 
     // Cache-aware requestFile: cache → batch fallback
     const requestFile = useCallback(async (filePath: string): Promise<string | null> => {
@@ -199,14 +206,7 @@ function WindowView({ sessionId, visible, onWindowsChanged }: WindowViewProps) {
         }
     }, [changes]);
 
-    // Invalidate cache on fs changes
-    useEffect(() => {
-        const unsub = fileTree.subscribe(() => {
-            // Lightweight: just clear the cache on fs change so stale content is re-fetched
-            // (FileTreeModel.onFsChanged already triggers a subscribe notification)
-        });
-        return unsub;
-    }, [fileTree, fileCache]);
+
 
     // Cache-aware requestDiff: cache → batch fallback
     const requestDiff = useCallback(async (filePath: string): Promise<{ added: number[]; removed: number[] }> => {
