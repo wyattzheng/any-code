@@ -135,15 +135,21 @@ export function FileBrowser({ topLevel, requestLs, requestFile, onFileContext }:
         resizeBorderRef.current?.classList.remove('dragging');
     }, []);
 
+    const sidebarRef = useRef<HTMLDivElement>(null);
+
+    /** Get actual sidebar size — avoids first-drag jump when sidebarSize is null */
+    const getActualSidebarSize = useCallback(() => {
+        if (sidebarSize != null) return sidebarSize;
+        if (!sidebarRef.current) return 200;
+        const rect = sidebarRef.current.getBoundingClientRect();
+        return horizontal ? rect.width : rect.height;
+    }, [sidebarSize, horizontal]);
+
     const handleMouseDown = (e: React.MouseEvent) => {
         e.preventDefault();
         resizeBorderRef.current?.classList.add('dragging');
-        const defaultSize = containerRef.current
-            ? (horizontal ? containerRef.current.getBoundingClientRect().width : containerRef.current.getBoundingClientRect().height) / 2
-            : 200;
-        const currentSize = sidebarSize ?? defaultSize;
         const pos = horizontal ? e.clientX : e.clientY;
-        dragRef.current = { startPos: pos, startSize: currentSize };
+        dragRef.current = { startPos: pos, startSize: getActualSidebarSize() };
         const onMove = (ev: MouseEvent) => onDragMove(horizontal ? ev.clientX : ev.clientY);
         const onUp = () => { onDragEnd(); window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
         window.addEventListener("mousemove", onMove);
@@ -153,12 +159,8 @@ export function FileBrowser({ topLevel, requestLs, requestFile, onFileContext }:
     const handleTouchStart = (e: React.TouchEvent) => {
         const touch = e.touches[0];
         resizeBorderRef.current?.classList.add('dragging');
-        const defaultSize = containerRef.current
-            ? (horizontal ? containerRef.current.getBoundingClientRect().width : containerRef.current.getBoundingClientRect().height) / 2
-            : 200;
-        const currentSize = sidebarSize ?? defaultSize;
         const pos = horizontal ? touch.clientX : touch.clientY;
-        dragRef.current = { startPos: pos, startSize: currentSize };
+        dragRef.current = { startPos: pos, startSize: getActualSidebarSize() };
         const onMove = (ev: TouchEvent) => { ev.preventDefault(); onDragMove(horizontal ? ev.touches[0].clientX : ev.touches[0].clientY); };
         const onUp = () => { onDragEnd(); window.removeEventListener("touchmove", onMove); window.removeEventListener("touchend", onUp); };
         window.addEventListener("touchmove", onMove, { passive: false });
@@ -195,7 +197,7 @@ export function FileBrowser({ topLevel, requestLs, requestFile, onFileContext }:
 
     return (
         <div className={`file-browser${horizontal ? ' file-browser--horizontal' : ''}`} ref={containerRef}>
-            <div className="file-browser-sidebar" style={sidebarStyle as any}>
+            <div className="file-browser-sidebar" ref={sidebarRef} style={sidebarStyle as any}>
                 <div className="file-tree">
                     {isEmpty ? (
                         <div className="file-tree-empty">
