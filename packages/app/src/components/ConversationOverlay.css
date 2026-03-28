@@ -73,7 +73,6 @@
     display: inline-flex;
     align-items: center;
     gap: 3px;
-    margin-left: auto;
 }
 
 .ctx-ring-text {
@@ -105,20 +104,19 @@
     width: 100%;
 }
 
+.conversation-header-right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+}
+
 .co-float-toggle {
     font-size: 14px;
     line-height: 1;
     opacity: 0.5;
     transition: opacity 0.15s;
     padding: 2px;
-}
-
-.co-float-toggle:first-of-type {
-    margin-left: auto;
-}
-
-.ctx-ring ~ .co-float-toggle {
-    margin-left: 0;
 }
 
 .co-float-toggle:hover {

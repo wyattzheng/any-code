@@ -835,27 +835,29 @@ export function ConversationOverlay({ sessionId, fileContext, chatHandlerRef, co
                 {isOverlay && floating && <div className="drag-grip" />}
                 <div className="conversation-header-content">
                     <ChatBubbleIcon /> 对话
-                    {isFull && <ContextRing contextUsed={contextUsed} compactionThreshold={compactionThreshold} />}
-                    {isFull && onPopOut && (
-                        <button className="co-float-toggle" onClick={onPopOut} title="弹出为侧边栏">
-                            <PinIcon />
-                        </button>
-                    )}
-                    {isOverlay && floating && (
-                        <button className="co-float-toggle" onClick={toggleFloating} title="固定到侧边栏">
-                            <PinIcon />
-                        </button>
-                    )}
-                    {isOverlay && !floating && (
-                        <>
-                            <button className="co-float-toggle" onClick={onPopIn} title="收回到对话 Tab">
-                                <MinimizeIcon />
+                    <span className="conversation-header-right">
+                        {isFull && <ContextRing contextUsed={contextUsed} compactionThreshold={compactionThreshold} />}
+                        {isFull && onPopOut && (
+                            <button className="co-float-toggle" onClick={onPopOut} title="弹出为侧边栏">
+                                <PinIcon />
                             </button>
-                            <button className="co-float-toggle" onClick={toggleFloating} title="浮动窗口">
-                                <UndockIcon />
+                        )}
+                        {isOverlay && floating && (
+                            <button className="co-float-toggle" onClick={toggleFloating} title="固定到侧边栏">
+                                <PinIcon />
                             </button>
-                        </>
-                    )}
+                        )}
+                        {isOverlay && !floating && (
+                            <>
+                                <button className="co-float-toggle" onClick={onPopIn} title="收回到对话 Tab">
+                                    <MinimizeIcon />
+                                </button>
+                                <button className="co-float-toggle" onClick={toggleFloating} title="浮动窗口">
+                                    <UndockIcon />
+                                </button>
+                            </>
+                        )}
+                    </span>
                 </div>
             </div>
             {renderMessages()}
