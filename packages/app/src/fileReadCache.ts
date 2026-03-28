@@ -18,6 +18,7 @@ const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
 interface CacheEntry {
     content: string;        // raw file content
     highlightHtml?: string; // Shiki-highlighted HTML (may arrive later)
+    diff?: { added: number[]; removed: number[] }; // git diff data
     size: number;           // estimated byte size of this entry
 }
 
@@ -88,6 +89,17 @@ export class FileReadCache {
         this._totalSize += delta;
     }
 
+    // ── Diff ──
+
+    getDiff(filePath: string): { added: number[]; removed: number[] } | null {
+        return this._map.get(filePath)?.diff ?? null;
+    }
+
+    setDiff(filePath: string, diff: { added: number[]; removed: number[] }): void {
+        const entry = this._map.get(filePath);
+        if (entry) entry.diff = diff;
+    }
+
     // ── Management ──
 
     invalidate(filePath: string): void {
@@ -143,16 +155,21 @@ function isHighlightable(name: string): boolean {
         || baseName === ".gitignore";
 }
 
+export interface BatchFileResult {
+    content: string | null;
+    diff?: { added: number[]; removed: number[] };
+}
+
 export class PreloadEngine {
     private _cache: FileReadCache;
     private _highlighter: CodeHighlighter;
-    private _fetchBatch: (paths: string[]) => Promise<Record<string, string | null>>;
+    private _fetchBatch: (paths: string[], withDiff?: boolean) => Promise<Record<string, BatchFileResult>>;
     private _preloading = false;
 
     constructor(
         cache: FileReadCache,
         highlighter: CodeHighlighter,
-        fetchBatch: (paths: string[]) => Promise<Record<string, string | null>>,
+        fetchBatch: (paths: string[], withDiff?: boolean) => Promise<Record<string, BatchFileResult>>,
     ) {
         this._cache = cache;
         this._highlighter = highlighter;
@@ -167,31 +184,54 @@ export class PreloadEngine {
         if (this._preloading) return;
 
         const files = collectVisibleFiles(model);
-        const uncached = files.filter(
-            f => !this._cache.hasContent(f)
-        );
+        const uncached = files.filter(f => !this._cache.hasContent(f));
         if (uncached.length === 0) {
-            // Content is cached — just highlight any that lack it
             this._highlightUncached(files);
             return;
         }
 
         this._preloading = true;
         try {
-            // Batch fetch all uncached files in one request
             const results = await this._fetchBatch(uncached);
-            for (const [filePath, content] of Object.entries(results)) {
-                if (content != null && this._cache.totalBytes < MAX_BYTES) {
-                    this._cache.setContent(filePath, content);
+            for (const [filePath, result] of Object.entries(results)) {
+                if (result.content != null && this._cache.totalBytes < MAX_BYTES) {
+                    this._cache.setContent(filePath, result.content);
                 }
             }
-            // Highlight all files that have content but no highlight
             await this._highlightUncached(files);
-        } catch {
-            // Silently skip errors
-        } finally {
-            this._preloading = false;
+        } catch { /* skip */ }
+        finally { this._preloading = false; }
+    }
+
+    /**
+     * Preload changed files with diff data.
+     * Called when the changes list updates.
+     */
+    async preloadChanges(changedFiles: string[]): Promise<void> {
+        if (this._preloading) return;
+
+        const uncached = changedFiles.filter(f => !this._cache.hasContent(f) || !this._cache.getDiff(f));
+        if (uncached.length === 0) {
+            this._highlightUncached(changedFiles);
+            return;
         }
+
+        this._preloading = true;
+        try {
+            const results = await this._fetchBatch(uncached, true);
+            for (const [filePath, result] of Object.entries(results)) {
+                if (result.content != null && this._cache.totalBytes < MAX_BYTES) {
+                    if (!this._cache.hasContent(filePath)) {
+                        this._cache.setContent(filePath, result.content);
+                    }
+                    if (result.diff) {
+                        this._cache.setDiff(filePath, result.diff);
+                    }
+                }
+            }
+            await this._highlightUncached(changedFiles);
+        } catch { /* skip */ }
+        finally { this._preloading = false; }
     }
 
     /** Highlight cached files that don't have highlight HTML yet */

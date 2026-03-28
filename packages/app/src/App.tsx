@@ -7,7 +7,7 @@ import { ConversationOverlay } from "./components/ConversationOverlay";
 import { WindowSwitcher } from "./components/WindowSwitcher";
 import { createCodeHighlighter, HighlighterContext } from "./components/CodeViewer";
 import { FileTreeModel, FileTreeContext } from "./fileTree";
-import { FileReadCache, FileReadCacheContext, PreloadEngine } from "./fileReadCache";
+import { FileReadCache, FileReadCacheContext, PreloadEngine, type BatchFileResult } from "./fileReadCache";
 import type { WindowInfo } from "./components/WindowSwitcher";
 
 export type TabId = "files" | "changes" | "terminal" | "preview" | string;
@@ -171,17 +171,21 @@ function WindowView({ sessionId, visible, onWindowsChanged }: WindowViewProps) {
     }, [fileCache, fetchFileFromServer]);
 
     // Batch file fetch for preloading — sends one POST with all paths
-    const fetchBatch = useCallback(async (paths: string[]): Promise<Record<string, string | null>> => {
+    const fetchBatch = useCallback(async (paths: string[], withDiff = false): Promise<Record<string, BatchFileResult>> => {
         try {
             const res = await fetch(
                 `${getApiBase()}/api/sessions/${sessionId}/files`,
-                { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ paths }) }
+                { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ paths, withDiff }) }
             );
             if (!res.ok) return {};
             const data = await res.json();
-            const result: Record<string, string | null> = {};
+            const result: Record<string, BatchFileResult> = {};
             for (const [p, v] of Object.entries(data.files ?? {})) {
-                result[p] = (v as any).content ?? null;
+                const entry = v as any;
+                result[p] = {
+                    content: entry.content ?? null,
+                    diff: entry.diff,
+                };
             }
             return result;
         } catch {
@@ -206,6 +210,13 @@ function WindowView({ sessionId, visible, onWindowsChanged }: WindowViewProps) {
         return unsub;
     }, [fileTree]);
 
+    // Preload changed files when changes list updates
+    useEffect(() => {
+        if (changes.length > 0) {
+            preloadRef.current?.preloadChanges(changes.map(c => c.file));
+        }
+    }, [changes]);
+
     // Invalidate cache on fs changes
     useEffect(() => {
         const unsub = fileTree.subscribe(() => {
@@ -215,17 +226,22 @@ function WindowView({ sessionId, visible, onWindowsChanged }: WindowViewProps) {
         return unsub;
     }, [fileTree, fileCache]);
 
+    // Cache-aware requestDiff: check cache first, then fetch from server
     const requestDiff = useCallback(async (filePath: string): Promise<{ added: number[]; removed: number[] }> => {
+        const cached = fileCache.getDiff(filePath);
+        if (cached) return cached;
         try {
             const res = await fetch(
                 `${getApiBase()}/api/sessions/${sessionId}/diff?path=${encodeURIComponent(filePath)}`
             );
             if (!res.ok) return { added: [], removed: [] };
-            return await res.json();
+            const diff = await res.json();
+            fileCache.setDiff(filePath, diff);
+            return diff;
         } catch {
             return { added: [], removed: [] };
         }
-    }, [sessionId]);
+    }, [sessionId, fileCache]);
 
     const [poppedOut, setPoppedOut] = useState(() => {
         try {
