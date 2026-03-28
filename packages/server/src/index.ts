@@ -719,11 +719,15 @@ class DirectoryWatchManager {
       usePolling: true,
       interval: 3000,
     })
+    let gitTimer: ReturnType<typeof setTimeout> | undefined
     gitWatcher.on("all", () => {
-      // Debounce: only schedule state push (git status refresh), not fs.changed
-      if (!this.batchTimer) {
-        this.batchTimer = setTimeout(() => this._flush(), 500)
-      }
+      // Debounce and call scheduleStatePush directly (not _flush,
+      // since _flush early-returns when pendingDirs is empty)
+      if (gitTimer) return
+      gitTimer = setTimeout(() => {
+        gitTimer = undefined
+        scheduleStatePush(this.cfg, this.sessionId, 0)
+      }, 500)
     })
     gitWatcher.on("error", () => {}) // silently ignore
     this.watchers.set("__git__", gitWatcher)
