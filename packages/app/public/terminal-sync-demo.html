@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>Terminal Sync 问题分析</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'SF Mono', Menlo, monospace; background: #0d1117; color: #e6edf3; padding: 20px; }
+h1 { font-size: 18px; margin-bottom: 16px; color: #58a6ff; }
+h2 { font-size: 14px; margin: 16px 0 8px; color: #8b949e; }
+.section { margin-bottom: 24px; padding: 16px; background: #161b22; border: 1px solid #30363d; border-radius: 8px; }
+.grid-wrap { display: flex; gap: 24px; flex-wrap: wrap; }
+.term-box { flex: 1; min-width: 300px; }
+.term-label { font-size: 12px; color: #8b949e; margin-bottom: 4px; }
+.term-grid { border: 1px solid #30363d; background: #0d1117; font-size: 12px; line-height: 1.4; overflow: hidden; }
+.term-row { white-space: pre; height: 1.4em; }
+.term-row .cell { display: inline-block; width: 1ch; height: 1.4em; }
+.term-row .cell.cursor { background: rgba(88,166,255,0.3); }
+.term-row .cell.highlight { background: rgba(255,100,100,0.2); }
+.term-row.blank-row { background: rgba(255,80,80,0.08); }
+.controls { display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap; }
+button { padding: 6px 14px; border: 1px solid #30363d; background: #21262d; color: #e6edf3; border-radius: 6px; cursor: pointer; font-size: 12px; font-family: inherit; }
+button:hover { background: #30363d; }
+button.active { border-color: #58a6ff; background: #1f3a5f; }
+.log { font-size: 11px; max-height: 200px; overflow-y: auto; background: #0d1117; border: 1px solid #30363d; padding: 8px; border-radius: 4px; margin-top: 8px; }
+.log-entry { color: #8b949e; margin: 2px 0; }
+.log-entry.warn { color: #d29922; }
+.log-entry.error { color: #f85149; }
+.log-entry.info { color: #58a6ff; }
+.explanation { font-size: 13px; line-height: 1.6; color: #c9d1d9; margin: 8px 0; font-family: -apple-system, sans-serif; }
+.explanation strong { color: #58a6ff; }
+.explanation code { background: #1f2937; padding: 1px 5px; border-radius: 3px; font-family: 'SF Mono', monospace; font-size: 12px; }
+.step-indicator { display: inline-block; width: 24px; height: 24px; border-radius: 50%; background: #21262d; border: 2px solid #30363d; text-align: center; line-height: 20px; font-size: 11px; margin-right: 6px; }
+.step-indicator.done { background: #238636; border-color: #2ea043; }
+.step-indicator.active { background: #1f3a5f; border-color: #58a6ff; }
+.buffer-vis { font-size: 11px; background: #0d1117; border: 1px solid #30363d; padding: 8px; border-radius: 4px; margin-top: 8px; max-height: 120px; overflow-y: auto; }
+.buffer-chunk { padding: 2px 4px; margin: 1px 0; border-radius: 2px; }
+.buffer-chunk.dim80 { background: rgba(255,100,100,0.1); border-left: 2px solid #f85149; }
+.buffer-chunk.dim120 { background: rgba(88,166,255,0.1); border-left: 2px solid #58a6ff; }
+</style>
+</head>
+<body>
+
+<h1>🔍 Terminal Sync 空行问题深度分析</h1>
+
+<!-- ── 基础概念 ── -->
+<div class="section">
+<h2>📐 终端模型基础</h2>
+<p class="explanation">
+    终端是一个 <strong>cols × rows 的字符网格</strong>。每个字符有固定位置 (col, row)。
+    光标在网格上移动，写入字符、换行、清屏等操作都是<strong>相对于当前网格尺寸</strong>的。
+</p>
+<div class="grid-wrap">
+    <div class="term-box">
+        <div class="term-label">80×6 终端（简化为 40×6 演示）</div>
+        <div class="term-grid" id="term-basic" style="width:40ch;"></div>
+    </div>
+</div>
+<div class="controls">
+    <button onclick="demoBasicWrite()">写入 "$ vite dev"</button>
+    <button onclick="demoBasicNewline()">换行 + 输出</button>
+    <button onclick="demoBasicClear()">清屏 (ESC[2J)</button>
+    <button onclick="demoBasicReset()">重置</button>
+</div>
+</div>
+
+<!-- ── 核心问题演示 ── -->
+<div class="section">
+<h2>⚠️ 核心问题：混合尺寸 rawBuffer 回放</h2>
+<p class="explanation">
+    左边是<strong>实时终端</strong>（正确渲染），右边是刷新后<strong>replay 的终端</strong>。<br>
+    注意观察 replay 时，80×6 阶段的数据在 60×6 终端里如何产生空行。
+</p>
+<div class="grid-wrap">
+    <div class="term-box">
+        <div class="term-label" id="live-label">实时终端 — 40×6</div>
+        <div class="term-grid" id="term-live" style="width:40ch;"></div>
+    </div>
+    <div class="term-box">
+        <div class="term-label">replay 终端 — 始终 60×6</div>
+        <div class="term-grid" id="term-replay" style="width:60ch;"></div>
+    </div>
+</div>
+<div class="controls">
+    <button onclick="step1()"><span class="step-indicator" id="s1">1</span>Shell 启动 (40col)</button>
+    <button onclick="step2()"><span class="step-indicator" id="s2">2</span>光标定位到底部</button>
+    <button onclick="step3()"><span class="step-indicator" id="s3">3</span>Resize → 60col</button>
+    <button onclick="step4()"><span class="step-indicator" id="s4">4</span>Vite 输出</button>
+    <button onclick="step5()"><span class="step-indicator" id="s5">5</span>模拟刷新 Replay ⚡</button>
+    <button onclick="resetDemo()">重置</button>
+</div>
+
+<h2>📦 rawBuffer 内容</h2>
+<div class="buffer-vis" id="buffer-vis"></div>
+
+<h2>📋 事件日志</h2>
+<div class="log" id="log"></div>
+</div>
+
+<!-- ── 解法对比 ── -->
+<div class="section">
+<h2>✅ 解法：只 replay 最后一次 resize 后的数据</h2>
+<p class="explanation">
+    在 rawBuffer 中<strong>记录 resize 位置</strong>。sync 时只发该位置之后的数据。<br>
+    数据永远和报告的 cols/rows 一致，不会出现尺寸错配。
+</p>
+<div class="grid-wrap">
+    <div class="term-box">
+        <div class="term-label">方案 A：replay 全部 buffer（当前）</div>
+        <div class="term-grid" id="term-fix-a" style="width:60ch;"></div>
+    </div>
+    <div class="term-box">
+        <div class="term-label">方案 B：replay 最后 resize 后的 buffer</div>
+        <div class="term-grid" id="term-fix-b" style="width:60ch;"></div>
+    </div>
+</div>
+<div class="controls">
+    <button onclick="runFixDemo()">▶ 运行对比</button>
+    <button onclick="resetFixDemo()">重置</button>
+</div>
+</div>
+
+<script>
+// ── Mini Terminal Emulator ──
+class MiniTerm {
+    constructor(el, cols, rows) {
+        this.el = el;
+        this.cols = cols;
+        this.rows = rows;
+        this.grid = [];
+        this.cx = 0;
+        this.cy = 0;
+        this.clear();
+    }
+
+    clear() {
+        this.grid = [];
+        for (let r = 0; r < this.rows; r++) {
+            this.grid.push(new Array(this.cols).fill(' '));
+        }
+        this.cx = 0;
+        this.cy = 0;
+        this.render();
+    }
+
+    resize(cols, rows) {
+        const oldGrid = this.grid;
+        this.cols = cols;
+        this.rows = rows;
+        this.grid = [];
+        for (let r = 0; r < rows; r++) {
+            if (r < oldGrid.length) {
+                const row = oldGrid[r].slice(0, cols);
+                while (row.length < cols) row.push(' ');
+                this.grid.push(row);
+            } else {
+                this.grid.push(new Array(cols).fill(' '));
+            }
+        }
+        if (this.cy >= rows) this.cy = rows - 1;
+        if (this.cx >= cols) this.cx = cols - 1;
+        this.el.style.width = cols + 'ch';
+        this.render();
+    }
+
+    // Process a command object
+    exec(cmd) {
+        switch (cmd.type) {
+            case 'write':
+                for (const ch of cmd.text) {
+                    if (ch === '\n') {
+                        this.cy++;
+                        this.cx = 0;
+                        if (this.cy >= this.rows) {
+                            this.scroll();
+                            this.cy = this.rows - 1;
+                        }
+                    } else if (ch === '\r') {
+                        this.cx = 0;
+                    } else {
+                        if (this.cx < this.cols) {
+                            this.grid[this.cy][this.cx] = ch;
+                            this.cx++;
+                        }
+                    }
+                }
+                break;
+            case 'move':
+                this.cy = Math.min(cmd.row, this.rows - 1);
+                this.cx = Math.min(cmd.col, this.cols - 1);
+                break;
+            case 'clear':
+                for (let r = 0; r < this.rows; r++)
+                    this.grid[r].fill(' ');
+                this.cx = 0;
+                this.cy = 0;
+                break;
+            case 'eraseLine':
+                this.grid[this.cy].fill(' ');
+                this.cx = 0;
+                break;
+        }
+        this.render();
+    }
+
+    scroll() {
+        this.grid.shift();
+        this.grid.push(new Array(this.cols).fill(' '));
+    }
+
+    render() {
+        let html = '';
+        for (let r = 0; r < this.rows; r++) {
+            const rowText = this.grid[r].join('');
+            const isBlank = rowText.trim() === '';
+            const cls = isBlank && r > 0 && r < this.rows - 1 ? ' blank-row' : '';
+            let cells = '';
+            for (let c = 0; c < this.cols; c++) {
+                const isCursor = (r === this.cy && c === this.cx);
+                cells += `<span class="cell${isCursor ? ' cursor' : ''}">${this.grid[r][c]}</span>`;
+            }
+            html += `<div class="term-row${cls}">${cells}</div>`;
+        }
+        this.el.innerHTML = html;
+    }
+}
+
+// ── Basic Demo ──
+const termBasic = new MiniTerm(document.getElementById('term-basic'), 40, 6);
+termBasic.exec({ type: 'write', text: '$ _' });
+
+function demoBasicWrite() {
+    termBasic.clear();
+    termBasic.exec({ type: 'write', text: '$ vite dev' });
+}
+function demoBasicNewline() {
+    termBasic.exec({ type: 'write', text: '\n\n  VITE v5.4  ready\n\n  > Local: http://localhost:5173/' });
+}
+function demoBasicClear() {
+    termBasic.exec({ type: 'clear' });
+    termBasic.exec({ type: 'write', text: '$ _' });
+}
+function demoBasicReset() {
+    termBasic.clear();
+    termBasic.exec({ type: 'write', text: '$ _' });
+}
+
+// ── Core Problem Demo ──
+const termLive = new MiniTerm(document.getElementById('term-live'), 40, 6);
+const termReplay = new MiniTerm(document.getElementById('term-replay'), 60, 6);
+const rawBuffer = [];
+let currentDims = { cols: 40, rows: 6 };
+let resizeMarker = 0; // index in rawBuffer where last resize happened
+
+function addLog(msg, cls = '') {
+    const log = document.getElementById('log');
+    log.innerHTML += `<div class="log-entry ${cls}">${msg}</div>`;
+    log.scrollTop = log.scrollHeight;
+}
+
+function updateBufferVis() {
+    const el = document.getElementById('buffer-vis');
+    if (rawBuffer.length === 0) {
+        el.innerHTML = '<span style="color:#484f58">(empty)</span>';
+        return;
+    }
+    el.innerHTML = rawBuffer.map((item, i) => {
+        const cls = item.dims.cols === 40 ? 'dim80' : 'dim120';
+        const dimLabel = `${item.dims.cols}×${item.dims.rows}`;
+        const marker = i === resizeMarker ? ' ← resize marker' : '';
+        const display = JSON.stringify(item.cmd).substring(0, 80);
+        return `<div class="buffer-chunk ${cls}">[${dimLabel}] ${display}${marker}</div>`;
+    }).join('');
+}
+
+function markStep(n) {
+    for (let i = 1; i <= 5; i++) {
+        const el = document.getElementById('s' + i);
+        el.className = i < n ? 'step-indicator done' : (i === n ? 'step-indicator active' : 'step-indicator');
+    }
+}
+
+function liveExec(cmd) {
+    rawBuffer.push({ cmd, dims: { ...currentDims } });
+    termLive.exec(cmd);
+    updateBufferVis();
+}
+
+function step1() {
+    resetDemo();
+    markStep(1);
+    addLog('Step 1: Shell 启动，40×6 终端', 'info');
+    liveExec({ type: 'write', text: 'Last login: Mon Mar 28' });
+    liveExec({ type: 'write', text: '\nuser@mac ~ % ' });
+    addLog('写入 shell 欢迎信息 + prompt（在 40col 下）');
+}
+
+function step2() {
+    markStep(2);
+    addLog('Step 2: Shell 把光标移到第 5 行（底部状态栏位置）', 'warn');
+    liveExec({ type: 'move', row: 4, col: 0 });
+    liveExec({ type: 'write', text: '[40x6] bottom status' });
+    addLog('光标跳到 row=4, col=0 → 这个 move 是 40×6 特定的！', 'warn');
+}
+
+function step3() {
+    markStep(3);
+    addLog('Step 3: Resize 40×6 → 60×6', 'info');
+    currentDims = { cols: 60, rows: 6 };
+    resizeMarker = rawBuffer.length;
+    termLive.resize(60, 6);
+    document.getElementById('live-label').textContent = '实时终端 — 60×6';
+    addLog('PTY resize → 实时终端 reflow 内容（正确）');
+    addLog('rawBuffer 标记 resize 位置: index=' + resizeMarker, 'info');
+    updateBufferVis();
+}
+
+function step4() {
+    markStep(4);
+    addLog('Step 4: AI agent 运行 vite dev（60col 下输出）', 'info');
+    liveExec({ type: 'write', text: '\n$ vite dev' });
+    liveExec({ type: 'write', text: '\n\n  VITE v5.4  ready in 304ms' });
+    liveExec({ type: 'write', text: '\n\n  > Local: http://localhost:5173/' });
+    addLog('vite 输出在 60col 下正确显示');
+}
+
+function step5() {
+    markStep(5);
+    addLog('Step 5: ⚡ 模拟页面刷新 — replay rawBuffer', 'error');
+    termReplay.clear();
+    termReplay.resize(60, 6);
+    
+    addLog('  replay 终端 resize 到 60×6（服务端报告的尺寸）');
+    addLog('  开始写入 rawBuffer（包含 40col + 60col 混合数据）...', 'warn');
+    
+    // Replay ALL buffer into 60x6 terminal
+    for (const item of rawBuffer) {
+        termReplay.exec(item.cmd);
+    }
+    
+    addLog('  ⚠️ 注意：40col 阶段的 move(row=4) 在 60col 终端里跳到 row4', 'error');
+    addLog('  这导致中间出现空白行！', 'error');
+}
+
+function resetDemo() {
+    rawBuffer.length = 0;
+    resizeMarker = 0;
+    currentDims = { cols: 40, rows: 6 };
+    termLive.resize(40, 6);
+    termLive.clear();
+    termReplay.resize(60, 6);
+    termReplay.clear();
+    document.getElementById('live-label').textContent = '实时终端 — 40×6';
+    document.getElementById('log').innerHTML = '';
+    updateBufferVis();
+    for (let i = 1; i <= 5; i++) document.getElementById('s' + i).className = 'step-indicator';
+}
+
+// ── Fix Demo ──
+function runFixDemo() {
+    // Reset both
+    const termA = new MiniTerm(document.getElementById('term-fix-a'), 60, 6);
+    const termB = new MiniTerm(document.getElementById('term-fix-b'), 60, 6);
+    
+    if (rawBuffer.length === 0) {
+        step1(); step2(); step3(); step4();
+    }
+    
+    // Plan A: replay ALL buffer
+    for (const item of rawBuffer) {
+        termA.exec(item.cmd);
+    }
+    
+    // Plan B: replay only after resize marker
+    const postResize = rawBuffer.slice(resizeMarker);
+    for (const item of postResize) {
+        termB.exec(item.cmd);
+    }
+}
+
+function resetFixDemo() {
+    new MiniTerm(document.getElementById('term-fix-a'), 60, 6);
+    new MiniTerm(document.getElementById('term-fix-b'), 60, 6);
+}
+
+resetDemo();
+</script>
+</body>
+</html>

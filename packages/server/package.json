@@ -14,16 +14,18 @@
     },
     "dependencies": {
         "@lydell/node-pty": "1.2.0-beta.3",
+        "@xterm/addon-serialize": "^0.14.0",
+        "@xterm/headless": "^6.0.0",
         "chokidar": "4.0.3",
         "ws": "^8.19.0",
         "zod": "4.1.8"
     },
     "devDependencies": {
         "@any-code/agent": "workspace:*",
+        "@any-code/app": "workspace:*",
         "@any-code/claude-code-agent": "workspace:*",
         "@any-code/codex-agent": "workspace:*",
         "@any-code/utils": "workspace:*",
-        "@any-code/app": "workspace:*",
         "@types/node": "^25.5.0",
         "@types/ws": "^8.18.1",
         "sql.js": "^1.12.0",

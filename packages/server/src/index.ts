@@ -16,6 +16,8 @@
  */
 
 import http from "http"
+import { Terminal as HeadlessTerminal } from "@xterm/headless"
+import { SerializeAddon } from "@xterm/addon-serialize"
 import https from "https"
 import { fileURLToPath } from "url"
 import path from "path"
@@ -749,24 +751,25 @@ const MAX_BUFFER_LINES = 5000
 /**
  * TerminalStateModel — manages terminal state and client sync.
  *
- * Follows the same pattern as SessionStateModel:
- *  - Holds the state (rawBuffer, alive)
- *  - notify(): broadcast incremental updates to all clients
- *  - syncClient(): full-state replay for newly connected clients
- *  - handleClient(): register WS + lifecycle management
+ * Uses a headless xterm.js instance as the authoritative terminal state.
+ * Clients get a serialized snapshot on connect, then receive live raw
+ * output for optimistic updates.
  */
-const MAX_RAW_BUFFER = 200
-
 class TerminalStateModel {
-  private rawBuffer: string[] = []
+  private headless: HeadlessTerminal
+  private serializer: SerializeAddon
   private alive = false
-  private cols = 80
-  private rows = 24
   private wsClients = new Set<WS>()
 
-  // Callbacks set by NodeTerminalProvider for user input
+  // Callbacks set by NodeTerminalProvider
   onInput: ((data: string) => void) | null = null
   onResize: ((cols: number, rows: number) => void) | null = null
+
+  constructor() {
+    this.headless = new HeadlessTerminal({ cols: 80, rows: 24, scrollback: 5000 })
+    this.serializer = new SerializeAddon()
+    this.headless.loadAddon(this.serializer)
+  }
 
   /** Update alive state and notify clients */
   setAlive(alive: boolean): void {
@@ -774,12 +777,9 @@ class TerminalStateModel {
     this.notify({ type: alive ? "terminal.ready" : "terminal.none" })
   }
 
-  /** Append raw output data — cache and push to clients */
+  /** Feed output to headless terminal and broadcast to clients */
   pushOutput(data: string): void {
-    this.rawBuffer.push(data)
-    if (this.rawBuffer.length > MAX_RAW_BUFFER) {
-      this.rawBuffer.splice(0, this.rawBuffer.length - MAX_RAW_BUFFER)
-    }
+    this.headless.write(data)
     this.notify({ type: "terminal.output", data })
   }
 
@@ -788,9 +788,19 @@ class TerminalStateModel {
     this.notify({ type: "terminal.exited", exitCode })
   }
 
-  /** Clear all buffered state */
+  /** Resize the headless terminal to match PTY */
+  resize(cols: number, rows: number): void {
+    if (cols > 0 && rows > 0) {
+      this.headless.resize(cols, rows)
+    }
+  }
+
+  /** Reset: dispose old headless terminal and create a fresh one */
   reset(): void {
-    this.rawBuffer = []
+    this.headless.dispose()
+    this.headless = new HeadlessTerminal({ cols: 80, rows: 24, scrollback: 5000 })
+    this.serializer = new SerializeAddon()
+    this.headless.loadAddon(this.serializer)
   }
 
   /** Broadcast a message to all connected clients */
@@ -802,21 +812,22 @@ class TerminalStateModel {
   }
 
   /**
-   * Register a new WebSocket client and manage its lifecycle.
+   * Register a new WebSocket client.
    *  1. Send current state (ready / none)
-   *  2. Send full buffer as a single terminal.sync message
-   *  3. Add to live broadcast set AFTER sync (no race condition)
+   *  2. Send serialized snapshot from headless terminal
+   *  3. Add to live broadcast set AFTER sync
    */
   handleClient(ws: WS): void {
     // 1. Current state
     ws.send(JSON.stringify({ type: this.alive ? "terminal.ready" : "terminal.none" }))
 
-    // 2. Full buffer sync with PTY dimensions (before joining live set)
-    if (this.rawBuffer.length > 0) {
-      ws.send(JSON.stringify({ type: "terminal.sync", data: this.rawBuffer.join(""), cols: this.cols, rows: this.rows }))
+    // 2. Serialize headless terminal → snapshot (before joining live set)
+    const snapshot = this.serializer.serialize()
+    if (snapshot) {
+      ws.send(JSON.stringify({ type: "terminal.sync", data: snapshot }))
     }
 
-    // 3. NOW add to live set — all future pushOutput() will reach this client
+    // 3. Add to live set
     this.wsClients.add(ws)
 
     // 4. Messages
@@ -826,8 +837,7 @@ class TerminalStateModel {
         if (msg.type === "terminal.input") {
           this.onInput?.(msg.data)
         } else if (msg.type === "terminal.resize") {
-          this.cols = msg.cols
-          this.rows = msg.rows
+          this.resize(msg.cols, msg.rows)
           this.onResize?.(msg.cols, msg.rows)
         }
       } catch { /* ignore */ }
