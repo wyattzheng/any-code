@@ -1673,7 +1673,18 @@ function createMainServer(cfg: ServerConfig): http.Server {
     if (req.method === "GET" && req.url?.startsWith("/api/messages")) {
       const url = new URL(req.url, `http://localhost:${cfg.port}`)
       const sessionId = url.searchParams.get("sessionId")
-      const session = sessionId ? getSession(sessionId) : undefined
+      let session = sessionId ? getSession(sessionId) : undefined
+
+      // Session may not be in memory after server restart — try resuming from DB
+      if (!session && sessionId) {
+        const row = db.findOne("user_session", { op: "eq", field: "session_id", value: sessionId })
+        if (row) {
+          try {
+            session = await resumeSession(cfg, row as Record<string, unknown>)
+          } catch { /* ignore resume errors */ }
+        }
+      }
+
       if (!session) {
         res.writeHead(404, { "Content-Type": "application/json" })
         res.end(JSON.stringify({ error: "Session not found" }))
