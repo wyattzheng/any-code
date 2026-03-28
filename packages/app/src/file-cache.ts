@@ -164,8 +164,6 @@ export class PreloadEngine {
     private _cache: FileReadCache;
     private _highlighter: CodeHighlighter;
     private _fetchBatch: (paths: string[], withDiff?: boolean) => Promise<Record<string, BatchFileResult>>;
-    private _preloadingTree = false;
-    private _preloadingChanges = false;
 
     constructor(
         cache: FileReadCache,
@@ -179,19 +177,14 @@ export class PreloadEngine {
 
     /**
      * Scan expanded directories in the file tree and preload all visible files.
-     * Uses a single batch request for all uncached files.
      */
     async preloadFromTree(model: FileTreeModel): Promise<void> {
-        if (this._preloadingTree) return;
-
         const files = collectVisibleFiles(model);
         const uncached = files.filter(f => !this._cache.hasContent(f));
         if (uncached.length === 0) {
             this._highlightUncached(files);
             return;
         }
-
-        this._preloadingTree = true;
         try {
             const results = await this._fetchBatch(uncached);
             for (const [filePath, result] of Object.entries(results)) {
@@ -201,23 +194,17 @@ export class PreloadEngine {
             }
             await this._highlightUncached(files);
         } catch { /* skip */ }
-        finally { this._preloadingTree = false; }
     }
 
     /**
      * Preload changed files with diff data.
-     * Called when the changes list updates.
      */
     async preloadChanges(changedFiles: string[]): Promise<void> {
-        if (this._preloadingChanges) return;
-
         const uncached = changedFiles.filter(f => !this._cache.hasContent(f) || !this._cache.getDiff(f));
         if (uncached.length === 0) {
             this._highlightUncached(changedFiles);
             return;
         }
-
-        this._preloadingChanges = true;
         try {
             const results = await this._fetchBatch(uncached, true);
             for (const [filePath, result] of Object.entries(results)) {
@@ -232,7 +219,6 @@ export class PreloadEngine {
             }
             await this._highlightUncached(changedFiles);
         } catch { /* skip */ }
-        finally { this._preloadingChanges = false; }
     }
 
     /** Highlight cached files that don't have highlight HTML yet */
@@ -243,7 +229,6 @@ export class PreloadEngine {
             if (this._cache.hasHighlight(filePath)) continue;
             const content = this._cache.getContent(filePath);
             if (content == null) continue;
-            // Yield to main thread before CPU-heavy highlight
             await new Promise(r => setTimeout(r, 0));
             const html = this._highlighter.highlight(content, filePath);
             this._cache.setHighlight(filePath, html);
