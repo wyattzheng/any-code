@@ -16,8 +16,10 @@
  */
 
 import http from "http"
-import { Terminal as HeadlessTerminal } from "@xterm/headless"
-import { SerializeAddon } from "@xterm/addon-serialize"
+import xtermHeadless from "@xterm/headless"
+const { Terminal: HeadlessTerminal } = xtermHeadless
+import xtermSerialize from "@xterm/addon-serialize"
+const { SerializeAddon } = xtermSerialize
 import https from "https"
 import { fileURLToPath } from "url"
 import path from "path"
@@ -756,8 +758,8 @@ const MAX_BUFFER_LINES = 5000
  * output for optimistic updates.
  */
 class TerminalStateModel {
-  private headless: HeadlessTerminal
-  private serializer: SerializeAddon
+  private headless: InstanceType<typeof HeadlessTerminal>
+  private serializer: InstanceType<typeof SerializeAddon>
   private alive = false
   private wsClients = new Set<WS>()
 
