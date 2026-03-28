@@ -6,6 +6,7 @@
 import { spawn } from "child_process"
 import fs from "fs/promises"
 import path from "path"
+import { minimatch } from "minimatch"
 import type { SearchProvider, GrepMatch } from "./search"
 
 export class NodeSearchProvider implements SearchProvider {
@@ -131,7 +132,7 @@ export class NodeSearchProvider implements SearchProvider {
                 } else if (entry.isFile()) {
                     // Check include patterns (simple glob: *.ext matching)
                     if (includePatterns.length > 0) {
-                        const matches = includePatterns.some((p: string) => simpleGlobMatch(name, p))
+                        const matches = includePatterns.some((p: string) => minimatch(relativePath, p, { dot: true, matchBase: true }))
                         if (!matches) continue
                     }
                     results.push(relativePath)
@@ -202,17 +203,3 @@ export class NodeSearchProvider implements SearchProvider {
     }
 }
 
-/** Simple glob matching: supports *.ext and *.{ext1,ext2} patterns */
-function simpleGlobMatch(filename: string, pattern: string): boolean {
-    if (pattern === "*") return true
-    if (pattern.startsWith("*.")) {
-        const ext = pattern.slice(1) // ".ts" or ".{ts,tsx}"
-        if (ext.startsWith(".{") && ext.endsWith("}")) {
-            const exts = ext.slice(2, -1).split(",")
-            return exts.some((e) => filename.endsWith(`.${e}`))
-        }
-        return filename.endsWith(ext)
-    }
-    // Fallback: exact match
-    return filename === pattern
-}
