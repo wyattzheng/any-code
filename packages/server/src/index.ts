@@ -638,8 +638,25 @@ function watchDirectory(cfg: ServerConfig, sessionId: string, dir: string) {
   // If dir is empty (cleared), just stop watching
   if (!dir) return
 
-  const debouncedPush = () => {
-    scheduleStatePush(cfg, sessionId, 500)
+  // Collect changed paths and broadcast in batches
+  let pendingPaths = new Set<string>()
+  let batchTimer: ReturnType<typeof setTimeout> | undefined
+
+  const flushChanges = () => {
+    batchTimer = undefined
+    if (pendingPaths.size === 0) return
+    const paths = [...pendingPaths]
+    pendingPaths = new Set()
+
+    // Broadcast changed paths to frontend
+    const clients = getSessionClients(sessionId)
+    const msg = JSON.stringify({ type: "fs.changed", paths })
+    for (const c of clients) {
+      if (c.readyState === WS.OPEN) c.send(msg)
+    }
+
+    // Also trigger state refresh (top-level + git changes)
+    scheduleStatePush(cfg, sessionId, 0)
   }
 
   const watcher = chokidarWatch(dir, {
@@ -650,7 +667,16 @@ function watchDirectory(cfg: ServerConfig, sessionId: string, dir: string) {
     interval: 3000,
   })
 
-  watcher.on("all", () => debouncedPush())
+  watcher.on("all", (_event: string, filePath: string) => {
+    // Convert to relative path from watched dir
+    const rel = path.relative(dir, filePath)
+    if (rel && !rel.startsWith("..")) {
+      pendingPaths.add(rel)
+    }
+    if (!batchTimer) {
+      batchTimer = setTimeout(flushChanges, 500)
+    }
+  })
   watcher.on("error", (err) => console.error(`❌  chokidar error for ${dir}:`, err))
   watchers.set(sessionId, watcher)
   console.log(`👁  Watching directory: ${dir}`)

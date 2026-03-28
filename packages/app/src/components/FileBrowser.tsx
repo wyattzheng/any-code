@@ -1,56 +1,37 @@
-import { useState, useRef, useCallback, useEffect, useLayoutEffect } from "react";
+import { useState, useRef, useCallback, useLayoutEffect } from "react";
 import { flushSync } from "react-dom";
 import { useResizePanel } from "../hooks/useResizePanel";
-import type { DirEntry, FileContext } from "../App";
-import { ChevronIcon, FileDocIcon } from "./Icons";
+import type { FileContext } from "../App";
+import { ChevronIcon } from "./Icons";
 import { FileIcon } from "./FileIcon";
 import { CodeViewer } from "./CodeViewer";
+import { useFileTree, useFileTreeSnapshot } from "../fsEvents";
 import "./FileBrowser.css";
 
 interface FileBrowserProps {
-    topLevel: DirEntry[];
-    requestLs: (path: string) => Promise<DirEntry[]>;
     requestFile: (path: string) => Promise<string | null>;
     onFileContext?: (ctx: FileContext | null) => void;
 }
 
 function LazyTreeItem({
-    entry,
-    parentPath,
-    requestLs,
+    name,
+    type,
+    fullPath,
     onFileClick,
     selectedFile,
     depth = 0,
 }: {
-    entry: DirEntry;
-    parentPath: string;
-    requestLs: (path: string) => Promise<DirEntry[]>;
+    name: string;
+    type: "file" | "dir";
+    fullPath: string;
     onFileClick: (path: string) => void;
     selectedFile: string | null;
     depth?: number;
 }) {
-    const [expanded, setExpanded] = useState(false);
-    const [children, setChildren] = useState<DirEntry[] | null>(null);
-    const [loading, setLoading] = useState(false);
+    const model = useFileTree();
+    useFileTreeSnapshot(model);
 
-    const fullPath = parentPath ? `${parentPath}/${entry.name}` : entry.name;
-
-    const toggle = async () => {
-        if (entry.type !== "dir") return;
-        if (expanded) {
-            setExpanded(false);
-            return;
-        }
-        if (children === null) {
-            setLoading(true);
-            const entries = await requestLs(fullPath);
-            setChildren(entries);
-            setLoading(false);
-        }
-        setExpanded(true);
-    };
-
-    if (entry.type === "file") {
+    if (type === "file") {
         const isSelected = selectedFile === fullPath;
         return (
             <div
@@ -58,30 +39,34 @@ function LazyTreeItem({
                 style={{ paddingLeft: `${12 + depth * 16 + 13}px` }}
                 onClick={() => onFileClick(fullPath)}
             >
-                <span className="file-icon"><FileIcon filename={entry.name} size={14} /></span>
-                <span className="file-name">{entry.name}</span>
+                <span className="file-icon"><FileIcon filename={name} size={14} /></span>
+                <span className="file-name">{name}</span>
             </div>
         );
     }
+
+    const expanded = model.isExpanded(fullPath);
+    const loading = model.isLoading(fullPath);
+    const children = model.getChildren(fullPath);
 
     return (
         <>
             <div
                 className="file-tree-item folder"
                 style={{ paddingLeft: `${12 + depth * 16}px` }}
-                onClick={toggle}
+                onClick={() => model.toggle(fullPath)}
             >
                 <span className={`chevron ${expanded ? "expanded" : ""}`}><ChevronIcon /></span>
-                <span className="file-icon"><FileIcon filename={entry.name} isDir size={14} /></span>
-                <span className="file-name">{entry.name}/</span>
+                <span className="file-icon"><FileIcon filename={name} isDir size={14} /></span>
+                <span className="file-name">{name}/</span>
                 {loading && <span className="tree-loading">…</span>}
             </div>
             {expanded && children?.map((child) => (
                 <LazyTreeItem
                     key={child.name}
-                    entry={child}
-                    parentPath={fullPath}
-                    requestLs={requestLs}
+                    name={child.name}
+                    type={child.type}
+                    fullPath={fullPath ? `${fullPath}/${child.name}` : child.name}
                     onFileClick={onFileClick}
                     selectedFile={selectedFile}
                     depth={depth + 1}
@@ -93,7 +78,12 @@ function LazyTreeItem({
 
 const HORIZONTAL_BREAKPOINT = 360;
 
-export function FileBrowser({ topLevel, requestLs, requestFile, onFileContext }: FileBrowserProps) {
+export function FileBrowser({ requestFile, onFileContext }: FileBrowserProps) {
+    const model = useFileTree();
+    useFileTreeSnapshot(model);
+
+    const topLevel = model.topLevel;
+
     const [sidebarSize, setSidebarSize] = useState<number | null>(() => {
         const saved = localStorage.getItem('fb-sidebar-height');
         return saved ? Number(saved) : null;
@@ -104,7 +94,6 @@ export function FileBrowser({ topLevel, requestLs, requestFile, onFileContext }:
     useLayoutEffect(() => {
         const el = containerRef.current;
         if (!el) return;
-        // Synchronous initial measurement (skip if not laid out yet)
         const initW = el.getBoundingClientRect().width;
         if (initW > 0) setHorizontal(initW >= HORIZONTAL_BREAKPOINT);
         const ro = new ResizeObserver((entries) => {
@@ -136,7 +125,7 @@ export function FileBrowser({ topLevel, requestLs, requestFile, onFileContext }:
         setSelectedFile(filePath);
         setFileContent(null);
         setFileLoading(true);
-        onFileContext?.(null); // clear selection on file switch
+        onFileContext?.(null);
         const content = await requestFile(filePath);
         setFileContent(content);
         setFileLoading(false);
@@ -172,9 +161,9 @@ export function FileBrowser({ topLevel, requestLs, requestFile, onFileContext }:
                         topLevel.map((entry) => (
                             <LazyTreeItem
                                 key={entry.name}
-                                entry={entry}
-                                parentPath=""
-                                requestLs={requestLs}
+                                name={entry.name}
+                                type={entry.type}
+                                fullPath={entry.name}
                                 onFileClick={handleFileClick}
                                 selectedFile={selectedFile}
                             />

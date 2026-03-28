@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createChannel, type Channel } from "./channel";
 import { getApiBase, getServerUrl, setServerUrl, isConfigured } from "./serverUrl";
 import { TabBar } from "./components/TabBar";
@@ -6,6 +6,7 @@ import { MainView } from "./components/MainView";
 import { ConversationOverlay } from "./components/ConversationOverlay";
 import { WindowSwitcher } from "./components/WindowSwitcher";
 import { createCodeHighlighter, HighlighterContext } from "./components/CodeViewer";
+import { FileTreeModel, FileTreeContext } from "./fsEvents";
 import type { WindowInfo } from "./components/WindowSwitcher";
 
 export type TabId = "files" | "changes" | "terminal" | "preview" | string;
@@ -85,6 +86,7 @@ function WindowView({ sessionId, visible, onWindowsChanged }: WindowViewProps) {
                 if (data.type === "state") {
                     if (data.directory) setDirectory(data.directory);
                     setTopLevel(data.topLevel || []);
+                    fileTreeRef.current.setTopLevel(data.topLevel || []);
                     setChanges(data.changes || []);
                     if (data.previewPort !== undefined) {
                         setPreviewPort(data.previewPort);
@@ -93,6 +95,8 @@ function WindowView({ sessionId, visible, onWindowsChanged }: WindowViewProps) {
                     if (data.chatBusy !== undefined) setChatBusy(data.chatBusy);
                     if (data.contextUsed !== undefined) setContextUsed(data.contextUsed);
                     if (data.compactionThreshold !== undefined) setCompactionThreshold(data.compactionThreshold);
+                } else if (data.type === "fs.changed") {
+                    fileTreeRef.current?.onFsChanged();
                 } else if (data.type === "windows.updated") {
                     onWindowsChanged();
                 } else if (data.type?.startsWith("chat.")) {
@@ -133,6 +137,11 @@ function WindowView({ sessionId, visible, onWindowsChanged }: WindowViewProps) {
             return [];
         }
     }, [sessionId]);
+
+    // FileTreeModel: owns all file tree state
+    const fileTree = useMemo(() => new FileTreeModel(requestLs), [requestLs]);
+    const fileTreeRef = useRef(fileTree);
+    fileTreeRef.current = fileTree;
 
     const requestFile = useCallback(async (filePath: string): Promise<string | null> => {
         try {
@@ -199,18 +208,18 @@ function WindowView({ sessionId, visible, onWindowsChanged }: WindowViewProps) {
                 <div className="app-main">
                     {directory ? (
                         <div style={{ display: activeTab === "chat" ? "none" : "flex", flex: 1 }}>
+                            <FileTreeContext.Provider value={fileTree}>
                             <MainView
                                 activeTab={activeTab}
-                                topLevel={topLevel}
                                 changes={changes}
                                 directory={directory}
                                 sessionId={sessionId}
                                 previewPort={previewPort}
-                                requestLs={requestLs}
                                 requestFile={requestFile}
                                 requestDiff={requestDiff}
                                 onFileContext={setFileContext}
                             />
+                            </FileTreeContext.Provider>
                         </div>
                     ) : (
                         <div className="main-view" style={{ display: activeTab === "chat" ? "none" : "flex", alignItems: "center", justifyContent: "center" }}>

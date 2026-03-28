@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import type { TabId, DirEntry, GitChange, FileContext } from "../App";
+import type { TabId, GitChange, FileContext } from "../App";
 import { FileBrowser } from "./FileBrowser";
 import { ChangesView } from "./ChangesView";
 import { PreviewTab } from "./PreviewTab";
@@ -9,18 +9,16 @@ import "./MainView.css";
 
 interface MainViewProps {
     activeTab: TabId;
-    topLevel: DirEntry[];
     changes: GitChange[];
     directory: string;
     sessionId: string;
     previewPort: number | null;
-    requestLs: (path: string) => Promise<DirEntry[]>;
     requestFile: (path: string) => Promise<string | null>;
     requestDiff: (path: string) => Promise<{ added: number[]; removed: number[] }>;
     onFileContext?: (ctx: FileContext | null) => void;
 }
 
-export function MainView({ activeTab, topLevel, changes, directory, sessionId, previewPort, requestLs, requestFile, requestDiff, onFileContext }: MainViewProps) {
+export function MainView({ activeTab, changes, directory, sessionId, previewPort, requestFile, requestDiff, onFileContext }: MainViewProps) {
     // Lazy-mount terminal: only create once the tab is first activated
     const [terminalMounted, setTerminalMounted] = useState(false);
     useEffect(() => {
@@ -31,7 +29,7 @@ export function MainView({ activeTab, topLevel, changes, directory, sessionId, p
         <div className="main-view">
             <div className="main-tab-area">
                 <div className="main-tab-panel" style={{ display: activeTab === "files" ? "flex" : "none" }}>
-                    <FileBrowser topLevel={topLevel} requestLs={requestLs} requestFile={requestFile} onFileContext={onFileContext} />
+                    <FileBrowser requestFile={requestFile} onFileContext={onFileContext} />
                 </div>
                 <div className="main-tab-panel" style={{ display: activeTab === "changes" ? "flex" : "none" }}>
                     <ChangesView changes={changes} requestFile={requestFile} requestDiff={requestDiff} onFileContext={onFileContext} />
