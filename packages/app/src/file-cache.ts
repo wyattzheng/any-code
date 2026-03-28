@@ -221,20 +221,32 @@ export class PreloadEngine {
     }
 
     /**
-     * Scan expanded directories in the file tree and preload all visible files.
+     * Scan expanded directories in the file tree and preload all visible files
+     * AND directory entries for visible subdirectories.
      */
     async preloadFromTree(model: FileTreeModel): Promise<void> {
-        const files = collectVisibleFiles(model);
-        const uncached = files.filter(f => !this._cache.hasContent(f));
-        if (uncached.length === 0) {
+        const { files, dirs } = collectVisiblePaths(model);
+
+        // Preload directory entries that aren't cached yet
+        const uncachedDirs = dirs.filter(d => !this._cache.getEntries(d));
+        // Preload file content that isn't cached yet
+        const uncachedFiles = files.filter(f => !this._cache.hasContent(f));
+
+        const allUncached = [...uncachedDirs, ...uncachedFiles];
+        if (allUncached.length === 0) {
             this._highlightUncached(files);
             return;
         }
         try {
-            const results = await this._fetchBatch(uncached);
-            for (const [filePath, result] of Object.entries(results)) {
+            const results = await this._fetchBatch(allUncached);
+            for (const [path, result] of Object.entries(results)) {
+                if (result.entries && !this._cache.getEntries(path)) {
+                    this._cache.setEntries(path, result.entries);
+                }
                 if (result.content != null && this._cache.totalBytes < MAX_BYTES) {
-                    this._cache.setContent(filePath, result.content);
+                    if (!this._cache.hasContent(path)) {
+                        this._cache.setContent(path, result.content);
+                    }
                 }
             }
             await this._highlightUncached(files);
@@ -283,22 +295,28 @@ export class PreloadEngine {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Collect all file paths visible in expanded directories (including top-level). */
-function collectVisibleFiles(model: FileTreeModel): string[] {
+/** Collect all visible file paths AND uncollapsed directory paths. */
+function collectVisiblePaths(model: FileTreeModel): { files: string[]; dirs: string[] } {
     const files: string[] = [];
+    const dirs: string[] = [];
 
     const collect = (dirPath: string, children: { name: string; type: string }[]) => {
         for (const child of children) {
             const fullPath = dirPath ? `${dirPath}/${child.name}` : child.name;
             if (child.type === "file" && isHighlightable(child.name)) {
                 files.push(fullPath);
-            } else if (child.type === "dir" && model.isExpanded(fullPath)) {
-                const sub = model.getChildren(fullPath);
-                if (sub) collect(fullPath, sub);
+            } else if (child.type === "dir") {
+                // Always preload directory entries for visible dirs
+                dirs.push(fullPath);
+                // If expanded, recurse into children
+                if (model.isExpanded(fullPath)) {
+                    const sub = model.getChildren(fullPath);
+                    if (sub) collect(fullPath, sub);
+                }
             }
         }
     };
 
     collect("", model.topLevel);
-    return files;
+    return { files, dirs };
 }
