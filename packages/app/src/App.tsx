@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, useContext } from "react";
 import { createChannel, type Channel } from "./channel";
 import { getApiBase, getServerUrl, setServerUrl, isConfigured } from "./serverUrl";
 import { TabBar } from "./components/TabBar";
@@ -7,6 +7,7 @@ import { ConversationOverlay } from "./components/ConversationOverlay";
 import { WindowSwitcher } from "./components/WindowSwitcher";
 import { createCodeHighlighter, HighlighterContext } from "./components/CodeViewer";
 import { FileTreeModel, FileTreeContext } from "./fsEvents";
+import { FileReadCache, FileReadCacheContext, PreloadEngine } from "./fileReadCache";
 import type { WindowInfo } from "./components/WindowSwitcher";
 
 export type TabId = "files" | "changes" | "terminal" | "preview" | string;
@@ -143,7 +144,11 @@ function WindowView({ sessionId, visible, onWindowsChanged }: WindowViewProps) {
     const fileTreeRef = useRef(fileTree);
     fileTreeRef.current = fileTree;
 
-    const requestFile = useCallback(async (filePath: string): Promise<string | null> => {
+    // ── FileReadCache + PreloadEngine ──
+    const codeHighlighter = useContext(HighlighterContext);
+    const [fileCache] = useState(() => new FileReadCache());
+
+    const fetchFileFromServer = useCallback(async (filePath: string): Promise<string | null> => {
         try {
             const res = await fetch(
                 `${getApiBase()}/api/sessions/${sessionId}/file?path=${encodeURIComponent(filePath)}`
@@ -155,6 +160,41 @@ function WindowView({ sessionId, visible, onWindowsChanged }: WindowViewProps) {
             return null;
         }
     }, [sessionId]);
+
+    // Cache-aware requestFile: check cache first, then fetch + cache
+    const requestFile = useCallback(async (filePath: string): Promise<string | null> => {
+        const cached = fileCache.getContent(filePath);
+        if (cached != null) return cached;
+        const content = await fetchFileFromServer(filePath);
+        if (content != null) fileCache.setContent(filePath, content);
+        return content;
+    }, [fileCache, fetchFileFromServer]);
+
+    // Preload engine: preloads visible files from expanded dirs
+    const preloadRef = useRef<PreloadEngine | null>(null);
+    useEffect(() => {
+        if (!codeHighlighter) return;
+        preloadRef.current = new PreloadEngine(fileCache, codeHighlighter, fetchFileFromServer);
+    }, [fileCache, codeHighlighter, fetchFileFromServer]);
+
+    // Trigger preload whenever file tree changes (expand/collapse/top-level update)
+    useEffect(() => {
+        const unsub = fileTree.subscribe(() => {
+            preloadRef.current?.preloadFromTree(fileTree);
+        });
+        // Also preload on initial mount
+        preloadRef.current?.preloadFromTree(fileTree);
+        return unsub;
+    }, [fileTree]);
+
+    // Invalidate cache on fs changes
+    useEffect(() => {
+        const unsub = fileTree.subscribe(() => {
+            // Lightweight: just clear the cache on fs change so stale content is re-fetched
+            // (FileTreeModel.onFsChanged already triggers a subscribe notification)
+        });
+        return unsub;
+    }, [fileTree, fileCache]);
 
     const requestDiff = useCallback(async (filePath: string): Promise<{ added: number[]; removed: number[] }> => {
         try {
@@ -209,6 +249,7 @@ function WindowView({ sessionId, visible, onWindowsChanged }: WindowViewProps) {
                     {directory ? (
                         <div style={{ display: activeTab === "chat" ? "none" : "flex", flex: 1 }}>
                             <FileTreeContext.Provider value={fileTree}>
+                            <FileReadCacheContext.Provider value={fileCache}>
                             <MainView
                                 activeTab={activeTab}
                                 changes={changes}
@@ -219,6 +260,7 @@ function WindowView({ sessionId, visible, onWindowsChanged }: WindowViewProps) {
                                 requestDiff={requestDiff}
                                 onFileContext={setFileContext}
                             />
+                            </FileReadCacheContext.Provider>
                             </FileTreeContext.Provider>
                         </div>
                     ) : (

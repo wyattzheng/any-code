@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useState, useMemo, useRef, useCallback, memo, createContext, useContext } from "react";
 import { createHighlighter, type Highlighter } from "shiki";
+import { useFileReadCache } from "../fileReadCache";
 import "./CodeViewer.css";
 
 export interface CodeHighlighter {
@@ -131,6 +132,7 @@ export interface CodeViewerProps {
 
 export const CodeViewer = memo(function CodeViewer({ code, filePath, addedLines, removedLines, onSelectionChange, scrollToLine, wordWrap }: CodeViewerProps) {
     const hl = useContext(HighlighterContext);
+    const fileCache = useFileReadCache();
     const [ready, setReady] = useState(hl?.ready ?? false);
     const [selectedLines, setSelectedLines] = useState<Set<number>>(new Set());
     const containerRef = useRef<HTMLDivElement>(null);
@@ -161,16 +163,25 @@ export const CodeViewer = memo(function CodeViewer({ code, filePath, addedLines,
     // Immediate plain-text HTML (no blocking)
     const plainHtml = useMemo(() => hl?.plainHtml(code) ?? null, [code, hl]);
 
-    // Async syntax highlight: show plain text first, then swap in highlighted version
+    // Async syntax highlight: check cache first, then schedule highlight
     const [rawHtml, setRawHtml] = useState<string | null>(null);
     useEffect(() => {
         if (!ready || !hl) { setRawHtml(null); return; }
-        // Reset to plain on file change so we don't show stale highlights
+
+        // Check cache for pre-highlighted HTML
+        const cached = fileCache?.getHighlight(filePath);
+        if (cached) { setRawHtml(cached); return; }
+
+        // Reset and schedule async highlight
         setRawHtml(null);
-        // Schedule highlighting off the critical path
         const id = setTimeout(() => {
             const highlighted = hl.highlight(code, filePath);
             setRawHtml(highlighted);
+            // Store back into cache for future use
+            if (fileCache) {
+                if (!fileCache.hasContent(filePath)) fileCache.setContent(filePath, code);
+                fileCache.setHighlight(filePath, highlighted);
+            }
         }, 0);
         return () => clearTimeout(id);
     }, [code, filePath, ready, hl]);
