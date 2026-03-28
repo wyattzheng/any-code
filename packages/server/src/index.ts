@@ -1616,25 +1616,36 @@ function createMainServer(cfg: ServerConfig): http.Server {
 
         const resolvedDir = path.resolve(dir)
         const results: Record<string, { content: string } | { error: string }> = {}
+        const BATCH_LIMIT = 1024 * 1024 // 1 MB total
+        let totalRead = 0
 
-        await Promise.all(paths.map(async (filePath: string) => {
+        for (const filePath of paths) {
+          if (totalRead >= BATCH_LIMIT) {
+            results[filePath] = { error: "Batch limit reached" }
+            continue
+          }
           const target = path.resolve(dir, filePath)
           if (!target.startsWith(resolvedDir)) {
             results[filePath] = { error: "Forbidden" }
-            return
+            continue
           }
           try {
             const stat = await fsPromises.stat(target)
             if (stat.size > 512 * 1024) {
               results[filePath] = { error: "File too large" }
-              return
+              continue
+            }
+            if (totalRead + stat.size > BATCH_LIMIT) {
+              results[filePath] = { error: "Batch limit reached" }
+              continue
             }
             const content = await fsPromises.readFile(target, "utf-8")
+            totalRead += stat.size
             results[filePath] = { content }
           } catch {
             results[filePath] = { error: "读取失败" }
           }
-        }))
+        }
 
         res.writeHead(200, { "Content-Type": "application/json" })
         res.end(JSON.stringify({ files: results }))
