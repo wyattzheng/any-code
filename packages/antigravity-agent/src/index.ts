@@ -626,9 +626,9 @@ export class AntigravityAgent implements IChatAgent {
   }
 
   abort(): void {
-    if (this.binaryChild) {
-      this.binaryChild.kill()
-      this.binaryChild = null
+    if (this._cascadeId && this.lsPort) {
+      console.log(`[Cascade] abort() → CancelCascadeInvocation cascadeId=${this._cascadeId}`)
+      this._rpc("CancelCascadeInvocation", { cascadeId: this._cascadeId }).catch(() => {})
     }
   }
 
