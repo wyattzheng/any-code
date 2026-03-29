@@ -194,9 +194,14 @@ export class CascadeView extends EventEmitter {
         this.emit("event", { type: "tool.start", toolCallId, toolName, toolArgs })
         if (step.status === "CORTEX_STEP_STATUS_DONE" || step.status === "CORTEX_STEP_STATUS_ERROR") {
           const output = step.error?.userErrorMessage || step.metadata?.toolCall?.result || step.listDirectory?.result || step.viewFile?.result || step.runCommand?.result || ""
+          // Build meaningful title for frontend display
+          const toolTitle = toolArgs.CommandLine || toolArgs.commandLine
+            || toolArgs.AbsolutePath || toolArgs.DirectoryPath || toolArgs.TargetFile
+            || toolArgs.Query || toolArgs.query
+            || toolName
           this.emit("event", {
             type: "tool.done", toolCallId,
-            toolName, toolOutput: typeof output === "string" ? output : JSON.stringify(output), toolTitle: toolName, toolMetadata: {},
+            toolName, toolOutput: typeof output === "string" ? output : JSON.stringify(output), toolTitle, toolMetadata: {},
           })
         }
         break
