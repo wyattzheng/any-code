@@ -514,7 +514,21 @@ export class AntigravityAgent implements IChatAgent {
           case "CORTEX_STEP_TYPE_GREP":
           case "CORTEX_STEP_TYPE_FIND": {
             const toolName = step.type.replace("CORTEX_STEP_TYPE_", "").toLowerCase()
-            const toolArgs = step.metadata?.toolCall?.argumentsJson ? JSON.parse(step.metadata.toolCall.argumentsJson) : {}
+            console.log(`[Stream] TOOL ${toolName} step keys: ${JSON.stringify(Object.keys(step)).slice(0, 300)}`)
+            console.log(`[Stream] TOOL ${toolName} step data: ${JSON.stringify(step).slice(0, 500)}`)
+            // Try multiple locations for tool arguments
+            let toolArgs: any = {}
+            if (step.metadata?.toolCall?.argumentsJson) {
+              toolArgs = JSON.parse(step.metadata.toolCall.argumentsJson)
+            } else if (step.runCommand) {
+              toolArgs = step.runCommand
+            } else if (step.listDirectory) {
+              toolArgs = step.listDirectory
+            } else if (step.viewFile) {
+              toolArgs = step.viewFile
+            } else if (step.writeFile) {
+              toolArgs = step.writeFile
+            }
             pushEvent({ type: "tool.start", toolCallId: step.stepId || String(step.stepNumber || ""), toolName, toolArgs })
             if (step.status === "CORTEX_STEP_STATUS_DONE") {
               const output = step.metadata?.toolCall?.result || step.listDirectory?.result || step.viewFile?.result || step.runCommand?.result || ""

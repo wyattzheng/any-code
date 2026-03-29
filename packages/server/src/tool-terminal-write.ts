@@ -31,20 +31,20 @@ export const TerminalTool = Tool.define("terminal", async () => {
         .describe("The text to send to the terminal. Omit to just read output without sending input.")
         .optional(),
       pressEnter: z
-        .boolean()
+        .preprocess((v) => v === "true" || v === true, z.boolean())
         .describe("Whether to press Enter after the input. Defaults to true.")
         .optional(),
       reset: z
-        .boolean()
+        .preprocess((v) => v === "true" || v === true, z.boolean())
         .describe("If true, destroy and recreate the terminal before sending input. Use when the terminal is stuck.")
         .optional(),
-      waitMs: z
+      waitMs: z.coerce
         .number()
         .int()
         .min(0)
         .describe("Milliseconds to wait after sending input before reading output. If 0 or omitted, no output is read. Max 5000.")
         .optional(),
-      readLines: z
+      readLines: z.coerce
         .number()
         .int()
         .min(1)
