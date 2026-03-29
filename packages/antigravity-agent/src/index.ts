@@ -100,12 +100,8 @@ export class AntigravityAgent implements IChatAgent {
   private _toolDefinitions: Array<{ name: string; description: string; inputSchema: any }> = []
   private _toolInfos = new Map<string, any>()
 
-  // Message history for getSessionMessages
-  private _messageHistory: Array<{
-    id: string; role: string; createdAt: number
-    text?: string
-    parts?: Array<{ type: string; tool?: string; content?: string }>
-  }> = []
+  // CascadeIds for this session (persisted in binary, tracked here for lookup)
+  private _cascadeIds: string[] = []
 
   /** Resolves when USS uss-oauth subscription is received and token injected */
   private _oauthInjected: Promise<void> | null = null
@@ -213,8 +209,100 @@ export class AntigravityAgent implements IChatAgent {
   }
 
   async getSessionMessages(opts: { limit: number }): Promise<any> {
+    if (!this.initialized || !this.lsPort) return []
     const limit = opts?.limit ?? 50
-    return this._messageHistory.slice(-limit)
+
+    // Collect messages from most recent trajectories
+    const messages: Array<{
+      id: string; role: string; createdAt: number
+      text?: string
+      parts?: Array<{ type: string; tool?: string; content?: string }>
+    }> = []
+
+    // Process session cascades in reverse (newest first), stop when we have enough
+    for (let ti = this._cascadeIds.length - 1; ti >= 0 && messages.length < limit; ti--) {
+      const cascadeId = this._cascadeIds[ti]
+
+      const stepsRes = await this._rpc("GetCascadeTrajectorySteps", { cascadeId })
+      const steps = stepsRes.steps || []
+
+      let currentAssistantParts: Array<{ type: string; tool?: string; content?: string }> = []
+      let currentAssistantText = ""
+      let currentThinking = ""
+      let hasAssistantContent = false
+
+      for (const step of steps) {
+        if (step.type === "CORTEX_STEP_TYPE_USER_INPUT") {
+          // Flush any pending assistant message before new user input
+          if (hasAssistantContent) {
+            const allParts = [
+              ...(currentThinking ? [{ type: "thinking", content: currentThinking }] : []),
+              ...(currentAssistantText ? [{ type: "text", content: currentAssistantText }] : []),
+              ...currentAssistantParts,
+            ]
+            messages.push({
+              id: `assistant-${cascadeId}`,
+              role: "assistant",
+              createdAt: new Date(step.metadata?.createdAt || 0).getTime() - 1,
+              parts: allParts,
+            })
+            currentAssistantParts = []
+            currentAssistantText = ""
+            currentThinking = ""
+            hasAssistantContent = false
+          }
+
+          // User message
+          const userText = step.userInput?.userResponse
+            || step.userInput?.items?.map((it: any) => it.text).join("\n")
+            || ""
+          if (userText) {
+            messages.push({
+              id: `user-${cascadeId}-${step.stepNumber || 0}`,
+              role: "user",
+              createdAt: new Date(step.metadata?.createdAt || 0).getTime(),
+              text: userText,
+            })
+          }
+        } else if (step.type === "CORTEX_STEP_TYPE_PLANNER_RESPONSE") {
+          hasAssistantContent = true
+          if (step.plannerResponse?.thinking) currentThinking = step.plannerResponse.thinking
+          if (step.plannerResponse?.response) currentAssistantText = step.plannerResponse.response
+        } else if (step.type === "CORTEX_STEP_TYPE_MCP_TOOL") {
+          hasAssistantContent = true
+          const toolName = step.mcpTool?.toolCall?.name || "unknown"
+          currentAssistantParts.push({ type: "tool", tool: toolName, content: "completed" })
+        } else if ([
+          "CORTEX_STEP_TYPE_LIST_DIRECTORY", "CORTEX_STEP_TYPE_VIEW_FILE",
+          "CORTEX_STEP_TYPE_RUN_COMMAND", "CORTEX_STEP_TYPE_WRITE_FILE",
+          "CORTEX_STEP_TYPE_GREP", "CORTEX_STEP_TYPE_FIND",
+          "CORTEX_STEP_TYPE_CODE_ACTION", "CORTEX_STEP_TYPE_CREATE_FILE",
+        ].includes(step.type)) {
+          hasAssistantContent = true
+          const toolName = step.type.replace("CORTEX_STEP_TYPE_", "").toLowerCase()
+          currentAssistantParts.push({ type: "tool", tool: toolName, content: "completed" })
+        }
+      }
+
+      // Flush final assistant message for this cascade
+      if (hasAssistantContent) {
+        const allParts = [
+          ...(currentThinking ? [{ type: "thinking", content: currentThinking }] : []),
+          ...(currentAssistantText ? [{ type: "text", content: currentAssistantText }] : []),
+          ...currentAssistantParts,
+        ]
+        messages.push({
+          id: `assistant-${cascadeId}-final`,
+          role: "assistant",
+          createdAt: Date.now(),
+          parts: allParts,
+        })
+      }
+    }
+
+    // Sort by createdAt and limit
+    messages.sort((a, b) => a.createdAt - b.createdAt)
+    return messages.slice(-limit)
   }
 
   async *chat(input: string): AsyncGenerator<ChatAgentEvent, void, unknown> {
@@ -228,10 +316,7 @@ export class AntigravityAgent implements IChatAgent {
       }
     }
 
-    // Track parts for assistant message history (declared outside try for recording in finally)
-    const assistantParts: Array<{ type: string; tool?: string; content?: string }> = []
-    let assistantText = ""
-    let assistantThinking = ""
+
 
     try {
       // Start cascade
@@ -274,14 +359,8 @@ export class AntigravityAgent implements IChatAgent {
         }
       }
 
-      // Record user message in history
-      const userMsgId = `user-${Date.now()}`
-      this._messageHistory.push({
-        id: userMsgId,
-        role: "user",
-        createdAt: Date.now(),
-        text: input,
-      })
+      // Track cascadeId for getSessionMessages
+      this._cascadeIds.push(cascadeId)
 
       // Send message
       console.log(`[Cascade] chat() → SendUserCascadeMessage...`)
@@ -334,7 +413,7 @@ export class AntigravityAgent implements IChatAgent {
                 yield { type: "thinking.delta" as const, thinkingContent: delta }
               }
               lastYieldedThinking = thinking
-              assistantThinking = thinking
+
             }
             // Main response text — when response appears, thinking phase is over
             const text = step.plannerResponse?.response
@@ -351,7 +430,7 @@ export class AntigravityAgent implements IChatAgent {
                 yield { type: "text.delta" as const, content: delta }
               }
               lastYieldedText = text
-              assistantText = text
+
             }
           }
         }
@@ -451,7 +530,7 @@ export class AntigravityAgent implements IChatAgent {
                   }
 
                   if (step.status === "CORTEX_STEP_STATUS_DONE") {
-                    assistantParts.push({ type: "tool", tool: mcpToolName, content: "completed" })
+
                     yield {
                       type: "tool.done" as const,
                       toolCallId: mcp.toolCall.id || "",
@@ -475,7 +554,7 @@ export class AntigravityAgent implements IChatAgent {
               case "CORTEX_STEP_TYPE_GREP":
               case "CORTEX_STEP_TYPE_FIND": {
                 const toolName = step.type.replace("CORTEX_STEP_TYPE_", "").toLowerCase()
-                assistantParts.push({ type: "tool", tool: toolName, content: step.status === "CORTEX_STEP_STATUS_DONE" ? "completed" : "running" })
+
                 const toolArgs = step.metadata?.toolCall?.argumentsJson
                   ? JSON.parse(step.metadata.toolCall.argumentsJson)
                   : {}
@@ -539,20 +618,7 @@ export class AntigravityAgent implements IChatAgent {
       yield { type: "error" as const, error: err?.message ?? String(err) }
     }
 
-    // Record assistant message in history
-    if (assistantText || assistantThinking || assistantParts.length > 0) {
-      const allParts = [
-        ...(assistantThinking ? [{ type: "thinking", content: assistantThinking }] : []),
-        ...(assistantText ? [{ type: "text", content: assistantText }] : []),
-        ...assistantParts,
-      ]
-      this._messageHistory.push({
-        id: `assistant-${Date.now()}`,
-        role: "assistant",
-        createdAt: Date.now(),
-        parts: allParts,
-      })
-    }
+
 
     yield { type: "done" as const }
   }
