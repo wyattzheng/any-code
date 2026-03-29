@@ -325,7 +325,8 @@ async function createNewWindow(cfg: ServerConfig, isDefault = false): Promise<Se
   const chatAgent = await createChatAgent(cfg.agent, createChatAgentConfig(cfg, "", undefined, tp, pp))
   await chatAgent.init()
 
-  const sessionId = chatAgent.sessionId
+  // Generate window ID server-side (agent's sessionId may be empty before first chat)
+  const sessionId = chatAgent.sessionId || crypto.randomUUID()
   const now = Date.now()
   terminalProviders.delete(tempId)
   terminalProviders.set(sessionId, tp)
