@@ -511,6 +511,7 @@ export class AntigravityAgent implements IChatAgent {
           } catch (e: any) {
             console.log(`[Cascade] Auto-approve ERROR: ${e.message}`)
           }
+          processedStepIndices.delete(stepIndex)  // allow re-processing when DONE arrives
           return
         }
 
@@ -540,23 +541,16 @@ export class AntigravityAgent implements IChatAgent {
           case "CORTEX_STEP_TYPE_GREP":
           case "CORTEX_STEP_TYPE_FIND": {
             const toolName = step.type.replace("CORTEX_STEP_TYPE_", "").toLowerCase()
-            console.log(`[Stream] TOOL ${toolName} step keys: ${JSON.stringify(Object.keys(step))}`)
-            console.log(`[Stream] TOOL ${toolName} metadata.toolCall: ${JSON.stringify(step.metadata?.toolCall).slice(0, 500)}`)
-            console.log(`[Stream] TOOL ${toolName} specific field: ${JSON.stringify(step.runCommand || step.listDirectory || step.viewFile || step.writeFile || step.codeAction || null).slice(0, 500)}`)
-            // Try multiple locations for tool arguments
-            let toolArgs: any = {}
-            if (step.metadata?.toolCall?.argumentsJson) {
-              toolArgs = JSON.parse(step.metadata.toolCall.argumentsJson)
-            } else if (step.runCommand) {
-              toolArgs = step.runCommand
-            } else if (step.listDirectory) {
-              toolArgs = step.listDirectory
-            } else if (step.viewFile) {
-              toolArgs = step.viewFile
-            } else if (step.writeFile) {
-              toolArgs = step.writeFile
+            const toolCallId = step.metadata?.toolCall?.id || step.stepId || String(step.stepNumber || "")
+            // Resolve args: cached PLANNER toolCalls → metadata → step-specific field
+            let toolArgs: any = toolCallArgsCache.get(step.metadata?.toolCall?.id) || {}
+            const rawArgs = step.metadata?.toolCall?.argumentsJson
+            if (rawArgs && rawArgs !== "{}" && rawArgs !== "") {
+              try { toolArgs = JSON.parse(rawArgs) } catch { }
+            } else if (Object.keys(toolArgs).length === 0) {
+              toolArgs = step.runCommand || step.listDirectory || step.viewFile || step.writeFile || {}
             }
-            pushEvent({ type: "tool.start", toolCallId: step.stepId || String(step.stepNumber || ""), toolName, toolArgs })
+            pushEvent({ type: "tool.start", toolCallId, toolName, toolArgs })
             if (step.status === "CORTEX_STEP_STATUS_DONE") {
               const output = step.metadata?.toolCall?.result || step.listDirectory?.result || step.viewFile?.result || step.runCommand?.result || ""
               pushEvent({
