@@ -415,161 +415,174 @@ export class AntigravityAgent implements IChatAgent {
       let resolvedTrajectoryId: string | null = null
       let hasEmittedThinkingStart = false
       let hasEmittedThinkingEnd = false
-      let lastProcessedStepCount = 0
+      let processedStepIndices = new Set<number>()
 
-      // Process steps and push events to queue
-      const processStepsToQueue = async () => {
-        const stepsRes = await this._rpc("GetCascadeTrajectorySteps", { cascadeId })
-        const allSteps = stepsRes.steps || []
-        const currentStepCount = allSteps.length
+      // Process a single step from stream frame
+      const processStep = async (step: any, stepIndex: number) => {
+        // PLANNER_RESPONSE: thinking + text streaming
+        if (step.type === "CORTEX_STEP_TYPE_PLANNER_RESPONSE") {
+          const thinking = step.plannerResponse?.thinking
+          if (thinking && thinking !== lastYieldedThinking) {
+            if (!hasEmittedThinkingStart) {
+              hasEmittedThinkingStart = true
+              pushEvent({ type: "thinking.start" })
+            }
+            const delta = thinking.startsWith(lastYieldedThinking)
+              ? thinking.slice(lastYieldedThinking.length) : thinking
+            if (delta) pushEvent({ type: "thinking.delta", thinkingContent: delta })
+            lastYieldedThinking = thinking
+          }
+          const text = step.plannerResponse?.response
+          if (text && text !== lastYieldedText) {
+            if (hasEmittedThinkingStart && !hasEmittedThinkingEnd) {
+              hasEmittedThinkingEnd = true
+              const duration = step.plannerResponse?.thinkingDuration?.seconds || 0
+              pushEvent({ type: "thinking.end", thinkingDuration: Number(duration) })
+            }
+            const delta = text.startsWith(lastYieldedText)
+              ? text.slice(lastYieldedText.length) : text
+            if (delta) pushEvent({ type: "text.delta", content: delta })
+            lastYieldedText = text
+          }
+          return
+        }
 
-        // Check all PLANNER_RESPONSE steps for streaming text + thinking
-        for (const step of allSteps) {
-          if (step.type === "CORTEX_STEP_TYPE_PLANNER_RESPONSE") {
-            const thinking = step.plannerResponse?.thinking
-            if (thinking && thinking !== lastYieldedThinking) {
-              if (!hasEmittedThinkingStart) {
-                hasEmittedThinkingStart = true
-                pushEvent({ type: "thinking.start" })
+        // Skip already-processed non-streaming steps (tool/error etc. don't update in-place)
+        if (processedStepIndices.has(stepIndex)) return
+        if (step.status !== "CORTEX_STEP_STATUS_DONE" && step.status !== "CORTEX_STEP_STATUS_ERROR" 
+            && step.status !== "CORTEX_STEP_STATUS_WAITING") return
+        processedStepIndices.add(stepIndex)
+
+        console.log(`[Cascade] step#${stepIndex}: type=${step.type} status=${step.status}`)
+
+        // Auto-approve WAITING steps
+        if (step.status === "CORTEX_STEP_STATUS_WAITING") {
+          const stepIdx = step.stepNumber ?? step.stepIndex ?? stepIndex
+          console.log(`[Cascade] ⚡ Auto-approving WAITING step#${stepIdx} (${step.type})`)
+          if (!resolvedTrajectoryId) {
+            try {
+              const trajRes = await this._rpc("GetCascadeTrajectory", { cascadeId })
+              resolvedTrajectoryId = trajRes.trajectory?.trajectoryId || null
+            } catch { }
+          }
+          const tid = resolvedTrajectoryId || cascadeId
+          const interactionBase: any = { trajectoryId: tid, stepIndex: stepIdx }
+          const isFileTool = ["CORTEX_STEP_TYPE_LIST_DIRECTORY", "CORTEX_STEP_TYPE_VIEW_FILE",
+            "CORTEX_STEP_TYPE_CODE_ACTION", "CORTEX_STEP_TYPE_CREATE_FILE"].includes(step.type)
+          if (isFileTool) {
+            let absPath = ""
+            try {
+              const args = JSON.parse(step.metadata?.toolCall?.argumentsJson || step.toolCall?.argumentsJson || "{}")
+              absPath = args.DirectoryPath || args.AbsolutePath || args.TargetFile || args.path || ""
+            } catch { }
+            interactionBase.filePermission = { allow: true, scope: 2, absolutePathUri: absPath ? `file://${absPath}` : "" }
+          } else if (step.type === "CORTEX_STEP_TYPE_RUN_COMMAND") {
+            interactionBase.runCommand = {}
+          } else {
+            interactionBase.codeAction = {}
+          }
+          try { await this._rpc("HandleCascadeUserInteraction", { cascadeId, interaction: interactionBase }) } catch { }
+          processedStepIndices.delete(stepIndex)  // allow re-processing after approval
+          return
+        }
+
+        switch (step.type) {
+          case "CORTEX_STEP_TYPE_MCP_TOOL": {
+            const mcp = step.mcpTool
+            if (mcp?.toolCall) {
+              const mcpToolName = mcp.toolCall.name || "unknown"
+              let parsedArgs = {}
+              try { parsedArgs = JSON.parse(mcp.toolCall.argumentsJson || "{}") } catch { }
+              pushEvent({ type: "tool.start", toolCallId: mcp.toolCall.id || "", toolName: mcpToolName, toolArgs: parsedArgs })
+              if (step.status === "CORTEX_STEP_STATUS_DONE") {
+                pushEvent({
+                  type: "tool.done", toolCallId: mcp.toolCall.id || "", toolName: mcpToolName,
+                  toolOutput: mcp.resultString || "", toolTitle: `${mcp.serverName || "mcp"}:${mcpToolName}`,
+                  toolMetadata: { serverName: mcp.serverName, serverVersion: mcp.serverInfo?.version },
+                })
               }
-              const delta = thinking.startsWith(lastYieldedThinking)
-                ? thinking.slice(lastYieldedThinking.length) : thinking
-              if (delta) pushEvent({ type: "thinking.delta", thinkingContent: delta })
-              lastYieldedThinking = thinking
             }
-            const text = step.plannerResponse?.response
-            if (text && text !== lastYieldedText) {
-              if (hasEmittedThinkingStart && !hasEmittedThinkingEnd) {
-                hasEmittedThinkingEnd = true
-                const duration = step.plannerResponse?.thinkingDuration?.seconds || 0
-                pushEvent({ type: "thinking.end", thinkingDuration: Number(duration) })
-              }
-              const delta = text.startsWith(lastYieldedText)
-                ? text.slice(lastYieldedText.length) : text
-              if (delta) pushEvent({ type: "text.delta", content: delta })
-              lastYieldedText = text
+            break
+          }
+
+          case "CORTEX_STEP_TYPE_LIST_DIRECTORY":
+          case "CORTEX_STEP_TYPE_VIEW_FILE":
+          case "CORTEX_STEP_TYPE_RUN_COMMAND":
+          case "CORTEX_STEP_TYPE_WRITE_FILE":
+          case "CORTEX_STEP_TYPE_GREP":
+          case "CORTEX_STEP_TYPE_FIND": {
+            const toolName = step.type.replace("CORTEX_STEP_TYPE_", "").toLowerCase()
+            const toolArgs = step.metadata?.toolCall?.argumentsJson ? JSON.parse(step.metadata.toolCall.argumentsJson) : {}
+            pushEvent({ type: "tool.start", toolCallId: step.stepId || String(step.stepNumber || ""), toolName, toolArgs })
+            if (step.status === "CORTEX_STEP_STATUS_DONE") {
+              const output = step.metadata?.toolCall?.result || step.listDirectory?.result || step.viewFile?.result || step.runCommand?.result || ""
+              pushEvent({
+                type: "tool.done", toolCallId: step.stepId || String(step.stepNumber || ""),
+                toolName, toolOutput: typeof output === "string" ? output : JSON.stringify(output), toolTitle: toolName, toolMetadata: {},
+              })
             }
+            break
+          }
+
+          case "CORTEX_STEP_TYPE_ERROR_MESSAGE": {
+            const errMsg = step.errorMessage?.error?.userErrorMessage || step.errorMessage?.error?.shortError || "Unknown error"
+            pushEvent({ type: "error", error: errMsg })
+            break
+          }
+
+          default:
+            if (!["CORTEX_STEP_TYPE_CHECKPOINT", "CORTEX_STEP_TYPE_EPHEMERAL_MESSAGE",
+              "CORTEX_STEP_TYPE_USER_INPUT", "CORTEX_STEP_TYPE_CONVERSATION_HISTORY",
+              "CORTEX_STEP_TYPE_KNOWLEDGE_ARTIFACTS"].includes(step.type)) {
+              console.log(`[Cascade] unhandled step type: ${step.type}`, JSON.stringify(step).slice(0, 200))
+            }
+            break
+        }
+      }
+
+      // Process a stream frame directly
+      const processStreamFrame = async (json: any) => {
+        const update = json.update
+        if (!update) return false
+
+        // Process steps from the frame
+        const stepsUpdate = update.mainTrajectoryUpdate?.stepsUpdate
+        if (stepsUpdate?.steps) {
+          const indices = stepsUpdate.indices || []
+          const steps = stepsUpdate.steps || []
+          for (let i = 0; i < steps.length; i++) {
+            const stepIndex = indices[i] ?? i
+            await processStep(steps[i], stepIndex)
           }
         }
 
-        if (currentStepCount > lastProcessedStepCount) {
-          const newSteps = allSteps.slice(lastProcessedStepCount)
-          lastProcessedStepCount = currentStepCount
-
-          for (let si = 0; si < newSteps.length; si++) {
-            const step = newSteps[si]
-            const stepArrayIdx = lastProcessedStepCount - newSteps.length + si
-            console.log(`[Cascade] step#${stepArrayIdx}: type=${step.type} status=${step.status}`)
-
-            // Auto-approve WAITING steps
-            if (step.status === "CORTEX_STEP_STATUS_WAITING") {
-              const stepIdx = step.stepNumber ?? step.stepIndex ?? stepArrayIdx
-              console.log(`[Cascade] ⚡ Auto-approving WAITING step#${stepIdx} (${step.type})`)
-              if (!resolvedTrajectoryId) {
-                try {
-                  const trajRes = await this._rpc("GetCascadeTrajectory", { cascadeId })
-                  resolvedTrajectoryId = trajRes.trajectory?.trajectoryId || null
-                } catch { }
-              }
-              const tid = resolvedTrajectoryId || cascadeId
-              const interactionBase: any = { trajectoryId: tid, stepIndex: stepIdx }
-              const isFileTool = ["CORTEX_STEP_TYPE_LIST_DIRECTORY", "CORTEX_STEP_TYPE_VIEW_FILE",
-                "CORTEX_STEP_TYPE_CODE_ACTION", "CORTEX_STEP_TYPE_CREATE_FILE"].includes(step.type)
-              if (isFileTool) {
-                let absPath = ""
-                try {
-                  const args = JSON.parse(step.metadata?.toolCall?.argumentsJson || step.toolCall?.argumentsJson || "{}")
-                  absPath = args.DirectoryPath || args.AbsolutePath || args.TargetFile || args.path || ""
-                } catch { }
-                interactionBase.filePermission = { allow: true, scope: 2, absolutePathUri: absPath ? `file://${absPath}` : "" }
-              } else if (step.type === "CORTEX_STEP_TYPE_RUN_COMMAND") {
-                interactionBase.runCommand = {}
-              } else {
-                interactionBase.codeAction = {}
-              }
-              try { await this._rpc("HandleCascadeUserInteraction", { cascadeId, interaction: interactionBase }) } catch { }
-            }
-
-            switch (step.type) {
-              case "CORTEX_STEP_TYPE_PLANNER_RESPONSE": break
-
-              case "CORTEX_STEP_TYPE_MCP_TOOL": {
-                const mcp = step.mcpTool
-                if (mcp?.toolCall) {
-                  const mcpToolName = mcp.toolCall.name || "unknown"
-                  let parsedArgs = {}
-                  try { parsedArgs = JSON.parse(mcp.toolCall.argumentsJson || "{}") } catch { }
-                  pushEvent({ type: "tool.start", toolCallId: mcp.toolCall.id || "", toolName: mcpToolName, toolArgs: parsedArgs })
-                  if (step.status === "CORTEX_STEP_STATUS_DONE") {
-                    pushEvent({
-                      type: "tool.done", toolCallId: mcp.toolCall.id || "", toolName: mcpToolName,
-                      toolOutput: mcp.resultString || "", toolTitle: `${mcp.serverName || "mcp"}:${mcpToolName}`,
-                      toolMetadata: { serverName: mcp.serverName, serverVersion: mcp.serverInfo?.version },
-                    })
-                  }
-                }
-                break
-              }
-
-              case "CORTEX_STEP_TYPE_LIST_DIRECTORY":
-              case "CORTEX_STEP_TYPE_VIEW_FILE":
-              case "CORTEX_STEP_TYPE_RUN_COMMAND":
-              case "CORTEX_STEP_TYPE_WRITE_FILE":
-              case "CORTEX_STEP_TYPE_GREP":
-              case "CORTEX_STEP_TYPE_FIND": {
-                const toolName = step.type.replace("CORTEX_STEP_TYPE_", "").toLowerCase()
-                const toolArgs = step.metadata?.toolCall?.argumentsJson ? JSON.parse(step.metadata.toolCall.argumentsJson) : {}
-                pushEvent({ type: "tool.start", toolCallId: step.stepId || String(step.stepNumber || ""), toolName, toolArgs })
-                if (step.status === "CORTEX_STEP_STATUS_DONE") {
-                  const output = step.metadata?.toolCall?.result || step.listDirectory?.result || step.viewFile?.result || step.runCommand?.result || ""
-                  pushEvent({
-                    type: "tool.done", toolCallId: step.stepId || String(step.stepNumber || ""),
-                    toolName, toolOutput: typeof output === "string" ? output : JSON.stringify(output), toolTitle: toolName, toolMetadata: {},
-                  })
-                }
-                break
-              }
-
-              case "CORTEX_STEP_TYPE_ERROR_MESSAGE": {
-                const errMsg = step.errorMessage?.error?.userErrorMessage || step.errorMessage?.error?.shortError || "Unknown error"
-                pushEvent({ type: "error", error: errMsg })
-                break
-              }
-
-              case "CORTEX_STEP_TYPE_CHECKPOINT":
-              case "CORTEX_STEP_TYPE_EPHEMERAL_MESSAGE":
-              case "CORTEX_STEP_TYPE_USER_INPUT":
-              case "CORTEX_STEP_TYPE_CONVERSATION_HISTORY":
-                break
-
-              default:
-                console.log(`[Cascade] unhandled step type: ${step.type}`, JSON.stringify(step).slice(0, 200))
-                break
-            }
-          }
+        // Resolve trajectoryId from frame
+        if (update.trajectoryId && !resolvedTrajectoryId) {
+          resolvedTrajectoryId = update.trajectoryId
         }
 
-        // Check completion
-        if (currentStepCount > 0) {
-          const lastStep = allSteps[allSteps.length - 1]
-          if (lastStep?.status === "CORTEX_STEP_STATUS_DONE" && (
-            lastStep?.type === "CORTEX_STEP_TYPE_CHECKPOINT" ||
-            lastStep?.type === "CORTEX_STEP_TYPE_ERROR_MESSAGE"
-          )) {
+        // Check completion: status=IDLE + CHECKPOINT done
+        if (update.status === "CASCADE_RUN_STATUS_IDLE") {
+          // Check if checkpoint is done in this frame
+          if (stepsUpdate?.steps) {
+            for (const step of stepsUpdate.steps) {
+              if (step.type === "CORTEX_STEP_TYPE_CHECKPOINT" && step.status === "CORTEX_STEP_STATUS_DONE") {
+                return true
+              }
+            }
+          }
+          // Also check termination metadata
+          if (update.executorMetadata?.terminationReason) {
             return true
           }
         }
         return false
       }
 
-      // Start streaming loop in background
+      // Start streaming
       const streamLoop = (async () => {
         try {
-          // Build Connect frame: [flags=0x00][length: 4 bytes BE][JSON]
-          const payload = JSON.stringify({
-            conversationId: cascadeId,
-            subscriberId: randomUUID(),
-          })
+          const payload = JSON.stringify({ conversationId: cascadeId, subscriberId: randomUUID() })
           const payloadBuf = Buffer.from(payload, "utf8")
           const frame = Buffer.alloc(5 + payloadBuf.length)
           frame[0] = 0x00
@@ -592,57 +605,44 @@ export class AntigravityAgent implements IChatAgent {
               },
               rejectUnauthorized: false,
             }, (res) => {
-              console.log(`[Cascade] Stream connected, status=${res.statusCode}`)
+              console.log(`[Stream] connected, status=${res.statusCode}`)
               let frameBuf = Buffer.alloc(0)
 
               res.on("data", async (chunk: Buffer) => {
                 frameBuf = Buffer.concat([frameBuf, chunk])
-                // Parse complete Connect frames
                 while (frameBuf.length >= 5) {
                   const frameLen = frameBuf.readUInt32BE(1)
                   const totalLen = 5 + frameLen
                   if (frameBuf.length < totalLen) break
                   const flags = frameBuf[0]
+                  const payload = frameBuf.slice(5, totalLen)
                   frameBuf = frameBuf.slice(totalLen)
 
                   if (flags === 0x02) {
-                    console.log(`[Cascade] Stream trailer (end)`)
+                    console.log(`[Stream] trailer (end)`)
                     streamDone = true
                     return
                   }
 
-                  // Data frame received — fetch latest steps
                   try {
-                    const complete = await processStepsToQueue()
-                    if (complete) { streamDone = true; return }
+                    const json = JSON.parse(payload.toString("utf8"))
+                    const complete = await processStreamFrame(json)
+                    if (complete) { streamDone = true; resolve(); return }
                   } catch (e: any) {
-                    console.log(`[Cascade] processSteps error: ${e.message}`)
+                    console.log(`[Stream] parse error: ${e.message}`)
                   }
                 }
               })
 
               res.on("end", () => { streamDone = true; resolve() })
               res.on("error", (err) => {
-                console.log(`[Cascade] Stream error: ${err.message}`)
+                console.log(`[Stream] error: ${err.message}`)
                 streamDone = true; resolve()
               })
-
-              // Safety: also poll at slower interval in case we miss frames
-              const safetyPoll = async () => {
-                while (!streamDone) {
-                  await new Promise(r => setTimeout(r, 500))
-                  if (streamDone) break
-                  try {
-                    const complete = await processStepsToQueue()
-                    if (complete) { streamDone = true; break }
-                  } catch { }
-                }
-              }
-              safetyPoll()
             })
 
             req.on("error", (err) => {
-              console.log(`[Cascade] Stream connect failed: ${err.message}`)
+              console.log(`[Stream] connect failed: ${err.message}`)
               reject(err)
             })
 
@@ -650,18 +650,27 @@ export class AntigravityAgent implements IChatAgent {
             req.end()
           })
         } catch {
-          // Fallback to pure polling
-          console.log(`[Cascade] Fallback to polling`)
+          // Fallback to polling
+          console.log(`[Cascade] Stream failed, fallback to polling`)
           for (let i = 0; i < 400 && !queueDone; i++) {
             await new Promise(r => setTimeout(r, 300))
             try {
-              const complete = await processStepsToQueue()
-              if (complete) break
+              const stepsRes = await this._rpc("GetCascadeTrajectorySteps", { cascadeId })
+              const allSteps = stepsRes.steps || []
+              for (let si = 0; si < allSteps.length; si++) {
+                await processStep(allSteps[si], si)
+              }
+              if (allSteps.length > 0) {
+                const last = allSteps[allSteps.length - 1]
+                if (last?.status === "CORTEX_STEP_STATUS_DONE" && (
+                  last?.type === "CORTEX_STEP_TYPE_CHECKPOINT" || last?.type === "CORTEX_STEP_TYPE_ERROR_MESSAGE"
+                )) break
+              }
             } catch { }
           }
         }
         queueDone = true
-        pushEvent(null)  // signal queue end
+        pushEvent(null)
       })()
 
       // Consume events from queue and yield to caller
