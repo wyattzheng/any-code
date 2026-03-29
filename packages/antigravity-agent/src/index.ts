@@ -234,8 +234,7 @@ export class AntigravityAgent implements IChatAgent {
 
       // Build cascade config with optional custom tools
       const plannerConfig: any = {
-        planModel: 1026,
-        requestedModel: { model: 291 },  // MODEL_CLAUDE_4_OPUS_THINKING
+        planModel: 1026,  // MODEL_PLACEHOLDER_M26 = Claude Opus 4.6 (Thinking)
         maxOutputTokens: 8192,
         cascadeCanAutoRunCommands: true,
         toolConfig: {
