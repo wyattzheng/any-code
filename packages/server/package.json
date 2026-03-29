@@ -23,6 +23,7 @@
     "devDependencies": {
         "@any-code/agent": "workspace:*",
         "@any-code/app": "workspace:*",
+        "@any-code/antigravity-agent": "workspace:*",
         "@any-code/claude-code-agent": "workspace:*",
         "@any-code/codex-agent": "workspace:*",
         "@any-code/utils": "workspace:*",

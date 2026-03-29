@@ -278,6 +278,9 @@ importers:
       '@any-code/agent':
         specifier: workspace:*
         version: link:../agent
+      '@any-code/antigravity-agent':
+        specifier: workspace:*
+        version: link:../antigravity-agent
       '@any-code/app':
         specifier: workspace:*
         version: link:../app

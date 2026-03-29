@@ -93,5 +93,10 @@ export function createChatAgent(agentType: string, config: ChatAgentConfig): ICh
     const { CodexAgent } = require("@any-code/codex-agent")
     return new CodexAgent(config)
   }
+  if (agentType === "antigravity") {
+    // Dynamic require — @any-code/antigravity-agent is bundled by tsup
+    const { AntigravityAgent } = require("@any-code/antigravity-agent")
+    return new AntigravityAgent(config)
+  }
   return new AnyCodeAgent(config)
 }
