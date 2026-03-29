@@ -838,7 +838,7 @@ export class AntigravityAgent implements IChatAgent {
 
         const child = spawn(binaryPath, [
           "--csrf_token", this.lsCsrf,
-          "--random_port",
+          "--https_server_port", "0",
           "--workspace_id", "anycode-agent",
           "--cloud_code_endpoint", "https://daily-cloudcode-pa.googleapis.com",
           "--app_data_dir", "antigravity",
