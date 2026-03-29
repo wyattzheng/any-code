@@ -287,7 +287,7 @@ export class AntigravityAgent implements IChatAgent {
           notifyUser: {
             artifactReviewMode: "ARTIFACT_REVIEW_MODE_TURBO",
           },
-          browserSubagent: { mode: "BROWSER_SUBAGENT_MODE_MAIN_AGENT_ONLY" },
+          antigravityBrowser: { enabled: false },
         },
         requestedModel: {
           model: "MODEL_PLACEHOLDER_M26",
