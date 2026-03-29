@@ -234,8 +234,7 @@ export class AntigravityAgent implements IChatAgent {
 
       // Build cascade config with optional custom tools
       const plannerConfig: any = {
-        planModel: 246,  // Gemini 2.5 Pro (fallback; actual model from requestedModelId)
-        requestedModelId: 291,  // MODEL_CLAUDE_4_OPUS_THINKING
+        planModel: 1026,  // MODEL_ANTIGRAVITY (Claude models require ChatClientServer proxy)
         maxOutputTokens: 8192,
         cascadeCanAutoRunCommands: true,
         toolConfig: {
