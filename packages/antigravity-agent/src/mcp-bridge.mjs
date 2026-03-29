@@ -26,51 +26,15 @@ function log(...args) {
 
 log(`Started. ${tools.length} tools, TCP port ${TCP_PORT}`)
 
-// --- Stdin reading: handle both Content-Length framing and bare JSON lines ---
+// --- Stdin reading: newline-delimited JSON (Go binary format) ---
 
-let buf = ""
-let contentLength = -1
+import { createInterface } from "node:readline"
 
-process.stdin.setEncoding("utf8")
-process.stdin.on("data", (chunk) => {
-  buf += chunk
-  processBuffer()
+const rl = createInterface({ input: process.stdin })
+rl.on("line", (line) => {
+  if (!line.trim()) return
+  tryHandleJson(line)
 })
-
-function processBuffer() {
-  while (buf.length > 0) {
-    // Try Content-Length framing first
-    if (contentLength === -1) {
-      const headerEnd = buf.indexOf("\r\n\r\n")
-      if (headerEnd !== -1) {
-        const header = buf.slice(0, headerEnd)
-        const clMatch = header.match(/Content-Length:\s*(\d+)/i)
-        if (clMatch) {
-          contentLength = parseInt(clMatch[1])
-          buf = buf.slice(headerEnd + 4)
-          continue
-        }
-      }
-    }
-
-    // If we have a pending Content-Length, wait for full body
-    if (contentLength >= 0) {
-      if (buf.length < contentLength) return // need more data
-      const body = buf.slice(0, contentLength)
-      buf = buf.slice(contentLength)
-      contentLength = -1
-      tryHandleJson(body)
-      continue
-    }
-
-    // Fallback: try bare JSON line delimited by \n
-    const nlIdx = buf.indexOf("\n")
-    if (nlIdx === -1) return // need more data
-    const line = buf.slice(0, nlIdx).trim()
-    buf = buf.slice(nlIdx + 1)
-    if (line) tryHandleJson(line)
-  }
-}
 
 function tryHandleJson(str) {
   try {
@@ -86,8 +50,8 @@ function tryHandleJson(str) {
 
 function send(obj) {
   const s = JSON.stringify(obj)
-  const header = `Content-Length: ${Buffer.byteLength(s)}\r\n\r\n`
-  process.stdout.write(header + s)
+  // Go binary uses newline-delimited JSON (no Content-Length header)
+  process.stdout.write(s + "\n")
   log(`→ response id=${obj.id}`)
 }
 

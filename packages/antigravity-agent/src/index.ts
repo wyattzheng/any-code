@@ -351,6 +351,8 @@ export class AntigravityAgent implements IChatAgent {
       // Inject custom tools as MCP servers
       if (this._toolDefinitions.length > 0) {
         const bridgePath = join(__dirname, "mcp-bridge.mjs")
+        console.log(`[Cascade] Injecting ${this._toolDefinitions.length} MCP tools via bridge: ${bridgePath}`)
+        console.log(`[Cascade] Tools: ${this._toolDefinitions.map((t: any) => t.name).join(", ")}`)
         plannerConfig.customizationConfig = {
           mcpServers: [{
             serverName: "anycode-tools",
@@ -359,6 +361,7 @@ export class AntigravityAgent implements IChatAgent {
             env: {
               ANYCODE_TOOLS_JSON: JSON.stringify(this._toolDefinitions),
               ANYCODE_MCP_PORT: String(this._mcpBridgePort),
+              ANYCODE_MCP_DEBUG: "1",
             },
           }],
         }
