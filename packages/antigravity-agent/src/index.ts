@@ -425,6 +425,11 @@ export class AntigravityAgent implements IChatAgent {
           const thinking = pr.thinking
           const text = pr.modifiedResponse || pr.response
           console.log(`[Stream] PLANNER step#${stepIndex} status=${step.status} thinking=${thinking?.length || 0} response=${text?.length || 0} keys=${Object.keys(pr).join(",")}`)
+          if (step.status === "CORTEX_STEP_STATUS_DONE") {
+            // Log full step for discovery (exclude large text fields)
+            const { thinking: _t, modifiedResponse: _r, response: _r2, ...rest } = pr
+            console.log(`[Stream] PLANNER DONE metadata: ${JSON.stringify(rest).slice(0, 1000)}`)
+          }
           if (thinking && thinking !== lastYieldedThinking) {
             if (!hasEmittedThinkingStart) {
               hasEmittedThinkingStart = true
@@ -543,6 +548,36 @@ export class AntigravityAgent implements IChatAgent {
           case "CORTEX_STEP_TYPE_ERROR_MESSAGE": {
             const errMsg = step.errorMessage?.error?.userErrorMessage || step.errorMessage?.error?.shortError || "Unknown error"
             pushEvent({ type: "error", error: errMsg })
+            break
+          }
+
+          case "CORTEX_STEP_TYPE_SEARCH_WEB": {
+            console.log(`[Stream] SEARCH_WEB data: ${JSON.stringify(step).slice(0, 800)}`)
+            const searchData = step.searchWeb || step.webSearch || {}
+            const query = searchData.query || searchData.searchQuery || ""
+            pushEvent({ type: "tool.start", toolCallId: step.stepId || String(stepIndex), toolName: "search_web", toolArgs: { query } })
+            if (step.status === "CORTEX_STEP_STATUS_DONE") {
+              const results = searchData.results || searchData.searchResults || []
+              pushEvent({
+                type: "tool.done", toolCallId: step.stepId || String(stepIndex),
+                toolName: "search_web", toolOutput: typeof results === "string" ? results : JSON.stringify(results),
+                toolTitle: `Search: ${query || "web"}`, toolMetadata: {},
+              })
+            }
+            break
+          }
+
+          case "CORTEX_STEP_TYPE_CODE_ACTION": {
+            console.log(`[Stream] CODE_ACTION data: ${JSON.stringify(step).slice(0, 500)}`)
+            const codeAction = step.codeAction || step.metadata?.toolCall || {}
+            const toolArgs = codeAction.argumentsJson ? JSON.parse(codeAction.argumentsJson) : codeAction
+            pushEvent({ type: "tool.start", toolCallId: step.stepId || String(stepIndex), toolName: "code_action", toolArgs })
+            if (step.status === "CORTEX_STEP_STATUS_DONE") {
+              pushEvent({
+                type: "tool.done", toolCallId: step.stepId || String(stepIndex),
+                toolName: "code_action", toolOutput: codeAction.result || "", toolTitle: "Code Action", toolMetadata: {},
+              })
+            }
             break
           }
 
