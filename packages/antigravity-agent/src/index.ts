@@ -836,9 +836,14 @@ export class AntigravityAgent implements IChatAgent {
       pipeServer.listen(pipePath, () => {
         this.pipeServer = pipeServer
 
+        // macOS binary uses --random_port, Linux binary uses --https_server_port 0
+        const portArgs = platform() === "darwin"
+          ? ["--random_port"]
+          : ["--https_server_port", "0"]
+
         const child = spawn(binaryPath, [
           "--csrf_token", this.lsCsrf,
-          "--https_server_port", "0",
+          ...portArgs,
           "--workspace_id", "anycode-agent",
           "--cloud_code_endpoint", "https://daily-cloudcode-pa.googleapis.com",
           "--app_data_dir", "antigravity",
