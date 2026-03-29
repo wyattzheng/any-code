@@ -234,7 +234,8 @@ export class AntigravityAgent implements IChatAgent {
 
       // Build cascade config with optional custom tools
       const plannerConfig: any = {
-        planModel: 291,  // MODEL_CLAUDE_4_OPUS_THINKING
+        planModel: 1008,
+        requestedModelId: 291,  // MODEL_CLAUDE_4_OPUS_THINKING
         maxOutputTokens: 8192,
         cascadeCanAutoRunCommands: true,
         toolConfig: {
@@ -496,12 +497,14 @@ export class AntigravityAgent implements IChatAgent {
           }
         }
 
-        // Detect completion: last step is CHECKPOINT with DONE
+        // Detect completion: no active steps remaining
         if (currentStepCount > 0) {
-          const lastStep = allSteps[allSteps.length - 1]
-          if (lastStep?.type === "CORTEX_STEP_TYPE_CHECKPOINT" && lastStep?.status === "CORTEX_STEP_STATUS_DONE") {
-            break
-          }
+          const hasActiveStep = allSteps.some((s: any) =>
+            s.status === "CORTEX_STEP_STATUS_GENERATING" ||
+            s.status === "CORTEX_STEP_STATUS_WAITING" ||
+            s.status === "CORTEX_STEP_STATUS_RUNNING"
+          )
+          if (!hasActiveStep) break
         }
       }
     } catch (err: any) {
