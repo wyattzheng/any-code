@@ -277,6 +277,7 @@ export class AntigravityAgent implements IChatAgent {
           plannerMode: "CONVERSATIONAL_PLANNER_MODE_DEFAULT",
           agenticMode: true,
         },
+        cascadeCanAutoRunCommands: true,
         toolConfig: {
           runCommand: {
             autoCommandConfig: {
@@ -286,6 +287,7 @@ export class AntigravityAgent implements IChatAgent {
           notifyUser: {
             artifactReviewMode: "ARTIFACT_REVIEW_MODE_TURBO",
           },
+          browserSubagent: { forceDisable: true },
         },
         requestedModel: {
           model: "MODEL_PLACEHOLDER_M26",
