@@ -218,26 +218,25 @@ export class AntigravityAgent implements IChatAgent {
     if (!this.initialized || !this.lsPort || !this._cascadeId) return []
     const limit = opts?.limit ?? 50
 
-    // If cascadeView exists, snapshot messages from its steps state
-    if (this._cascadeView) {
-      console.log(`[getSessionMessages] cascadeId=${this._cascadeId}, using CascadeView snapshot`)
+    // Ensure cascadeView exists
+    if (!this._cascadeView) {
+      this._cascadeView = new CascadeView({ rpc: this._rpc.bind(this), cascadeId: this._cascadeId })
+    }
+
+    // If view already has steps, return snapshot immediately
+    if (this._cascadeView.hasSteps) {
+      console.log(`[getSessionMessages] using CascadeView snapshot`)
       return this._cascadeView.getMessages(limit)
     }
 
-    // Fallback: use GetCascadeTrajectorySteps if no cascadeView yet
-    console.log(`[getSessionMessages] cascadeId=${this._cascadeId}, fallback to RPC`)
+    // Otherwise, connect stream to replay history
+    console.log(`[getSessionMessages] streaming history for cascadeId=${this._cascadeId}`)
     try {
-      const stepsRes = await this._rpc("GetCascadeTrajectorySteps", { cascadeId: this._cascadeId })
-      const steps = stepsRes.steps || []
-      // Create a temporary CascadeView to process the steps
-      const tempView = new CascadeView({ rpc: this._rpc.bind(this), cascadeId: this._cascadeId })
-      for (let i = 0; i < steps.length; i++) {
-        tempView.feedFrame({ update: { mainTrajectoryUpdate: { stepsUpdate: { indices: [i], steps: [steps[i]] } } } })
-      }
-      return tempView.getMessages(limit)
-    } catch {
-      return []
+      await this._connectStream(this._cascadeId)
+    } catch (e: any) {
+      console.log(`[getSessionMessages] stream failed: ${e.message}`)
     }
+    return this._cascadeView.getMessages(limit)
   }
 
   async *chat(input: string): AsyncGenerator<ChatAgentEvent, void, unknown> {
@@ -365,78 +364,12 @@ export class AntigravityAgent implements IChatAgent {
       view.on("event", onEvent)
 
       // Start streaming
-      const streamLoop = (async () => {
-        try {
-          const payload = JSON.stringify({ conversationId: cascadeId, subscriberId: randomUUID() })
-          const payloadBuf = Buffer.from(payload, "utf8")
-          const frame = Buffer.alloc(5 + payloadBuf.length)
-          frame[0] = 0x00
-          frame.writeUInt32BE(payloadBuf.length, 1)
-          payloadBuf.copy(frame, 5)
-
-          await new Promise<void>((resolve, reject) => {
-            const req = httpsRequest({
-              hostname: "127.0.0.1",
-              port: this.lsPort,
-              path: "/exa.language_server_pb.LanguageServerService/StreamAgentStateUpdates",
-              method: "POST",
-              headers: {
-                "Content-Type": "application/connect+json",
-                "connect-protocol-version": "1",
-                "x-codeium-csrf-token": this.lsCsrf,
-                "Content-Length": frame.length,
-              },
-              rejectUnauthorized: false,
-            }, (res) => {
-              console.log(`[Stream] connected, status=${res.statusCode}`)
-              let frameBuf = Buffer.alloc(0)
-
-              res.on("data", (chunk: Buffer) => {
-                frameBuf = Buffer.concat([frameBuf, chunk])
-                while (frameBuf.length >= 5) {
-                  const frameLen = frameBuf.readUInt32BE(1)
-                  const totalLen = 5 + frameLen
-                  if (frameBuf.length < totalLen) break
-                  const flags = frameBuf[0]
-                  const payload = frameBuf.slice(5, totalLen)
-                  frameBuf = frameBuf.slice(totalLen)
-
-                  if (flags === 0x02) {
-                    console.log(`[Stream] trailer (end)`)
-                    return resolve()
-                  }
-
-                  try {
-                    const json = JSON.parse(payload.toString("utf8"))
-                    const complete = view.feedFrame(json)
-                    if (complete) { resolve(); return }
-                  } catch (e: any) {
-                    console.log(`[Stream] parse error: ${e.message}`)
-                  }
-                }
-              })
-
-              res.on("end", () => resolve())
-              res.on("error", (err) => {
-                console.log(`[Stream] error: ${err.message}`)
-                resolve()
-              })
-            })
-
-            req.on("error", (err) => {
-              console.log(`[Stream] connect failed: ${err.message}`)
-              reject(err)
-            })
-
-            req.write(frame)
-            req.end()
-          })
-        } catch {
-          console.log(`[Cascade] Stream connection failed`)
-        }
+      this._connectStream(cascadeId).catch(() => {
+        console.log(`[Cascade] Stream connection failed`)
+      }).finally(() => {
         queueDone = true
         pushEvent(null)
-      })()
+      })
 
       // Consume events from queue and yield to caller
       try {
@@ -457,6 +390,75 @@ export class AntigravityAgent implements IChatAgent {
     }
 
     yield { type: "done" as const }
+  }
+
+  /** Open StreamAgentStateUpdates and feed frames to CascadeView until complete */
+  private _connectStream(cascadeId: string): Promise<void> {
+    const view = this._cascadeView!
+    return new Promise<void>((resolve, reject) => {
+      const payload = JSON.stringify({ conversationId: cascadeId, subscriberId: randomUUID() })
+      const payloadBuf = Buffer.from(payload, "utf8")
+      const frame = Buffer.alloc(5 + payloadBuf.length)
+      frame[0] = 0x00
+      frame.writeUInt32BE(payloadBuf.length, 1)
+      payloadBuf.copy(frame, 5)
+
+      const req = httpsRequest({
+        hostname: "127.0.0.1",
+        port: this.lsPort,
+        path: "/exa.language_server_pb.LanguageServerService/StreamAgentStateUpdates",
+        method: "POST",
+        headers: {
+          "Content-Type": "application/connect+json",
+          "connect-protocol-version": "1",
+          "x-codeium-csrf-token": this.lsCsrf,
+          "Content-Length": frame.length,
+        },
+        rejectUnauthorized: false,
+      }, (res) => {
+        console.log(`[Stream] connected, status=${res.statusCode}`)
+        let frameBuf = Buffer.alloc(0)
+
+        res.on("data", (chunk: Buffer) => {
+          frameBuf = Buffer.concat([frameBuf, chunk])
+          while (frameBuf.length >= 5) {
+            const frameLen = frameBuf.readUInt32BE(1)
+            const totalLen = 5 + frameLen
+            if (frameBuf.length < totalLen) break
+            const flags = frameBuf[0]
+            const payload = frameBuf.slice(5, totalLen)
+            frameBuf = frameBuf.slice(totalLen)
+
+            if (flags === 0x02) {
+              console.log(`[Stream] trailer (end)`)
+              return resolve()
+            }
+
+            try {
+              const json = JSON.parse(payload.toString("utf8"))
+              const complete = view.feedFrame(json)
+              if (complete) { resolve(); return }
+            } catch (e: any) {
+              console.log(`[Stream] parse error: ${e.message}`)
+            }
+          }
+        })
+
+        res.on("end", () => resolve())
+        res.on("error", (err) => {
+          console.log(`[Stream] error: ${err.message}`)
+          resolve()
+        })
+      })
+
+      req.on("error", (err) => {
+        console.log(`[Stream] connect failed: ${err.message}`)
+        reject(err)
+      })
+
+      req.write(frame)
+      req.end()
+    })
   }
 
   abort(): void {

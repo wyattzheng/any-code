@@ -38,6 +38,7 @@ export class CascadeView extends EventEmitter {
   }
 
   get cascadeId(): string { return this._cascadeId }
+  get hasSteps(): boolean { return this.steps.size > 0 }
 
   /** Reset incremental state for a new chat turn (keeps history steps) */
   reset(cascadeId: string): void {
@@ -306,88 +307,94 @@ export class CascadeView extends EventEmitter {
 
   // ─── Message snapshot ───
 
-  /** Build ChatMessage[] from internal steps state */
+  /** Build ChatMessage[] from internal steps state — matches live event order */
   getMessages(limit = 50): any[] {
     const messages: any[] = []
-    let currentAssistantParts: any[] = []
-    let currentAssistantText = ""
-    let currentThinking = ""
-    let hasAssistantContent = false
+    let parts: any[] = []
+    let lastText = ""
+    let lastThinking = ""
 
-    // Sort by stepIndex
+    const flushAssistant = (id: string, createdAt: number) => {
+      if (parts.length > 0) {
+        messages.push({ id, role: "assistant", createdAt, parts })
+        parts = []
+      }
+      lastText = ""
+      lastThinking = ""
+    }
+
+    // Sort by stepIndex — replay in exact same order
     const sortedEntries = [...this.steps.entries()].sort((a, b) => a[0] - b[0])
 
     for (const [idx, step] of sortedEntries) {
-      if (step.type === "CORTEX_STEP_TYPE_USER_INPUT") {
-        // Flush previous assistant message
-        if (hasAssistantContent) {
-          messages.push({
-            id: `assistant-${this._cascadeId}-${idx}`,
-            role: "assistant",
-            createdAt: new Date(step.metadata?.createdAt || 0).getTime() - 1,
-            parts: [
-              ...(currentThinking ? [{ type: "thinking", content: currentThinking }] : []),
-              ...(currentAssistantText ? [{ type: "text", content: currentAssistantText }] : []),
-              ...currentAssistantParts,
-            ],
-          })
-          currentAssistantParts = []
-          currentAssistantText = ""
-          currentThinking = ""
-          hasAssistantContent = false
-        }
+      const ts = new Date(step.metadata?.createdAt || 0).getTime()
 
+      if (step.type === "CORTEX_STEP_TYPE_USER_INPUT") {
+        flushAssistant(`assistant-${this._cascadeId}-${idx}`, ts - 1)
         const userText = step.userInput?.userResponse
           || step.userInput?.items?.map((it: any) => it.text).join("\n")
           || ""
         if (userText) {
-          messages.push({
-            id: `user-${this._cascadeId}-${idx}`,
-            role: "user",
-            createdAt: new Date(step.metadata?.createdAt || 0).getTime(),
-            text: userText,
-          })
+          messages.push({ id: `user-${this._cascadeId}-${idx}`, role: "user", createdAt: ts, text: userText })
         }
-      } else if (step.type === "CORTEX_STEP_TYPE_PLANNER_RESPONSE") {
-        hasAssistantContent = true
-        if (step.plannerResponse?.thinking) currentThinking = step.plannerResponse.thinking
-        const text = step.plannerResponse?.modifiedResponse || step.plannerResponse?.response
-        if (text) currentAssistantText = text
-      } else if (step.type === "CORTEX_STEP_TYPE_MCP_TOOL") {
-        hasAssistantContent = true
-        const toolName = step.mcpTool?.toolCall?.name || "unknown"
-        currentAssistantParts.push({ type: "tool", tool: toolName, content: "completed" })
+        continue
+      }
+
+      if (step.type === "CORTEX_STEP_TYPE_PLANNER_RESPONSE") {
+        const pr = step.plannerResponse || {}
+        const thinking = pr.thinking
+        const text = pr.modifiedResponse || pr.response
+
+        // Emit thinking (only first time)
+        if (thinking && thinking !== lastThinking) {
+          if (!lastThinking) {
+            const durationStr = typeof pr.thinkingDuration === "string" ? pr.thinkingDuration : "0"
+            const durationMs = Math.round((parseFloat(durationStr.replace("s", "")) || 0) * 1000)
+            parts.push({ type: "thinking", content: thinking, duration: durationMs })
+          }
+          lastThinking = thinking
+        }
+
+        // Flush previous text block and create new one with latest text
+        if (text && text !== lastText) {
+          // Remove previous text part (it was partial)
+          let textIdx = -1
+          for (let i = parts.length - 1; i >= 0; i--) {
+            if (parts[i].type === "text") { textIdx = i; break }
+          }
+          if (textIdx >= 0) parts.splice(textIdx, 1)
+          parts.push({ type: "text", content: text })
+          lastText = text
+        }
+        continue
+      }
+
+      // Tool steps — insert inline after current text
+      let toolName = ""
+      let toolContent = "completed"
+
+      if (step.type === "CORTEX_STEP_TYPE_MCP_TOOL") {
+        toolName = step.mcpTool?.toolCall?.name || "unknown"
       } else if (step.type === "CORTEX_STEP_TYPE_SEARCH_WEB") {
-        hasAssistantContent = true
-        currentAssistantParts.push({ type: "tool", tool: "search_web", content: "completed" })
+        toolName = "search_web"
       } else if (step.type === "CORTEX_STEP_TYPE_CODE_ACTION") {
-        hasAssistantContent = true
-        currentAssistantParts.push({ type: "tool", tool: "code_action", content: "completed" })
+        toolName = "code_action"
       } else if ([
         "CORTEX_STEP_TYPE_LIST_DIRECTORY", "CORTEX_STEP_TYPE_VIEW_FILE",
         "CORTEX_STEP_TYPE_RUN_COMMAND", "CORTEX_STEP_TYPE_WRITE_FILE",
         "CORTEX_STEP_TYPE_GREP", "CORTEX_STEP_TYPE_FIND",
         "CORTEX_STEP_TYPE_CREATE_FILE",
       ].includes(step.type)) {
-        hasAssistantContent = true
-        const toolName = step.type.replace("CORTEX_STEP_TYPE_", "").toLowerCase()
-        currentAssistantParts.push({ type: "tool", tool: toolName, content: "completed" })
+        toolName = step.type.replace("CORTEX_STEP_TYPE_", "").toLowerCase()
+      }
+
+      if (toolName) {
+        parts.push({ type: "tool", tool: toolName, content: toolContent })
       }
     }
 
-    // Flush final assistant message
-    if (hasAssistantContent) {
-      messages.push({
-        id: `assistant-${this._cascadeId}-final`,
-        role: "assistant",
-        createdAt: Date.now(),
-        parts: [
-          ...(currentThinking ? [{ type: "thinking", content: currentThinking }] : []),
-          ...(currentAssistantText ? [{ type: "text", content: currentAssistantText }] : []),
-          ...currentAssistantParts,
-        ],
-      })
-    }
+    // Flush remaining assistant parts
+    flushAssistant(`assistant-${this._cascadeId}-final`, Date.now())
 
     return messages.slice(-limit)
   }
