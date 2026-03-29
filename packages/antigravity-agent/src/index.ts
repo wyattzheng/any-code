@@ -322,6 +322,9 @@ export class AntigravityAgent implements IChatAgent {
         return
       }
 
+      // Notify server to persist the cascadeId
+      this._emitEvent("cascade.created", { cascadeId: this._cascadeId })
+
       // Build cascade config with optional custom tools
       const plannerConfig: any = {
         planModel: 1026,  // MODEL_PLACEHOLDER_M26 = Claude Opus 4.6 (Thinking)

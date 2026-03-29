@@ -227,14 +227,14 @@ When a user starts a new conversation without an active project, your first prio
 }
 
 /** Create a ChatAgentConfig for the given session context */
-function createChatAgentConfig(cfg: ServerConfig, directory: string, sessionId?: string, terminal?: TerminalProvider, preview?: PreviewProvider) {
+function createChatAgentConfig(cfg: ServerConfig, directory: string, sessionId?: string, terminal?: TerminalProvider, preview?: PreviewProvider, cascadeId?: string) {
   return {
     apiKey: cfg.apiKey,
     model: cfg.model,
     baseUrl: cfg.baseUrl,
     terminal,
     preview,
-    sessionId,
+    sessionId: cascadeId,  // cascadeId IS the agent's sessionId
     codeAgentOptions: createAgentConfig(cfg, directory, sessionId, terminal, preview),
   }
 }
@@ -277,6 +277,15 @@ function registerSession(cfg: ServerConfig, id: string, chatAgent: IChatAgent, d
     }
   })
 
+  // Listen for cascade creation to persist cascadeId for session history restoration
+  chatAgent.on("cascade.created", (data: any) => {
+    const cascadeId = data?.cascadeId
+    if (cascadeId) {
+      db.update("user_session", { op: "eq", field: "session_id", value: id }, { cascade_id: cascadeId })
+      console.log(`🔗  Session ${id} cascade_id saved: ${cascadeId}`)
+    }
+  })
+
   return entry
 }
 
@@ -289,10 +298,11 @@ async function resumeSession(cfg: ServerConfig, row: Record<string, unknown>): P
   if (cached) return cached
 
   const dir = (row.directory as string) || ""
+  const cascadeId = (row.cascade_id as string) || undefined
   const tp = getOrCreateTerminalProvider(sessionId)
   const pp = getOrCreatePreviewProvider(cfg, sessionId)
 
-  const chatAgent = await createChatAgent(cfg.agent, createChatAgentConfig(cfg, dir, sessionId, tp, pp))
+  const chatAgent = await createChatAgent(cfg.agent, createChatAgentConfig(cfg, dir, sessionId, tp, pp, cascadeId))
   await chatAgent.init()
 
   const entry = registerSession(cfg, sessionId, chatAgent, dir, row.time_created as number)
@@ -1803,6 +1813,11 @@ export async function startServer() {
       }
       console.log("✅  user_session migration complete")
     }
+    // Add cascade_id column if missing
+    if (!cols.some((c: any) => c.name === "cascade_id")) {
+      sharedStorage.exec(`ALTER TABLE "user_session" ADD COLUMN "cascade_id" TEXT NOT NULL DEFAULT ''`)
+      console.log("✅  Added cascade_id column to user_session")
+    }
   } else {
     // Table doesn't exist — create fresh
     sharedStorage.exec(`
@@ -1810,7 +1825,8 @@ export async function startServer() {
         "session_id"   TEXT PRIMARY KEY,
         "directory"    TEXT NOT NULL DEFAULT '',
         "time_created" INTEGER NOT NULL,
-        "is_default"   INTEGER NOT NULL DEFAULT 0
+        "is_default"   INTEGER NOT NULL DEFAULT 0,
+        "cascade_id"   TEXT NOT NULL DEFAULT ''
       )
     `)
   }
