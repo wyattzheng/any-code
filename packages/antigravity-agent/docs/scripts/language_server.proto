@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package exa.language_server_pb;
+
+message CascadeInputItem {
+  string text = 1;
+}
+
+message SendUserCascadeMessageRequest {
+  string cascade_id = 1;
+  repeated CascadeInputItem items = 2;
+}
+
+message SendUserCascadeMessageResponse {
+}
+
+message StartCascadeRequest {
+}
+
+message StartCascadeResponse {
+  string cascade_id = 1;
+}
+
+service LanguageServerService {
+  rpc SendUserCascadeMessage(SendUserCascadeMessageRequest) returns (SendUserCascadeMessageResponse);
+  rpc StartCascade(StartCascadeRequest) returns (StartCascadeResponse);
+}
