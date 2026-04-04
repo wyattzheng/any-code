@@ -14,7 +14,7 @@
 
 import { createServer as createHttpServer, type Server as HttpServer } from "http"
 import { request as httpsRequest } from "https"
-import { createServer as createNetServer, type Server as NetServer } from "net"
+import { createServer as createNetServer, type Server as NetServer, type Socket } from "net"
 import { spawn, type ChildProcess } from "child_process"
 import { tmpdir, platform, homedir } from "os"
 import { join, dirname } from "path"
@@ -90,13 +90,16 @@ export class AntigravityAgent implements IChatAgent {
   private accessToken = ""
   private refreshToken = ""
   private extServer: HttpServer | null = null
+  private extSockets = new Set<Socket>()
   private binaryChild: ChildProcess | null = null
-  private pipeServer: any = null
+  private pipeServer: NetServer | null = null
+  private pipeSockets = new Set<Socket>()
   private initialized = false
   private initPromise: Promise<void> | null = null
 
   // MCP tool bridge
   private _mcpBridgeServer: NetServer | null = null
+  private _mcpBridgeSockets = new Set<Socket>()
   private _mcpBridgePort = 0
   private _toolDefinitions: Array<{ name: string; description: string; inputSchema: any }> = []
   private _toolInfos = new Map<string, any>()
@@ -475,19 +478,103 @@ export class AntigravityAgent implements IChatAgent {
   }
 
   /** Destroy all managed resources */
-  destroy(): void {
+  async destroy(): Promise<void> {
     this.abort()
-    this.extServer?.close()
-    this.pipeServer?.close()
-    this._mcpBridgeServer?.close()
+    await this._terminateBinary()
+    await Promise.all([
+      this._closeServer(this.extServer, this.extSockets),
+      this._closeServer(this.pipeServer, this.pipeSockets),
+      this._closeServer(this._mcpBridgeServer, this._mcpBridgeSockets),
+    ])
     this.extServer = null
     this.pipeServer = null
     this._mcpBridgeServer = null
+    this.extSockets.clear()
+    this.pipeSockets.clear()
+    this._mcpBridgeSockets.clear()
+    this.lsPort = 0
+    this._mcpBridgePort = 0
+    this.binaryChild = null
+    this._cascadeView = null
+    this._oauthInjected = null
+    this._oauthInjectedResolve = null
+    this.eventHandlers.clear()
     this.initialized = false
     this.initPromise = null
   }
 
   // ─── Private Methods ───────────────────────────────────────
+
+  private _trackServerSockets(server: HttpServer | NetServer, sockets: Set<Socket>) {
+    server.on("connection", (socket: Socket) => {
+      sockets.add(socket)
+      socket.on("close", () => sockets.delete(socket))
+    })
+  }
+
+  private async _closeServer(server: HttpServer | NetServer | null, sockets: Set<Socket>) {
+    for (const socket of sockets) {
+      try { socket.destroy() } catch { /* ignore */ }
+    }
+    sockets.clear()
+    if (!server) return
+    await new Promise<void>((resolve) => {
+      let settled = false
+      const finish = () => {
+        if (settled) return
+        settled = true
+        resolve()
+      }
+      const timer = setTimeout(finish, 1000)
+      try {
+        server.close(() => {
+          clearTimeout(timer)
+          finish()
+        })
+      } catch {
+        clearTimeout(timer)
+        finish()
+      }
+    })
+  }
+
+  private async _terminateBinary() {
+    const child = this.binaryChild
+    if (!child) return
+    this.binaryChild = null
+    await new Promise<void>((resolve) => {
+      let settled = false
+      const finish = () => {
+        if (settled) return
+        settled = true
+        resolve()
+      }
+      const onExit = () => {
+        clearTimeout(forceKillTimer)
+        finish()
+      }
+      const forceKillTimer = setTimeout(() => {
+        try {
+          if (child.exitCode === null) child.kill("SIGKILL")
+        } catch { /* ignore */ }
+        setTimeout(finish, 250)
+      }, 1500)
+
+      child.once("exit", onExit)
+      child.once("close", onExit)
+
+      if (child.exitCode !== null) {
+        onExit()
+        return
+      }
+
+      try {
+        child.kill("SIGTERM")
+      } catch {
+        onExit()
+      }
+    })
+  }
 
   /** Start TCP server for MCP bridge tool call forwarding */
   private _startMcpBridge(): Promise<void> {
@@ -509,6 +596,7 @@ export class AntigravityAgent implements IChatAgent {
           }
         })
       })
+      this._trackServerSockets(server, this._mcpBridgeSockets)
       server.listen(0, "127.0.0.1", () => {
         const addr = server.address() as any
         this._mcpBridgePort = addr.port
@@ -658,6 +746,7 @@ export class AntigravityAgent implements IChatAgent {
           res.end(Buffer.alloc(0))
         })
       })
+      this._trackServerSockets(server, this.extSockets)
 
       server.listen(0, "127.0.0.1", () => {
         const port = (server.address() as any).port
@@ -674,6 +763,7 @@ export class AntigravityAgent implements IChatAgent {
         `ag_agent_${randomBytes(4).toString("hex")}`,
       )
       const pipeServer = createNetServer(() => { })
+      this._trackServerSockets(pipeServer, this.pipeSockets)
 
       pipeServer.listen(pipePath, () => {
         this.pipeServer = pipeServer

@@ -1,10 +1,34 @@
+import fs from "fs";
+import os from "os";
+import path from "path";
 import { ClaudeCodeAgent } from "./src/chat-agent.ts";
 
+function loadCurrentAccount() {
+  try {
+    const settingsPath = path.join(os.homedir(), ".anycode", "settings.json");
+    const settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+    const accounts = Array.isArray(settings.accounts) ? settings.accounts : [];
+    const currentAccount = accounts.find((account) => account.id === settings.currentAccountId) || accounts[0] || null;
+    return {
+      model: currentAccount?.MODEL || "qwen3-max-2026-01-23",
+      apiKey: currentAccount?.API_KEY || "",
+      baseUrl: currentAccount?.BASE_URL || "",
+    };
+  } catch {
+    return {
+      model: "qwen3-max-2026-01-23",
+      apiKey: "",
+      baseUrl: "",
+    };
+  }
+}
+
 async function main() {
+  const config = loadCurrentAccount();
   const agent = new ClaudeCodeAgent({
-    model: process.env.MODEL || "qwen3-max-2026-01-23",
-    apiKey: process.env.API_KEY || "",
-    baseUrl: process.env.BASE_URL || "",
+    model: config.model,
+    apiKey: config.apiKey,
+    baseUrl: config.baseUrl,
   });
 
   const ctx = {

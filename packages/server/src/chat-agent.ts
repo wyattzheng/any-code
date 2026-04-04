@@ -4,10 +4,10 @@
  * Abstracts over different agent backends (AnyCode native, Claude Code SDK, etc.)
  * so that the server's WebSocket chat handler only consumes a single interface.
  *
- * Controlled by the AGENT environment variable:
- *   AGENT=anycode     → AnyCodeAgent (default, wraps CodeAgent from @any-code/agent)
- *   AGENT=claudecode  → ClaudeCodeAgent (from @any-code/claude-code-agent)
- *   AGENT=codex       → CodexAgent (from @any-code/codex-agent)
+ * The active backend is selected from the current account in settings.json:
+ *   anycode      → AnyCodeAgent (default, wraps CodeAgent from @any-code/agent)
+ *   claudecode   → ClaudeCodeAgent (from @any-code/claude-code-agent)
+ *   codex        → CodexAgent (from @any-code/codex-agent)
  */
 
 import { CodeAgent, type CodeAgentEvent, type CodeAgentOptions, type TerminalProvider, type PreviewProvider } from "@any-code/agent"
@@ -54,8 +54,16 @@ export class AnyCodeAgent implements IChatAgent {
     yield* this._codeAgent.chat(input)
   }
 
-  abort(): void {
-    this._codeAgent.abort()
+  async abort(): Promise<void> {
+    if (!this._initialized) return
+    await this._codeAgent.abort()
+  }
+
+  async destroy(): Promise<void> {
+    if (!this._initialized) return
+    try {
+      await this._codeAgent.abort()
+    } catch { /* ignore */ }
   }
 
   on(event: string, handler: (data: any) => void): void {
@@ -79,10 +87,123 @@ export class AnyCodeAgent implements IChatAgent {
   }
 }
 
+interface NoAgentMessageRecord {
+  role: "user" | "assistant"
+  text: string
+  createdAt: number
+}
+
+interface NoAgentStore {
+  load(limit: number): Promise<NoAgentMessageRecord[]> | NoAgentMessageRecord[]
+  append(message: NoAgentMessageRecord): Promise<void> | void
+}
+
+/**
+ * NoAgent — placeholder agent used when no account is configured.
+ * Keeps the window/session alive and responds with a setup hint.
+ */
+export class NoAgent implements IChatAgent {
+  readonly name: string
+  private readonly config: ChatAgentConfig & { noAgentStore?: NoAgentStore, noAgentSessionId?: string }
+  private readonly store?: NoAgentStore
+  private readonly _sessionId: string
+  private _initialized = false
+  private _history: NoAgentMessageRecord[] = []
+
+  constructor(config: ChatAgentConfig) {
+    this.config = config as ChatAgentConfig & { noAgentStore?: NoAgentStore, noAgentSessionId?: string }
+    this.store = this.config.noAgentStore
+    this.name = config.name || "No Agent"
+    this._sessionId = this.config.noAgentSessionId || `noagent-${Date.now()}`
+  }
+
+  get sessionId(): string {
+    return this._sessionId
+  }
+
+  async init(): Promise<void> {
+    if (this._initialized) return
+    this._initialized = true
+    const loaded = await this.store?.load(200)
+    this._history = Array.isArray(loaded) ? loaded : []
+  }
+
+  on(_event: string, _handler: (data: any) => void): void {
+    // NoAgent doesn't emit runtime events
+  }
+
+  setWorkingDirectory(_dir: string): void {
+    // No-op
+  }
+
+  async getUsage(): Promise<any> {
+    return null
+  }
+
+  async getContext(): Promise<any> {
+    return null
+  }
+
+  async getSessionMessages(opts: { limit: number }): Promise<any> {
+    await this.init()
+    const limit = Math.max(0, opts?.limit ?? 30)
+    return this._history.slice(-limit).map((message, index) => (
+      message.role === "user"
+        ? {
+          id: `${this._sessionId}-user-${index}`,
+          role: "user",
+          text: message.text,
+          createdAt: message.createdAt,
+        }
+        : {
+          id: `${this._sessionId}-assistant-${index}`,
+          role: "assistant",
+          parts: [{ type: "text", content: message.text }],
+          createdAt: message.createdAt,
+        }
+    ))
+  }
+
+  abort(): void {
+    // No-op
+  }
+
+  destroy(): void {
+    this._history = []
+  }
+
+  async *chat(input: string): AsyncGenerator<ChatAgentEvent, void, unknown> {
+    await this.init()
+
+    const userMessage: NoAgentMessageRecord = {
+      role: "user",
+      text: input,
+      createdAt: Date.now(),
+    }
+    this._history.push(userMessage)
+    await this.store?.append(userMessage)
+
+    const assistantText = "当前还没有配置可用账号。请先打开设置，添加账号的 AGENT、PROVIDER、MODEL、API_KEY 和 BASE_URL，然后再继续对话。"
+    const assistantMessage: NoAgentMessageRecord = {
+      role: "assistant",
+      text: assistantText,
+      createdAt: Date.now(),
+    }
+    this._history.push(assistantMessage)
+    await this.store?.append(assistantMessage)
+
+    yield { type: "text.delta", content: assistantText }
+    yield { type: "done" }
+  }
+}
+
 // ── Factory ──────────────────────────────────────────────────────────────
 
 /** Create the appropriate IChatAgent based on agent type string */
 export async function createChatAgent(agentType: string, config: ChatAgentConfig): Promise<IChatAgent> {
+  if (agentType === "noagent") {
+    return new NoAgent(config)
+  }
   if (agentType === "claudecode") {
     const { ClaudeCodeAgent } = await import("@any-code/claude-code-agent")
     return new ClaudeCodeAgent(config)

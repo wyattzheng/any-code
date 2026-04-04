@@ -5,11 +5,11 @@
  *   1. Chat is handled via WebSocket (broadcast to all clients)
  *   2. Frontend is served separately by the app package
  *
+ * Runtime config:
+ *   ~/.anycode/settings.json
+ *     - current account: AGENT / PROVIDER / MODEL / API_KEY / BASE_URL
+ *
  * Environment variables:
- *   PROVIDER    — LLM provider id  (default: "anthropic")
- *   MODEL       — LLM model id     (default: "claude-sonnet-4-20250514")
- *   API_KEY     — Provider API key  (required)
- *   BASE_URL    — Custom API base URL (optional)
  *   PORT        — HTTP port         (default: 3210)
  *   TLS_CERT    — Path to TLS certificate file (optional, enables HTTPS)
  *   TLS_KEY     — Path to TLS private key file  (optional, enables HTTPS)
@@ -33,6 +33,7 @@ import { WebSocketServer, WebSocket as WS } from "ws"
 // @ts-expect-error — @lydell/node-pty has types but exports config doesn't expose them
 import * as pty from "@lydell/node-pty"
 import { SqlJsStorage, NodeFS, NodeSearchProvider } from "@any-code/utils"
+import { DEFAULT_MODEL, SettingsModel, SettingsStore, normalizeString, type UserSettingsFile } from "@any-code/settings"
 import { watch as chokidarWatch, type FSWatcher as ChokidarWatcher } from "chokidar"
 import { createChatAgent, type IChatAgent } from "./chat-agent"
 
@@ -40,6 +41,11 @@ import { createChatAgent, type IChatAgent } from "./chat-agent"
 
 const ANYCODE_DIR = path.join(os.homedir(), ".anycode")
 const DB_PATH = path.join(ANYCODE_DIR, "data.db")
+const NO_AGENT_TYPE = "noagent"
+const settingsStore = new SettingsStore({ anycodeDir: ANYCODE_DIR })
+const API_ERROR_CODES = {
+  SETTINGS_ACCOUNT_INCOMPLETE: "SETTINGS_ACCOUNT_INCOMPLETE",
+} as const
 interface ServerConfig {
   provider: string
   model: string
@@ -55,25 +61,36 @@ interface ServerConfig {
   agent: string
 }
 
+function readUserSettingsFile(): UserSettingsFile {
+  return settingsStore.read().toJSON()
+}
+
+function writeUserSettingsFile(settings: UserSettingsFile) {
+  return settingsStore.write(settings).toJSON()
+}
+
+function applySettingsToConfig(cfg: ServerConfig, settings: UserSettingsFile) {
+  const runtime = new SettingsModel(settings).resolveRuntime()
+  cfg.userSettings = runtime.userSettings
+  cfg.agent = runtime.agent
+  cfg.provider = runtime.provider
+  cfg.apiKey = runtime.apiKey
+  cfg.baseUrl = runtime.baseUrl
+  cfg.model = runtime.model
+}
+
 function loadConfig(): ServerConfig {
-  let userSettings: Record<string, any> = {}
-  try {
-    userSettings = JSON.parse(fs.readFileSync(path.join(ANYCODE_DIR, "settings.json"), "utf-8"))
-  } catch { }
-  const agent = process.env.AGENT ?? userSettings.AGENT ?? "anycode"
-  const provider = process.env.PROVIDER ?? userSettings.PROVIDER ?? "anthropic";
-  const model = process.env.MODEL ?? userSettings.MODEL ?? "claude-sonnet-4-20250514"
-  const apiKey = process.env.API_KEY ?? userSettings.API_KEY ?? ""
-  const baseUrl = process.env.BASE_URL ?? userSettings.BASE_URL ?? ""
+  const runtime = settingsStore.read().resolveRuntime()
+  const userSettings = runtime.userSettings
+  const agent = runtime.agent
+  const provider = runtime.provider
+  const model = runtime.model
+  const apiKey = runtime.apiKey
+  const baseUrl = runtime.baseUrl
   const port = parseInt(process.env.PORT ?? "3210", 10)
   const previewPort = parseInt(process.env.PREVIEW_PORT ?? String(port + 1), 10)
-  if (!provider || !model || !baseUrl) {
-    console.error("❌  Missing PROVIDER, MODEL, BASE_URL")
-    process.exit(1)
-  }
-  if (!apiKey) {
-    console.error("❌  Missing API_KEY")
-    console.error("Run 'anycode start' to configure, or set API_KEY env var.")
+  if (!provider) {
+    console.error("❌  Missing PROVIDER")
     process.exit(1)
   }
   const appDist = resolveAppDist()
@@ -169,10 +186,24 @@ class NodeGitProvider {
 interface SessionEntry {
   id: string
   chatAgent: IChatAgent
+  agentType: string
+  runtimeAgentType: string
   directory: string  // empty = no project directory set yet
   title: string      // session title (populated when agent generates it)
   createdAt: number
   state: SessionStateModel
+}
+
+interface NoAgentMessageRecord {
+  role: "user" | "assistant"
+  text: string
+  createdAt: number
+}
+
+interface SessionAgentBinding {
+  chatAgent: IChatAgent
+  agentType: string
+  runtimeAgentType: string
 }
 
 // In-memory agent cache, keyed by session ID
@@ -184,7 +215,7 @@ const sessions = new Map<string, SessionEntry>()
 let sharedStorage: SqlJsStorage
 let db: NoSqlDb
 
-function createAgentConfig(cfg: ServerConfig, directory: string, sessionId?: string, terminal?: TerminalProvider, preview?: PreviewProvider) {
+function createAgentConfig(cfg: ServerConfig, directory: string, resumeToken?: string, terminal?: TerminalProvider, preview?: PreviewProvider) {
   return {
     directory: directory,
     fs: new NodeFS(),
@@ -193,7 +224,7 @@ function createAgentConfig(cfg: ServerConfig, directory: string, sessionId?: str
     shell: new NodeShellProvider(),
     git: new NodeGitProvider(),
     dataPath: makePaths(),
-    ...(sessionId ? { sessionId } : {}),
+    ...(resumeToken ? { sessionId: resumeToken } : {}),
     ...(terminal ? { terminal } : {}),
     ...(preview ? { preview } : {}),
     tools: [
@@ -226,34 +257,117 @@ When a user starts a new conversation without an active project, your first prio
   }
 }
 
-/** Create a ChatAgentConfig for the given session context */
-function createChatAgentConfig(cfg: ServerConfig, directory: string, sessionId?: string, terminal?: TerminalProvider, preview?: PreviewProvider, cascadeId?: string) {
+/** Create a ChatAgentConfig for the given session context. */
+function createChatAgentConfig(cfg: ServerConfig, directory: string, terminal?: TerminalProvider, preview?: PreviewProvider, resumeToken?: string) {
   return {
     apiKey: cfg.apiKey,
     model: cfg.model,
     baseUrl: cfg.baseUrl,
     terminal,
     preview,
-    sessionId: cascadeId,  // cascadeId IS the agent's sessionId
-    codeAgentOptions: createAgentConfig(cfg, directory, sessionId, terminal, preview),
+    sessionId: resumeToken,
+    codeAgentOptions: createAgentConfig(cfg, directory, resumeToken, terminal, preview),
   }
 }
 
-/** Wire up agent events and register in sessions map. */
-function registerSession(cfg: ServerConfig, id: string, chatAgent: IChatAgent, directory: string, createdAt: number): SessionEntry {
-  const entry: SessionEntry = {
-    id,
-    chatAgent,
-    directory,
-    createdAt,
-    title: "",
-    state: new SessionStateModel(id, cfg)
+function getPreferredAgentType(agentType: string | undefined) {
+  return normalizeString(agentType) ?? "anycode"
+}
+
+function createNoAgentStore(sessionId: string) {
+  return {
+    async load(limit: number): Promise<NoAgentMessageRecord[]> {
+      return getPersistedNoAgentMessages(sessionId, limit)
+    },
+    async append(message: NoAgentMessageRecord) {
+      db.insert("user_session_message", {
+        session_id: sessionId,
+        role: message.role,
+        text: message.text,
+        time_created: message.createdAt,
+      })
+    },
   }
-  sessions.set(id, entry)
+}
 
-  // Kick off initial state compute
-  entry.state.updateFileSystem(directory)
+function getPersistedNoAgentMessages(sessionId: string, limit: number): NoAgentMessageRecord[] {
+  const rows = db.findMany("user_session_message", {
+    filter: { op: "eq", field: "session_id", value: sessionId },
+    orderBy: [{ field: "id", direction: "desc" }],
+    limit,
+  })
+  return rows.reverse().map((row) => ({
+    role: row.role === "assistant" ? "assistant" : "user",
+    text: typeof row.text === "string" ? row.text : "",
+    createdAt: typeof row.time_created === "number" ? row.time_created : Date.now(),
+  }))
+}
 
+function mergeSessionHistoryMessages(noAgentMessages: NoAgentMessageRecord[], runtimeMessages: any[], limit: number) {
+  const normalizedNoAgent = noAgentMessages.map((message, index) => (
+    message.role === "user"
+      ? {
+        id: `noagent-user-${index}`,
+        role: "user",
+        text: message.text,
+        createdAt: message.createdAt,
+      }
+      : {
+        id: `noagent-assistant-${index}`,
+        role: "assistant",
+        parts: [{ type: "text", content: message.text }],
+        createdAt: message.createdAt,
+      }
+  ))
+
+  return [...normalizedNoAgent, ...(Array.isArray(runtimeMessages) ? runtimeMessages : [])]
+    .map((message, index) => ({
+      ...message,
+      id: typeof message?.id === "string" && message.id ? message.id : `merged-${index}`,
+      createdAt: typeof message?.createdAt === "number" ? message.createdAt : index,
+    }))
+    .sort((a, b) => {
+      if (a.createdAt === b.createdAt) return String(a.id).localeCompare(String(b.id))
+      return a.createdAt - b.createdAt
+    })
+    .slice(-limit)
+}
+
+async function createSessionAgentBinding(
+  cfg: ServerConfig,
+  sessionId: string,
+  directory: string,
+  terminal: TerminalProvider | undefined,
+  preview: PreviewProvider | undefined,
+  preferredAgentType: string,
+  resumeToken?: string,
+): Promise<SessionAgentBinding> {
+  if (!cfg.apiKey) {
+    const chatAgent = await createChatAgent(NO_AGENT_TYPE, {
+      ...createChatAgentConfig(cfg, directory, terminal, preview),
+      name: "No Agent",
+      noAgentSessionId: sessionId,
+      noAgentStore: createNoAgentStore(sessionId),
+    } as any)
+    await chatAgent.init()
+    return {
+      chatAgent,
+      agentType: preferredAgentType,
+      runtimeAgentType: NO_AGENT_TYPE,
+    }
+  }
+
+  const chatAgent = await createChatAgent(cfg.agent, createChatAgentConfig(cfg, directory, terminal, preview, resumeToken))
+  await chatAgent.init()
+  return {
+    chatAgent,
+    agentType: cfg.agent,
+    runtimeAgentType: cfg.agent,
+  }
+}
+
+function bindSessionAgentEvents(cfg: ServerConfig, entry: SessionEntry, chatAgent: IChatAgent) {
+  const id = entry.id
   // Listen for directory.set events from the agent
   chatAgent.on("directory.set", (data: any) => {
     const dir = data.directory
@@ -279,14 +393,121 @@ function registerSession(cfg: ServerConfig, id: string, chatAgent: IChatAgent, d
 
   // Listen for cascade creation to persist cascadeId for session history restoration
   chatAgent.on("cascade.created", (data: any) => {
-    const cascadeId = data?.cascadeId
-    if (cascadeId) {
-      db.update("user_session", { op: "eq", field: "session_id", value: id }, { cascade_id: cascadeId })
-      console.log(`🔗  Session ${id} cascade_id saved: ${cascadeId}`)
-    }
+    persistResumeTokenForWindow(id, entry.runtimeAgentType, data?.cascadeId)
   })
+}
+
+/** Wire up agent events and register in sessions map. */
+function registerSession(
+  cfg: ServerConfig,
+  id: string,
+  chatAgent: IChatAgent,
+  directory: string,
+  createdAt: number,
+  agentType: string,
+  runtimeAgentType: string,
+): SessionEntry {
+  const entry: SessionEntry = {
+    id,
+    chatAgent,
+    agentType,
+    runtimeAgentType,
+    directory,
+    createdAt,
+    title: "",
+    state: new SessionStateModel(id, cfg)
+  }
+  sessions.set(id, entry)
+
+  // Kick off initial state compute
+  entry.state.updateFileSystem(directory)
+  bindSessionAgentEvents(cfg, entry, chatAgent)
 
   return entry
+}
+
+async function destroyChatAgent(chatAgent: IChatAgent) {
+  try { await chatAgent.abort() } catch { /* ignore */ }
+  if (typeof chatAgent.destroy === "function") {
+    try { await chatAgent.destroy() } catch { /* ignore */ }
+  }
+}
+
+function getUsableResumeToken(agentType: string, token: string | undefined) {
+  if (!token) return undefined
+  if (agentType === NO_AGENT_TYPE) return undefined
+  if (agentType === "claudecode" && token.startsWith("claude-")) return undefined
+  if (agentType === "codex" && token.startsWith("codex-")) return undefined
+  return token
+}
+
+function tryGetAgentSessionId(chatAgent: IChatAgent) {
+  try {
+    return chatAgent.sessionId || undefined
+  } catch {
+    return undefined
+  }
+}
+
+function persistResumeTokenForWindow(windowId: string, agentType: string, token: string | undefined) {
+  const resumeToken = getUsableResumeToken(agentType, token)
+  if (!resumeToken) return
+  db.update("user_session", { op: "eq", field: "session_id", value: windowId }, { cascade_id: resumeToken })
+  console.log(`🔗  Window ${windowId} resume token saved: ${resumeToken}`)
+}
+
+function persistAgentTypeForWindow(windowId: string, agentType: string) {
+  db.update("user_session", { op: "eq", field: "session_id", value: windowId }, { agent_type: agentType })
+}
+
+function getErrorCode(error: unknown) {
+  return typeof error === "object" && error !== null && typeof (error as { code?: unknown }).code === "string"
+    ? (error as { code: string }).code
+    : undefined
+}
+
+async function replaceSessionAgent(cfg: ServerConfig, entry: SessionEntry, keepResumeToken: boolean) {
+  const previousAgent = entry.chatAgent
+  const row = db.findOne("user_session", { op: "eq", field: "session_id", value: entry.id }) as any
+  const preferredAgentType = getPreferredAgentType(typeof row?.agent_type === "string" ? row.agent_type : entry.agentType)
+  const storedResumeToken = getUsableResumeToken(preferredAgentType, typeof row?.cascade_id === "string" ? row.cascade_id : undefined)
+  const liveResumeToken = getUsableResumeToken(entry.runtimeAgentType, tryGetAgentSessionId(previousAgent))
+  const shouldKeepResumeToken = !cfg.apiKey || keepResumeToken
+  const resumeToken = shouldKeepResumeToken
+    ? (storedResumeToken || liveResumeToken)
+    : undefined
+
+  if (!shouldKeepResumeToken) {
+    db.update("user_session", { op: "eq", field: "session_id", value: entry.id }, { cascade_id: "" })
+  }
+
+  const tp = getOrCreateTerminalProvider(entry.id)
+  const pp = getOrCreatePreviewProvider(cfg, entry.id)
+  const next = await createSessionAgentBinding(cfg, entry.id, entry.directory, tp, pp, preferredAgentType, resumeToken)
+
+  entry.chatAgent = next.chatAgent
+  entry.agentType = next.agentType
+  entry.runtimeAgentType = next.runtimeAgentType
+  persistAgentTypeForWindow(entry.id, entry.agentType)
+  bindSessionAgentEvents(cfg, entry, next.chatAgent)
+
+  if (entry.directory) {
+    try { next.chatAgent.setWorkingDirectory(entry.directory) } catch { /* ignore */ }
+    watchDirectory(cfg, entry.id, entry.directory)
+  }
+
+  persistResumeTokenForWindow(entry.id, entry.runtimeAgentType, tryGetAgentSessionId(next.chatAgent))
+  await destroyChatAgent(previousAgent)
+}
+
+async function applyAgentSwitchToSessions(cfg: ServerConfig) {
+  const entries = Array.from(sessions.values())
+  for (const entry of entries) {
+    sessionChatAbort.get(entry.id)?.()
+    sessionChatAbort.delete(entry.id)
+    entry.state.setChatBusy(false)
+    await replaceSessionAgent(cfg, entry, !cfg.apiKey || entry.agentType === cfg.agent)
+  }
 }
 
 /**
@@ -298,19 +519,21 @@ async function resumeSession(cfg: ServerConfig, row: Record<string, unknown>): P
   if (cached) return cached
 
   const dir = (row.directory as string) || ""
-  const cascadeId = (row.cascade_id as string) || undefined
-  console.log(`♻️  Resuming session ${sessionId}, cascade_id=${cascadeId || '(none)'}, dir=${dir || '(none)'}`) 
+  const preferredAgentType = getPreferredAgentType(typeof row.agent_type === "string" ? row.agent_type : cfg.agent)
+  const resumeToken = getUsableResumeToken(preferredAgentType, (row.cascade_id as string) || undefined)
+  console.log(`♻️  Resuming session ${sessionId}, resume_token=${resumeToken || '(none)'}, dir=${dir || '(none)'}`)
   const tp = getOrCreateTerminalProvider(sessionId)
   const pp = getOrCreatePreviewProvider(cfg, sessionId)
 
-  const chatAgent = await createChatAgent(cfg.agent, createChatAgentConfig(cfg, dir, sessionId, tp, pp, cascadeId))
-  await chatAgent.init()
+  const next = await createSessionAgentBinding(cfg, sessionId, dir, tp, pp, preferredAgentType, resumeToken)
 
-  const entry = registerSession(cfg, sessionId, chatAgent, dir, row.time_created as number)
+  const entry = registerSession(cfg, sessionId, next.chatAgent, dir, row.time_created as number, next.agentType, next.runtimeAgentType)
+  persistAgentTypeForWindow(sessionId, entry.agentType)
   if (dir) {
-    try { chatAgent.setWorkingDirectory(dir) } catch { /* already set */ }
+    try { next.chatAgent.setWorkingDirectory(dir) } catch { /* already set */ }
     watchDirectory(cfg, sessionId, dir)
   }
+  persistResumeTokenForWindow(sessionId, entry.runtimeAgentType, tryGetAgentSessionId(next.chatAgent))
   console.log(`♻️  Session ${sessionId} resumed`)
   return entry
 }
@@ -319,31 +542,26 @@ async function resumeSession(cfg: ServerConfig, row: Record<string, unknown>): P
  * Create a brand new session/window.
  */
 async function createNewWindow(cfg: ServerConfig, isDefault = false): Promise<SessionEntry> {
-  const tempId = `temp-${Date.now()}`
-  const tp = getOrCreateTerminalProvider(tempId)
-  const pp = getOrCreatePreviewProvider(cfg, tempId)
-
-  const chatAgent = await createChatAgent(cfg.agent, createChatAgentConfig(cfg, "", undefined, tp, pp))
-  await chatAgent.init()
-
-  // Window ID is always server-generated (separate from agent's cascade sessionId)
+  // Window ID is always server-generated (separate from the agent resume token)
   const sessionId = crypto.randomUUID()
+  const tp = getOrCreateTerminalProvider(sessionId)
+  const pp = getOrCreatePreviewProvider(cfg, sessionId)
+  const next = await createSessionAgentBinding(cfg, sessionId, "", tp, pp, getPreferredAgentType(cfg.agent))
   const now = Date.now()
-  terminalProviders.delete(tempId)
-  terminalProviders.set(sessionId, tp)
-  previewProviders.delete(tempId)
-  previewProviders.set(sessionId, pp)
-    ; (tp as any).sessionId = sessionId
-    ; (pp as any).sessionId = sessionId
-  const entry = registerSession(cfg, sessionId, chatAgent, "", now)
+  ; (tp as any).sessionId = sessionId
+  ; (pp as any).sessionId = sessionId
+  const entry = registerSession(cfg, sessionId, next.chatAgent, "", now, next.agentType, next.runtimeAgentType)
 
   db.insert("user_session", {
     session_id: sessionId,
     directory: "",
     time_created: now,
     is_default: isDefault ? 1 : 0,
+    cascade_id: "",
+    agent_type: entry.agentType,
   })
 
+  persistResumeTokenForWindow(sessionId, entry.runtimeAgentType, tryGetAgentSessionId(next.chatAgent))
   console.log(`✅  Window ${sessionId} created${isDefault ? " (default)" : ""}`)
   return entry
 }
@@ -371,6 +589,9 @@ async function getOrCreateSession(cfg: ServerConfig): Promise<SessionEntry> {
  */
 async function getAllWindows(cfg: ServerConfig): Promise<SessionEntry[]> {
   const rows = db.findMany("user_session", {})
+  if (rows.length === 0) {
+    return [await createNewWindow(cfg, true)]
+  }
   const entries: SessionEntry[] = []
   for (const row of rows) {
     entries.push(await resumeSession(cfg, row))
@@ -390,6 +611,7 @@ function deleteWindow(sessionId: string): boolean {
   const session = sessions.get(sessionId)
   if (session) {
     sessions.delete(sessionId)
+    destroyChatAgent(session.chatAgent).catch(() => { /* ignore */ })
   }
   const tp = terminalProviders.get(sessionId)
   if (tp && tp.exists()) {
@@ -399,6 +621,7 @@ function deleteWindow(sessionId: string): boolean {
 
   // Remove from DB
   db.remove("user_session", { op: "eq", field: "session_id", value: sessionId })
+  db.remove("user_session_message", { op: "eq", field: "session_id", value: sessionId })
   console.log(`🗑  Window ${sessionId} deleted`)
   return true
 }
@@ -1523,6 +1746,29 @@ function createServer(cfg: ServerConfig, handler: http.RequestListener): http.Se
   return http.createServer(handler)
 }
 
+async function readJsonBody(req: http.IncomingMessage) {
+  const chunks: Buffer[] = []
+  for await (const chunk of req) chunks.push(chunk as Buffer)
+  if (chunks.length === 0) return {}
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString())
+  } catch {
+    return {}
+  }
+}
+
+function sendJson(res: http.ServerResponse, status: number, body: unknown) {
+  if (res.writableEnded) return
+  res.writeHead(status, { "Content-Type": "application/json" })
+  res.end(JSON.stringify(body))
+}
+
+function sendErrorJson(res: http.ServerResponse, status: number, error: unknown, fallbackMessage = "Request failed") {
+  const message = error instanceof Error ? error.message : fallbackMessage
+  const code = getErrorCode(error)
+  sendJson(res, status, code ? { error: message, code } : { error: message })
+}
+
 // ── HTTP Server ────────────────────────────────────────────────────────────
 
 function createMainServer(cfg: ServerConfig): http.Server {
@@ -1538,14 +1784,86 @@ function createMainServer(cfg: ServerConfig): http.Server {
       if (serveAppIndex(cfg, res)) return
     }
 
+    if (req.method === "GET" && req.url === "/api/settings") {
+      const settings = readUserSettingsFile()
+      res.writeHead(200, { "Content-Type": "application/json" })
+      res.end(JSON.stringify({
+        accounts: settings.accounts ?? [],
+        currentAccountId: settings.currentAccountId ?? null,
+      }))
+      return
+    }
+
+    if (req.method === "POST" && req.url === "/api/settings") {
+      const previous = readUserSettingsFile()
+      const body = await readJsonBody(req)
+      const rawAccounts = Array.isArray(body.accounts) ? body.accounts : []
+      const applyCurrentAccount = body.applyCurrentAccount === true
+
+      const invalidAccount = rawAccounts.find((account: unknown) => (
+        !account ||
+        typeof account !== "object" ||
+        !normalizeString((account as Record<string, unknown>).name) ||
+        !normalizeString((account as Record<string, unknown>).AGENT) ||
+        !normalizeString((account as Record<string, unknown>).PROVIDER) ||
+        !normalizeString((account as Record<string, unknown>).MODEL)
+      ))
+      if (invalidAccount) {
+        const invalidName = normalizeString((invalidAccount as Record<string, unknown>).name)
+          ?? normalizeString((invalidAccount as Record<string, unknown>).id)
+          ?? "unknown"
+        sendJson(res, 400, {
+          error: `Account "${invalidName}" is incomplete`,
+          code: API_ERROR_CODES.SETTINGS_ACCOUNT_INCOMPLETE,
+        })
+        return
+      }
+
+      const next = new SettingsModel({
+        ...previous,
+        accounts: rawAccounts,
+        currentAccountId: typeof body.currentAccountId === "string" ? body.currentAccountId : null,
+      }).toJSON()
+
+      if (!applyCurrentAccount) {
+        const saved = writeUserSettingsFile(next)
+        sendJson(res, 200, {
+          ok: true,
+          accounts: saved.accounts ?? [],
+          currentAccountId: saved.currentAccountId ?? null,
+        })
+        return
+      }
+
+      try {
+        applySettingsToConfig(cfg, next)
+        await applyAgentSwitchToSessions(cfg)
+        writeUserSettingsFile(next)
+      } catch (err: any) {
+        applySettingsToConfig(cfg, previous)
+        try {
+          await applyAgentSwitchToSessions(cfg)
+        } catch (rollbackErr) {
+          console.error("⚠  Failed to roll back account switch:", rollbackErr)
+        }
+        sendErrorJson(res, 500, err, "Failed to save settings")
+        return
+      }
+
+      sendJson(res, 200, {
+        ok: true,
+        accounts: next.accounts ?? [],
+        currentAccountId: next.currentAccountId ?? null,
+      })
+      return
+    }
+
     // ── Session management ──
     if (req.method === "POST" && req.url === "/api/sessions") {
       getOrCreateSession(cfg).then((entry) => {
-        res.writeHead(200, { "Content-Type": "application/json" })
-        res.end(JSON.stringify({ id: entry.id, directory: entry.directory }))
+        sendJson(res, 200, { id: entry.id, directory: entry.directory })
       }).catch((err: any) => {
-        res.writeHead(500, { "Content-Type": "application/json" })
-        res.end(JSON.stringify({ error: err.message }))
+        sendErrorJson(res, 500, err)
       })
       return
     }
@@ -1572,11 +1890,9 @@ function createMainServer(cfg: ServerConfig): http.Server {
           createdAt: e.createdAt,
           isDefault: defaultMap.get(e.id) ?? false,
         }))
-        res.writeHead(200, { "Content-Type": "application/json" })
-        res.end(JSON.stringify(list))
+        sendJson(res, 200, list)
       }).catch((err: any) => {
-        res.writeHead(500, { "Content-Type": "application/json" })
-        res.end(JSON.stringify({ error: err.message }))
+        sendErrorJson(res, 500, err)
       })
       return
     }
@@ -1584,11 +1900,9 @@ function createMainServer(cfg: ServerConfig): http.Server {
     // POST /api/windows — create new window
     if (req.method === "POST" && req.url === "/api/windows") {
       createNewWindow(cfg, false).then((entry) => {
-        res.writeHead(200, { "Content-Type": "application/json" })
-        res.end(JSON.stringify({ id: entry.id, directory: entry.directory, isDefault: false }))
+        sendJson(res, 200, { id: entry.id, directory: entry.directory, isDefault: false })
       }).catch((err: any) => {
-        res.writeHead(500, { "Content-Type": "application/json" })
-        res.end(JSON.stringify({ error: err.message }))
+        sendErrorJson(res, 500, err)
       })
       return
     }
@@ -1714,7 +2028,8 @@ function createMainServer(cfg: ServerConfig): http.Server {
       const list = await Promise.all(Array.from(sessions.values()).map(async (s) => ({
         id: s.id, directory: s.directory,
         stats: await s.chatAgent.getUsage(),
-        sessionId: s.chatAgent.sessionId,
+        sessionId: tryGetAgentSessionId(s.chatAgent),
+        resumeToken: tryGetAgentSessionId(s.chatAgent),
       })))
       res.writeHead(200, { "Content-Type": "application/json" })
       res.end(JSON.stringify({ sessions: list }))
@@ -1742,9 +2057,13 @@ function createMainServer(cfg: ServerConfig): http.Server {
         res.end(JSON.stringify({ error: "Session not found" }))
         return
       }
-      session.chatAgent.getSessionMessages({ limit: 30 }).then((messages: any) => {
+      const limit = 30
+      session.chatAgent.getSessionMessages({ limit }).then((messages: any) => {
+        const payload = session.runtimeAgentType === NO_AGENT_TYPE
+          ? messages
+          : mergeSessionHistoryMessages(getPersistedNoAgentMessages(session.id, limit), messages, limit)
         res.writeHead(200, { "Content-Type": "application/json" })
-        res.end(JSON.stringify(messages))
+        res.end(JSON.stringify(payload))
       }).catch((err: any) => {
         res.writeHead(500, { "Content-Type": "application/json" })
         res.end(JSON.stringify({ error: err.message }))
@@ -1820,6 +2139,10 @@ export async function startServer() {
       sharedStorage.exec(`ALTER TABLE "user_session" ADD COLUMN "cascade_id" TEXT NOT NULL DEFAULT ''`)
       console.log("✅  Added cascade_id column to user_session")
     }
+    if (!cols.some((c: any) => c.name === "agent_type")) {
+      sharedStorage.exec(`ALTER TABLE "user_session" ADD COLUMN "agent_type" TEXT NOT NULL DEFAULT 'anycode'`)
+      console.log("✅  Added agent_type column to user_session")
+    }
   } else {
     // Table doesn't exist — create fresh
     sharedStorage.exec(`
@@ -1828,10 +2151,22 @@ export async function startServer() {
         "directory"    TEXT NOT NULL DEFAULT '',
         "time_created" INTEGER NOT NULL,
         "is_default"   INTEGER NOT NULL DEFAULT 0,
-        "cascade_id"   TEXT NOT NULL DEFAULT ''
+        "cascade_id"   TEXT NOT NULL DEFAULT '',
+        "agent_type"   TEXT NOT NULL DEFAULT 'anycode'
       )
     `)
   }
+
+  sharedStorage.exec(`
+    CREATE TABLE IF NOT EXISTS "user_session_message" (
+      "id"           INTEGER PRIMARY KEY AUTOINCREMENT,
+      "session_id"   TEXT NOT NULL,
+      "role"         TEXT NOT NULL,
+      "text"         TEXT NOT NULL DEFAULT '',
+      "time_created" INTEGER NOT NULL
+    )
+  `)
+  sharedStorage.exec(`CREATE INDEX IF NOT EXISTS "idx_user_session_message_session_time" ON "user_session_message" ("session_id", "id")`)
 
   const appDistExists = fs.existsSync(cfg.appDist)
 

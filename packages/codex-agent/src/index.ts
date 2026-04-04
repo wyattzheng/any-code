@@ -8,7 +8,7 @@
  * MCP server bridge (codex-mcp-bridge.cjs) that communicates back over TCP.
  */
 
-import { createServer as createTcpServer, type Server as TcpServer } from "net"
+import { createServer as createTcpServer, type Server as TcpServer, type Socket } from "net"
 import { statSync } from "fs"
 import { join, dirname } from "path"
 import type { IChatAgent, ChatAgentEvent, ChatAgentConfig } from "@any-code/utils"
@@ -17,20 +17,25 @@ export type { IChatAgent, ChatAgentEvent, ChatAgentConfig }
 
 export class CodexAgent implements IChatAgent {
   readonly name: string
-  readonly sessionId: string
   private config: ChatAgentConfig
   private abortController: AbortController | null = null
   private eventHandlers = new Map<string, Array<(data: any) => void>>()
   private _codex: any = null
   private _thread: any = null
+  private _threadId: string
   private _workingDirectory: string = ""
   private _mcpServer: TcpServer | null = null
+  private _mcpSockets = new Set<Socket>()
   private _mcpPort: number = 0
 
   constructor(config: ChatAgentConfig) {
     this.config = config
     this.name = config.name || "Codex Agent"
-    this.sessionId = `codex-${Date.now()}`
+    this._threadId = config.sessionId || `codex-${Date.now()}`
+  }
+
+  get sessionId(): string {
+    return this._thread?.id ?? this._threadId
   }
 
   async init(): Promise<void> {
@@ -142,13 +147,18 @@ export class CodexAgent implements IChatAgent {
 
       // Reuse thread for multi-turn conversation, or start a new one
       if (!this._thread) {
-        this._thread = this._codex.startThread({
+        const threadOptions = {
           model: this.config.model || "o4-mini",
           ...(this._workingDirectory ? { workingDirectory: this._workingDirectory } : {}),
           approvalPolicy: "never",
           sandboxMode: "danger-full-access",
           skipGitRepoCheck: true,
-        })
+        }
+        const resumeThreadId = (this.config.sessionId && this.config.sessionId.trim())
+          || (!this._threadId.startsWith("codex-") ? this._threadId : "")
+        this._thread = resumeThreadId
+          ? this._codex.resumeThread(resumeThreadId, threadOptions)
+          : this._codex.startThread(threadOptions)
       }
 
       const { events } = await this._thread.runStreamed(input, {
@@ -159,6 +169,13 @@ export class CodexAgent implements IChatAgent {
       let hasEmittedThinkingEnd = false
 
       for await (const event of events) {
+        if (event.type === "thread.started") {
+          const threadId = (event as any).thread_id
+          if (threadId && threadId !== this._threadId) {
+            this._threadId = threadId
+            this._emitEvent("cascade.created", { cascadeId: threadId })
+          }
+        }
         switch (event.type) {
           case "item.started": {
             const item = (event as any).item
@@ -342,6 +359,10 @@ export class CodexAgent implements IChatAgent {
           }
         })
       })
+      server.on("connection", (socket: Socket) => {
+        this._mcpSockets.add(socket)
+        socket.on("close", () => this._mcpSockets.delete(socket))
+      })
       server.listen(0, "127.0.0.1", () => {
         const addr = server.address() as any
         this._mcpPort = addr.port
@@ -388,5 +409,27 @@ export class CodexAgent implements IChatAgent {
   abort(): void {
     this.abortController?.abort()
     this.abortController = null
+  }
+
+  async destroy(): Promise<void> {
+    this.abort()
+    const server = this._mcpServer
+    this._mcpServer = null
+    this._mcpPort = 0
+    this._thread = null
+    this._codex = null
+    this.eventHandlers.clear()
+    for (const socket of this._mcpSockets) {
+      try { socket.destroy() } catch { /* ignore */ }
+    }
+    this._mcpSockets.clear()
+    if (!server) return
+    await new Promise<void>((resolve) => {
+      try {
+        server.close(() => resolve())
+      } catch {
+        resolve()
+      }
+    })
   }
 }

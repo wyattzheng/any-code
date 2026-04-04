@@ -3,14 +3,17 @@ import path from "path";
 import os from "os";
 import fs from "fs";
 import readline from "readline";
+import { randomUUID } from "crypto";
 import { fileURLToPath } from "url";
 import { startServer } from "@any-code/server";
+import { DEFAULT_MODEL, SettingsStore, type AccountSettings, type UserSettingsFile } from "@any-code/settings";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const PROCESS_NAME = "anycode-server";
-const ANYCODE_DIR = path.join(os.homedir(), ".anycode");
-const SETTINGS_PATH = path.join(ANYCODE_DIR, "settings.json");
+const settingsStore = new SettingsStore();
+const ANYCODE_DIR = settingsStore.anycodeDir;
+const SETTINGS_PATH = settingsStore.path;
 const DEFAULT_PORT = 3210;
 
 // ── Colors ────────────────────────────────────────────────────────────────
@@ -80,26 +83,19 @@ function keyValue(key: string, value: string, pad = 12) {
 
 // ── Settings ──────────────────────────────────────────────────────────────
 
-interface Settings {
-    PROVIDER?: string;
-    API_KEY?: string;
-    MODEL?: string;
-    BASE_URL?: string;
-}
+type Settings = UserSettingsFile;
 
 function loadSettings(): Settings {
-    try {
-        fs.mkdirSync(ANYCODE_DIR, { recursive: true });
-        const raw = fs.readFileSync(SETTINGS_PATH, "utf-8");
-        return JSON.parse(raw);
-    } catch {
-        return {};
-    }
+    return settingsStore.read().toJSON();
 }
 
 function saveSettings(settings: Settings) {
-    fs.mkdirSync(ANYCODE_DIR, { recursive: true });
-    fs.writeFileSync(SETTINGS_PATH, JSON.stringify(settings, null, 2) + "\n");
+    settingsStore.write(settings);
+}
+
+function getCurrentAccount(settings: Settings): AccountSettings | undefined {
+    if (typeof settings.currentAccountId !== "string") return undefined;
+    return settings.accounts?.find((account) => account.id === settings.currentAccountId);
 }
 
 function prompt(question: string): Promise<string> {
@@ -118,43 +114,84 @@ function prompt(question: string): Promise<string> {
 async function ensureSettings(): Promise<Settings> {
     const settings = loadSettings();
     let changed = false;
+    let account = getCurrentAccount(settings);
+    const hasStoredAccounts = (settings.accounts?.length ?? 0) > 0;
 
-    if (!settings.PROVIDER) {
+    if (!account && !hasStoredAccounts) {
         blank();
-        console.log(`  ${c.bold}${c.white}Welcome! Let's configure your LLM provider.${c.reset}`);
+        console.log(`  ${c.bold}${c.white}Welcome! Let's configure your first account.${c.reset}`);
         blank();
         divider();
         blank();
-        const val = await prompt(`  ${c.cyan}?${c.reset} ${c.bold}Provider${c.reset} ${c.gray}(anthropic, openai)${c.reset}: `);
-        settings.PROVIDER = val || "anthropic";
+        const name = await prompt(`  ${c.cyan}?${c.reset} ${c.bold}Account Name${c.reset} ${c.gray}(default account)${c.reset}: `);
+        account = {
+            id: randomUUID(),
+            name: name || "默认账号",
+            AGENT: "anycode",
+            PROVIDER: "anthropic",
+            MODEL: DEFAULT_MODEL,
+            API_KEY: "",
+        };
+        settings.accounts = [account];
+        settings.currentAccountId = account.id;
         changed = true;
     }
 
-    if (!settings.API_KEY) {
+    if (!account) {
+        return settings;
+    }
+
+    if (!account.AGENT) {
         if (!changed) {
             blank();
-            console.log(`  ${c.bold}${c.white}Welcome! Let's configure your LLM provider.${c.reset}`);
+            console.log(`  ${c.bold}${c.white}Let's finish configuring your current account.${c.reset}`);
             blank();
             divider();
             blank();
         }
-        settings.API_KEY = await prompt(`  ${c.cyan}?${c.reset} ${c.bold}API Key${c.reset} ${c.gray}(required)${c.reset}: `);
-        if (!settings.API_KEY) {
+        const val = await prompt(`  ${c.cyan}?${c.reset} ${c.bold}Agent${c.reset} ${c.gray}(anycode, claudecode, codex, antigravity)${c.reset}: `);
+        account.AGENT = val || "anycode";
+        changed = true;
+    }
+
+    if (!account.PROVIDER) {
+        if (!changed) {
+            blank();
+            console.log(`  ${c.bold}${c.white}Let's finish configuring your current account.${c.reset}`);
+            blank();
+            divider();
+            blank();
+        }
+        const val = await prompt(`  ${c.cyan}?${c.reset} ${c.bold}Provider${c.reset} ${c.gray}(anthropic, openai, google, litellm)${c.reset}: `);
+        account.PROVIDER = val || "anthropic";
+        changed = true;
+    }
+
+    if (!account.API_KEY) {
+        if (!changed) {
+            blank();
+            console.log(`  ${c.bold}${c.white}Let's finish configuring your current account.${c.reset}`);
+            blank();
+            divider();
+            blank();
+        }
+        account.API_KEY = await prompt(`  ${c.cyan}?${c.reset} ${c.bold}API Key${c.reset} ${c.gray}(required)${c.reset}: `);
+        if (!account.API_KEY) {
             fail("API Key is required to continue.");
             process.exit(1);
         }
         changed = true;
     }
 
-    if (!settings.MODEL) {
-        const val = await prompt(`  ${c.cyan}?${c.reset} ${c.bold}Model${c.reset} ${c.gray}(claude-opus-4-6)${c.reset}: `);
-        settings.MODEL = val || "claude-opus-4-6";
+    if (!account.MODEL) {
+        const val = await prompt(`  ${c.cyan}?${c.reset} ${c.bold}Model${c.reset} ${c.gray}(${DEFAULT_MODEL})${c.reset}: `);
+        account.MODEL = val || DEFAULT_MODEL;
         changed = true;
     }
 
-    if (settings.BASE_URL === undefined) {
+    if (account.BASE_URL === undefined) {
         const val = await prompt(`  ${c.cyan}?${c.reset} ${c.bold}Base URL${c.reset} ${c.gray}(optional, Enter to skip)${c.reset}: `);
-        settings.BASE_URL = val || undefined;
+        account.BASE_URL = val || undefined;
         changed = true;
     }
 
@@ -257,6 +294,7 @@ function getLocalIP(): string {
 function showAccessInfo(settings: Settings) {
     const port = DEFAULT_PORT;
     const ip = getLocalIP();
+    const account = getCurrentAccount(settings);
 
     blank();
     console.log(`  ${c.bold}${c.green}Server is running!${c.reset}`);
@@ -265,7 +303,9 @@ function showAccessInfo(settings: Settings) {
     blank();
     keyValue("Local", `${c.cyan}${c.bold}http://localhost:${port}${c.reset}`);
     keyValue("Network", `${c.cyan}http://${ip}:${port}${c.reset}`);
-    keyValue("Model", `${c.yellow}${settings.MODEL}${c.reset}`);
+    if (account) keyValue("Account", `${c.green}${account.name}${c.reset}`);
+    if (account) keyValue("Provider", `${c.yellow}${account.PROVIDER}${c.reset}`);
+    if (account) keyValue("Model", `${c.yellow}${account.MODEL}${c.reset}`);
     blank();
     divider();
     blank();
@@ -516,36 +556,39 @@ async function cmdUpdate() {
     blank();
 }
 
-const CONFIG_KEYS = ["API_KEY", "MODEL", "BASE_URL"] as const;
-
 function cmdConfig() {
     banner();
 
     const settings = loadSettings();
+    const account = getCurrentAccount(settings);
 
     console.log(`  ${c.gray}Config file:${c.reset} ${c.yellow}${SETTINGS_PATH}${c.reset}`);
     blank();
     divider();
     blank();
 
-    let hasAny = false;
-    for (const key of CONFIG_KEYS) {
-        const value = settings[key];
-        if (value === undefined) {
-            keyValue(key, `${c.gray}(not set)${c.reset}`);
-        } else if (key === "API_KEY" && value.length > 8) {
-            const masked = value.slice(0, 4) + "····" + value.slice(-4);
-            keyValue(key, `${c.green}${masked}${c.reset}`);
-            hasAny = true;
+    if (account) {
+        keyValue("Account", `${c.green}${account.name}${c.reset}`);
+        keyValue("Agent", `${c.green}${account.AGENT}${c.reset}`);
+        keyValue("Provider", `${c.green}${account.PROVIDER}${c.reset}`);
+        keyValue("Model", account.MODEL ? `${c.green}${account.MODEL}${c.reset}` : `${c.gray}(not set)${c.reset}`);
+        if (account.API_KEY.length > 8) {
+            const masked = account.API_KEY.slice(0, 4) + "····" + account.API_KEY.slice(-4);
+            keyValue("API_KEY", `${c.green}${masked}${c.reset}`);
+        } else if (account.API_KEY) {
+            keyValue("API_KEY", `${c.green}${account.API_KEY}${c.reset}`);
         } else {
-            keyValue(key, `${c.green}${value}${c.reset}`);
-            hasAny = true;
+            keyValue("API_KEY", `${c.gray}(not set)${c.reset}`);
         }
+        keyValue("BASE_URL", account.BASE_URL ? `${c.green}${account.BASE_URL}${c.reset}` : `${c.gray}(not set)${c.reset}`);
+    } else {
+        keyValue("Account", `${c.gray}(not set)${c.reset}`);
     }
+    keyValue("Accounts", `${c.white}${settings.accounts?.length ?? 0}${c.reset}`);
 
     blank();
 
-    if (!hasAny) {
+    if (!account) {
         console.log(`  ${c.gray}Run ${c.green}anycode start${c.gray} to set up.${c.reset}`);
         blank();
     }

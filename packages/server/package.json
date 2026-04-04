@@ -26,6 +26,7 @@
         "@any-code/antigravity-agent": "workspace:*",
         "@any-code/claude-code-agent": "workspace:*",
         "@any-code/codex-agent": "workspace:*",
+        "@any-code/settings": "workspace:*",
         "@any-code/utils": "workspace:*",
         "@types/node": "^25.5.0",
         "@types/ws": "^8.18.1",

@@ -36,7 +36,7 @@ export interface ChatAgentConfig {
   terminal?: any
   /** Preview provider for the session (used by ClaudeCodeAgent MCP tools) */
   preview?: any
-  /** Session ID for resuming a session */
+  /** Backend session ID for resuming a session */
   sessionId?: string
 }
 
@@ -49,14 +49,17 @@ export interface IChatAgent {
   /** Human-readable name of this agent backend */
   readonly name: string
 
-  /** Unique session identifier */
+  /** Backend resume token / session identifier */
   readonly sessionId: string
 
   /** Send a message and receive streaming events */
   chat(input: string): AsyncGenerator<ChatAgentEvent, void, unknown>
 
   /** Abort current chat/task */
-  abort(): void
+  abort(): void | Promise<void>
+
+  /** Release any long-lived resources owned by this agent instance */
+  destroy?(): void | Promise<void>
 
   /** Ensure agent is ready (lazy init, idempotent) */
   init(): Promise<void>

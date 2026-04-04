@@ -25,26 +25,38 @@ docker run -d \
   -p 2223:2223 \
   -p 2224:2224 \
   -v /etc/letsencrypt:/etc/letsencrypt:ro \
+  -v ~/.anycode:/root/.anycode \
   -e PORT=2223 \
   -e TLS_CERT=/etc/letsencrypt/live/<your-domain>/fullchain.pem \
   -e TLS_KEY=/etc/letsencrypt/live/<your-domain>/privkey.pem \
-  -e PROVIDER=openai \
-  -e AGENT=anycode \
-  -e MODEL=<model-name> \
-  -e API_KEY=<your-api-key> \
-  -e BASE_URL=<your-api-base-url> \
   anycodex/anycode:latest
+```
+
+然后在宿主机的 `~/.anycode/settings.json` 里配置账号：
+
+```json
+{
+  "accounts": [
+    {
+      "id": "default",
+      "name": "OpenAI 主账号",
+      "AGENT": "anycode",
+      "PROVIDER": "openai",
+      "MODEL": "gpt-4o",
+      "API_KEY": "sk-xxxxxxxx",
+      "BASE_URL": "https://api.openai.com/v1"
+    }
+  ],
+  "currentAccountId": "default"
+}
 ```
 
 | 环境变量 | 说明 | 示例 |
 |---------|------|------|
 | `PORT` | 服务端口 | `2223` |
 | `TLS_CERT` / `TLS_KEY` | TLS 证书路径（用于 HTTPS） | |
-| `PROVIDER` | AI 服务提供商 | `openai` |
-| `AGENT` | Agent 类型 | `anycode` |
-| `MODEL` | 模型名称 | `gpt-4o` |
-| `API_KEY` | API 密钥 | `sk-xxxxxxxx` |
-| `BASE_URL` | API 地址 | `https://api.openai.com/v1` |
+
+`AGENT`、`PROVIDER`、`MODEL`、`API_KEY`、`BASE_URL` 都统一放在 `settings.json` 的账号列表里管理，不再通过环境变量传入。
 
 ## License
 

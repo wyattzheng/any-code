@@ -12,17 +12,22 @@ export type { IChatAgent, ChatAgentEvent, ChatAgentConfig }
 
 export class ClaudeCodeAgent implements IChatAgent {
   readonly name: string
-  readonly sessionId: string
   private abortController: AbortController | null = null
   private config: ChatAgentConfig
   private eventHandlers = new Map<string, Array<(data: any) => void>>()
   /** SDK-managed session ID — populated after first response, used for `resume` on subsequent calls */
   private _claudeSessionId: string | null = null
+  private _fallbackSessionId: string
 
   constructor(config: ChatAgentConfig) {
     this.config = config
     this.name = config.name || "Claude Code Agent"
-    this.sessionId = `claude-${Date.now()}`
+    this._claudeSessionId = config.sessionId || null
+    this._fallbackSessionId = config.sessionId || `claude-${Date.now()}`
+  }
+
+  get sessionId(): string {
+    return this._claudeSessionId || this._fallbackSessionId
   }
 
   async init(): Promise<void> {
@@ -228,6 +233,7 @@ export class ClaudeCodeAgent implements IChatAgent {
         // Capture session_id from the first message for conversation memory
         if (!this._claudeSessionId && (msg as any).session_id) {
           this._claudeSessionId = (msg as any).session_id
+          this._emitEvent("cascade.created", { cascadeId: this._claudeSessionId })
         }
         switch (msg.type) {
           // Streaming deltas — token-by-token output
@@ -342,5 +348,10 @@ export class ClaudeCodeAgent implements IChatAgent {
   abort(): void {
     this.abortController?.abort()
     this.abortController = null
+  }
+
+  destroy(): void {
+    this.abort()
+    this.eventHandlers.clear()
   }
 }

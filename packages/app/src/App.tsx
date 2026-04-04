@@ -27,6 +27,31 @@ export interface FileContext {
     lines: number[];
 }
 
+interface ApiResponseBody {
+    error?: string;
+    code?: string;
+}
+
+function createApiError(res: Response, body: ApiResponseBody, fallbackMessage: string) {
+    const error = new Error(body.error || fallbackMessage) as Error & { code?: string; status?: number };
+    error.code = body.code;
+    error.status = res.status;
+    return error;
+}
+
+async function readResponseJson<T>(res: Response): Promise<T & ApiResponseBody> {
+    const text = await res.text();
+    if (!text.trim()) {
+        if (!res.ok) throw new Error("后端服务未启动，或代理请求失败");
+        return {} as T & ApiResponseBody;
+    }
+    try {
+        return JSON.parse(text) as T & ApiResponseBody;
+    } catch {
+        throw new Error(text);
+    }
+}
+
 
 
 // ── Per-window view — each instance keeps its own DOM and state alive ────
@@ -415,7 +440,7 @@ export function App() {
         try {
             const res = await fetch(`${getApiBase()}/api/windows`);
             if (res.ok) {
-                const list = await res.json();
+                const list = await readResponseJson<WindowInfo[]>(res);
                 setWindows(list);
             }
         } catch { /* ignore */ }
@@ -431,8 +456,10 @@ export function App() {
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({}),
                 });
-                const data = await res.json();
-                if (data.error) throw new Error(data.error);
+                const data = await readResponseJson<{ id: string }>(res);
+                if (!res.ok || data.error) {
+                    throw createApiError(res, data, `HTTP ${res.status}`);
+                }
                 // Restore last window from localStorage, fallback to returned id
                 const savedWindowId = localStorage.getItem('anycode:lastWindow');
                 setActiveWindowId(savedWindowId || data.id);
@@ -471,8 +498,10 @@ export function App() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({}),
             });
-            const data = await res.json();
-            if (data.error) return;
+            const data = await readResponseJson<{ id: string }>(res);
+            if (!res.ok || data.error) {
+                throw createApiError(res, data, `HTTP ${res.status}`);
+            }
             await fetchWindows();
             setActiveWindowId(data.id);
             try { localStorage.setItem('anycode:lastWindow', data.id); } catch { }
@@ -529,6 +558,7 @@ export function App() {
                 onSwitch={handleWindowSwitch}
                 onCreate={handleWindowCreate}
                 onDelete={handleWindowDelete}
+                onSettingsSaved={fetchWindows}
                 creating={windowCreating}
             />
             {windows.map((w) => (
