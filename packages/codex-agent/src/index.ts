@@ -15,6 +15,38 @@ import type { IChatAgent, ChatAgentEvent, ChatAgentConfig } from "@any-code/util
 
 export type { IChatAgent, ChatAgentEvent, ChatAgentConfig }
 
+function normalizeString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined
+}
+
+function decodeJwtPayload(token: string | undefined): Record<string, any> | undefined {
+  const normalized = normalizeString(token)
+  if (!normalized) return undefined
+
+  try {
+    const [, payload] = normalized.split(".")
+    if (!payload) return undefined
+    return JSON.parse(Buffer.from(payload, "base64url").toString("utf8"))
+  } catch {
+    return undefined
+  }
+}
+
+function extractOpenAIAccountId(idToken: string | undefined, accessToken: string | undefined): string | undefined {
+  const payloads = [decodeJwtPayload(idToken), decodeJwtPayload(accessToken)]
+
+  for (const payload of payloads) {
+    const direct = normalizeString(payload?.account_id)
+    if (direct) return direct
+
+    const auth = payload?.["https://api.openai.com/auth"]
+    const nested = normalizeString(auth?.chatgpt_account_id)
+    if (nested) return nested
+  }
+
+  return undefined
+}
+
 export class CodexAgent implements IChatAgent {
   readonly name: string
   private config: ChatAgentConfig
@@ -110,6 +142,7 @@ export class CodexAgent implements IChatAgent {
           const accessToken = parts[0]
           const refreshToken = parts[1] || ""
           const idToken = parts[2] || ""
+          const accountId = extractOpenAIAccountId(idToken, accessToken)
 
           const fs = await import("fs")
           const path = await import("path")
@@ -125,12 +158,12 @@ export class CodexAgent implements IChatAgent {
                 id_token: idToken,
                 access_token: accessToken,
                 ...(refreshToken ? { refresh_token: refreshToken } : {}),
+                ...(accountId ? { account_id: accountId } : {}),
               },
               last_refresh: new Date().toISOString(),
             }),
           )
           this._codex = new Codex({
-            ...(this.config.baseUrl ? { baseUrl: this.config.baseUrl } : {}),
             env: { ...process.env, CODEX_HOME: codexHome, ANYCODE_MCP_PORT: String(this._mcpPort) } as Record<string, string>,
             config: mcpConfig,
           })
@@ -289,7 +322,7 @@ export class CodexAgent implements IChatAgent {
             const err = (event as any).error
             yield {
               type: "error" as const,
-              error: err?.message ?? "Turn failed",
+              error: normalizeString(err?.message) ?? "Turn failed",
             }
             break
           }
@@ -325,7 +358,7 @@ export class CodexAgent implements IChatAgent {
       } else {
         yield {
           type: "error" as const,
-          error: err?.message ?? String(err),
+          error: normalizeString(err?.message) ?? String(err),
         }
       }
     }
