@@ -16,7 +16,7 @@ export default defineConfig({
     banner: {
         js: "#!/usr/bin/env node",
     },
-    external: ["@lydell/node-pty", "sql.js", "ws"],
+    external: ["@any-code/server", "@lydell/node-pty", "sql.js", "ws"],
     onSuccess: async () => {
         cpSync(appDist, resolve("dist/app"), { recursive: true });
     },

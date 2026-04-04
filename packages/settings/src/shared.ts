@@ -7,6 +7,8 @@ export const DEFAULT_PROVIDER = "anthropic"
 export const DEFAULT_MODEL = getVendorDefaultModel(DEFAULT_PROVIDER) ?? "claude-opus-4-6"
 export const DEFAULT_BASE_URL = getVendorDefaultBaseUrl(DEFAULT_PROVIDER) ?? "https://api.anthropic.com/v1"
 export const DEFAULT_PROVIDER_OPTIONS = ["anthropic", "openai", "google", "litellm"] as const
+export const REASONING_EFFORT_OPTIONS = ["minimal", "low", "medium", "high", "xhigh"] as const
+export const DEFAULT_REASONING_EFFORT = "xhigh"
 
 const FORCED_PROVIDER_BY_AGENT = {
   claudecode: "anthropic",
@@ -20,6 +22,7 @@ export interface AccountSettings {
   AGENT: string
   PROVIDER: string
   MODEL: string
+  REASONING_EFFORT: string
   API_KEY: string
   BASE_URL?: string
 }
@@ -28,6 +31,7 @@ export interface UserSettingsFile extends Record<string, any> {
   accounts?: AccountSettings[]
   currentAccountId?: string | null
   MODEL?: string
+  REASONING_EFFORT?: string
   TLS_CERT?: string
   TLS_KEY?: string
   AGENT?: string
@@ -40,6 +44,7 @@ export interface RuntimeSettings {
   agent: string
   provider: string
   model: string
+  reasoningEffort: string
   apiKey: string
   baseUrl: string
   currentAccount: AccountSettings | null
@@ -50,6 +55,12 @@ export function normalizeString(value: unknown) {
   if (typeof value !== "string") return undefined
   const trimmed = value.trim()
   return trimmed || undefined
+}
+
+export function normalizeReasoningEffort(value: unknown) {
+  const normalized = normalizeString(value)
+  if (!normalized) return DEFAULT_REASONING_EFFORT
+  return REASONING_EFFORT_OPTIONS.includes(normalized as typeof REASONING_EFFORT_OPTIONS[number]) ? normalized : DEFAULT_REASONING_EFFORT
 }
 
 function normalizeAccountNameKey(value: unknown) {
@@ -153,6 +164,7 @@ export function normalizeAccount(
   const AGENT = normalizeString(input.AGENT) ?? DEFAULT_AGENT
   const PROVIDER = normalizeProviderForAgent(AGENT, input.PROVIDER)
   const MODEL = normalizeString(input.MODEL) ?? normalizeString(fallbackModel) ?? getDefaultModelForProvider(PROVIDER)
+  const REASONING_EFFORT = normalizeReasoningEffort(input.REASONING_EFFORT)
   const API_KEY = normalizeString(input.API_KEY) ?? ""
   const BASE_URL = normalizeString(input.BASE_URL) ?? normalizeString(fallbackBaseUrl) ?? getDefaultBaseUrlForProvider(PROVIDER)
   const normalized: AccountSettings = {
@@ -161,6 +173,7 @@ export function normalizeAccount(
     AGENT,
     PROVIDER,
     MODEL,
+    REASONING_EFFORT,
     API_KEY,
   }
   if (BASE_URL) normalized.BASE_URL = BASE_URL
@@ -229,6 +242,7 @@ export function normalizeSettings(raw: unknown): UserSettingsFile {
   delete normalized.API_KEY
   delete normalized.BASE_URL
   delete normalized.MODEL
+  delete normalized.REASONING_EFFORT
   return normalized
 }
 
@@ -270,6 +284,7 @@ export class SettingsModel {
       agent: normalizeString(currentAccount?.AGENT) ?? DEFAULT_AGENT,
       provider: normalizeString(currentAccount?.PROVIDER) ?? DEFAULT_PROVIDER,
       model: normalizeString(currentAccount?.MODEL) ?? getDefaultModelForProvider(currentAccount?.PROVIDER),
+      reasoningEffort: normalizeReasoningEffort(currentAccount?.REASONING_EFFORT),
       apiKey: normalizeString(currentAccount?.API_KEY) ?? "",
       baseUrl: normalizeString(currentAccount?.BASE_URL) ?? getDefaultBaseUrlForProvider(currentAccount?.PROVIDER),
       currentAccount,

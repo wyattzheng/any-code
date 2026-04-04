@@ -28,6 +28,7 @@ export interface ChatAgentConfig {
   apiKey: string
   model: string
   baseUrl?: string
+  reasoningEffort?: string
   /** Override the default agent name */
   name?: string
   /** AnyCode-specific: full CodeAgentOptions for internal CodeAgent creation */

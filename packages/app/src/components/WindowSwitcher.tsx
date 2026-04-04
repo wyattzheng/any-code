@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     createUniqueAccountName,
+    DEFAULT_REASONING_EFFORT,
     getDefaultBaseUrlForProvider,
     getDefaultModelForProvider,
     getDuplicateAccountName,
@@ -8,6 +9,7 @@ import {
     getOAuthUiForProvider,
     getProviderBrandVendor,
     getProviderOptionsForAgent,
+    REASONING_EFFORT_OPTIONS,
     normalizeProviderForAgent,
 } from "@any-code/settings/shared";
 import { GearIcon, CloseIcon, ChevronIcon, PlusIcon, VendorIcon, hasVendorIcon } from "./Icons";
@@ -28,6 +30,7 @@ interface AccountInfo {
     AGENT: string;
     PROVIDER: string;
     MODEL: string;
+    REASONING_EFFORT: string;
     API_KEY: string;
     BASE_URL?: string;
 }
@@ -121,6 +124,7 @@ function createAccount(existingAccounts: AccountInfo[]): AccountInfo {
         AGENT: "anycode",
         PROVIDER: provider,
         MODEL: getDefaultModelForProvider(provider),
+        REASONING_EFFORT: DEFAULT_REASONING_EFFORT,
         API_KEY: "",
         BASE_URL: getDefaultBaseUrlForProvider(provider),
     };
@@ -410,6 +414,7 @@ function SettingsModal({ onClose, onSaved }: { onClose: () => void; onSaved?: ()
             AGENT: account.AGENT.trim(),
             PROVIDER: normalizeProviderForAgent(account.AGENT, account.PROVIDER),
             MODEL: account.MODEL.trim(),
+            REASONING_EFFORT: account.REASONING_EFFORT.trim() || DEFAULT_REASONING_EFFORT,
             API_KEY: account.API_KEY.trim(),
             BASE_URL: account.BASE_URL?.trim() || "",
         }))
@@ -877,6 +882,18 @@ function SettingsModal({ onClose, onSaved }: { onClose: () => void; onSaved?: ()
                                             onChange={(e) => updateSelectedAccount({ MODEL: e.target.value })}
                                             placeholder="claude-opus-4-6 / gpt-5.4 / gemini-3.1-pro"
                                         />
+                                    </div>
+                                    <div className="settings-row">
+                                        <label className="settings-label">REASONING</label>
+                                        <select
+                                            className="settings-input"
+                                            value={selectedAccount.REASONING_EFFORT}
+                                            onChange={(e) => updateSelectedAccount({ REASONING_EFFORT: e.target.value })}
+                                        >
+                                            {REASONING_EFFORT_OPTIONS.map((effort) => (
+                                                <option key={effort} value={effort}>{effort}</option>
+                                            ))}
+                                        </select>
                                     </div>
                                     <div className="settings-row">
                                         <label className="settings-label">BASE_URL</label>

@@ -7,6 +7,7 @@ import { randomUUID } from "crypto";
 import { fileURLToPath } from "url";
 import { AnyCodeServer } from "@any-code/server";
 import {
+    DEFAULT_REASONING_EFFORT,
     getDefaultBaseUrlForProvider,
     getDefaultModelForProvider,
     SettingsStore,
@@ -139,6 +140,7 @@ async function ensureSettings(): Promise<Settings> {
             AGENT: "anycode",
             PROVIDER: normalizeProviderForAgent("anycode", undefined),
             MODEL: getDefaultModelForProvider(normalizeProviderForAgent("anycode", undefined)),
+            REASONING_EFFORT: DEFAULT_REASONING_EFFORT,
             BASE_URL: getDefaultBaseUrlForProvider(normalizeProviderForAgent("anycode", undefined)),
             API_KEY: "",
         };
@@ -204,6 +206,11 @@ async function ensureSettings(): Promise<Settings> {
         const defaultModel = getDefaultModelForProvider(account.PROVIDER);
         const val = await prompt(`  ${c.cyan}?${c.reset} ${c.bold}Model${c.reset} ${c.gray}(${defaultModel})${c.reset}: `);
         account.MODEL = val || defaultModel;
+        changed = true;
+    }
+
+    if (!account.REASONING_EFFORT) {
+        account.REASONING_EFFORT = DEFAULT_REASONING_EFFORT;
         changed = true;
     }
 
@@ -594,6 +601,7 @@ function cmdConfig() {
         keyValue("Agent", `${c.green}${account.AGENT}${c.reset}`);
         keyValue("Provider", `${c.green}${account.PROVIDER}${c.reset}`);
         keyValue("Model", account.MODEL ? `${c.green}${account.MODEL}${c.reset}` : `${c.gray}(not set)${c.reset}`);
+        keyValue("Reasoning", `${c.green}${account.REASONING_EFFORT || DEFAULT_REASONING_EFFORT}${c.reset}`);
         if (account.API_KEY.length > 8) {
             const masked = account.API_KEY.slice(0, 4) + "····" + account.API_KEY.slice(-4);
             keyValue("API_KEY", `${c.green}${masked}${c.reset}`);

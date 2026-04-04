@@ -59,6 +59,7 @@ const ACCOUNT_QUOTA_CACHE_TTL_MS = 10 * 1000
 interface ServerConfig {
   provider: string
   model: string
+  reasoningEffort?: string
   apiKey: string
   baseUrl: string
   port: number
@@ -224,6 +225,7 @@ function createChatAgentConfig(server: AnyCodeServer, cfg: ServerConfig, directo
     apiKey: cfg.apiKey,
     model: cfg.model,
     baseUrl: cfg.baseUrl,
+    reasoningEffort: cfg.reasoningEffort,
     terminal,
     preview,
     sessionId: resumeToken,
@@ -763,6 +765,7 @@ export class AnyCodeServer {
     this.cfg.apiKey = runtime.apiKey
     this.cfg.baseUrl = runtime.baseUrl
     this.cfg.model = runtime.model
+    this.cfg.reasoningEffort = runtime.reasoningEffort
   }
 
   persistCurrentAccountApiKey(apiKey: string) {
@@ -1175,6 +1178,7 @@ export class AnyCodeServer {
     const agent = runtime.agent
     const provider = runtime.provider
     const model = runtime.model
+    const reasoningEffort = runtime.reasoningEffort
     const apiKey = runtime.apiKey
     const baseUrl = runtime.baseUrl
     const port = parseInt(process.env.PORT ?? "3210", 10)
@@ -1190,7 +1194,7 @@ export class AnyCodeServer {
       console.error("❌  Both TLS_CERT and TLS_KEY must be set together")
       process.exit(1)
     }
-    return { provider, model, apiKey, baseUrl, port, previewPort, appDist, userSettings, tlsCert, tlsKey, agent }
+    return { provider, model, reasoningEffort, apiKey, baseUrl, port, previewPort, appDist, userSettings, tlsCert, tlsKey, agent }
   }
 
   private registerProcessErrorHandlers() {

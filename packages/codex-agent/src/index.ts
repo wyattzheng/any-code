@@ -183,6 +183,7 @@ export class CodexAgent implements IChatAgent {
         const threadOptions = {
           model: this.config.model || "o4-mini",
           ...(this._workingDirectory ? { workingDirectory: this._workingDirectory } : {}),
+          ...(normalizeString(this.config.reasoningEffort) ? { modelReasoningEffort: normalizeString(this.config.reasoningEffort) as "minimal" | "low" | "medium" | "high" | "xhigh" } : {}),
           approvalPolicy: "never",
           sandboxMode: "danger-full-access",
           skipGitRepoCheck: true,
