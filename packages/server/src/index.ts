@@ -747,22 +747,44 @@ export class AnyCodeServer {
     return entries
   }
 
-  deleteWindow(sessionId: string): boolean {
+  async deleteWindow(sessionId: string): Promise<boolean> {
     const row = this.db.findOne("user_session", { op: "eq", field: "session_id", value: sessionId })
     if (!row) return false
     if ((row as any).is_default === 1) return false
 
+    this.sessionChatAbort.get(sessionId)?.()
+    this.sessionChatAbort.delete(sessionId)
+
+    const statePushTimer = this.statePushTimers.get(sessionId)
+    if (statePushTimer) {
+      clearTimeout(statePushTimer)
+      this.statePushTimers.delete(sessionId)
+    }
+
+    const watcher = this.dirWatchManagers.get(sessionId)
+    if (watcher) {
+      watcher.destroy()
+      this.dirWatchManagers.delete(sessionId)
+    }
+
     const session = this.sessions.get(sessionId)
     if (session) {
       this.sessions.delete(sessionId)
-      destroyChatAgent(session.chatAgent).catch(() => { /* ignore */ })
+      await destroyChatAgent(session.chatAgent)
     }
+
     const tp = this.terminalProviders.get(sessionId)
     if (tp && tp.exists()) {
       try { tp.teardown() } catch { /* ignore */ }
     }
     this.terminalProviders.delete(sessionId)
     this.previewProviders.delete(sessionId)
+    this.sessionClients.delete(sessionId)
+
+    if (this.previewSessionId === sessionId) {
+      this.previewSessionId = null
+      this.previewTarget = null
+    }
 
     this.db.remove("user_session", { op: "eq", field: "session_id", value: sessionId })
     this.db.remove("user_session_message", { op: "eq", field: "session_id", value: sessionId })
@@ -1186,14 +1208,15 @@ function createMainServer(server: AnyCodeServer, cfg: ServerConfig): http.Server
     // DELETE /api/windows/:id — delete non-default window
     const windowDeleteMatch = req.url?.match(/^\/api\/windows\/([^/?]+)$/)
     if (req.method === "DELETE" && windowDeleteMatch) {
-      const ok = server.deleteWindow(windowDeleteMatch[1])
-      if (ok) {
-        res.writeHead(200, { "Content-Type": "application/json" })
-        res.end(JSON.stringify({ ok: true }))
-      } else {
-        res.writeHead(400, { "Content-Type": "application/json" })
-        res.end(JSON.stringify({ error: "Cannot delete default window or window not found" }))
-      }
+      server.deleteWindow(windowDeleteMatch[1]).then((ok) => {
+        if (ok) {
+          sendJson(res, 200, { ok: true })
+        } else {
+          sendJson(res, 400, { error: "Cannot delete default window or window not found" })
+        }
+      }).catch((err: any) => {
+        sendErrorJson(res, 500, err, "Failed to delete window")
+      })
       return
     }
 

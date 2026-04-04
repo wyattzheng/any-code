@@ -20,6 +20,7 @@ COPY packages/claude-code-agent/package.json packages/claude-code-agent/
 COPY packages/server/package.json packages/server/
 COPY packages/provider/package.json packages/provider/
 COPY packages/utils/package.json packages/utils/
+COPY packages/settings/package.json packages/settings/
 
 RUN pnpm install --frozen-lockfile --registry https://registry.npmmirror.com
 
