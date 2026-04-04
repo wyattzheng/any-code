@@ -212,13 +212,18 @@
 .settings-body-stack {
     display: flex;
     flex-direction: column;
-    gap: 18px;
+    gap: 0;
+}
+
+.settings-section + .settings-section {
+    margin-top: 28px;
 }
 
 .settings-section {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 8px;
+    padding: 0;
 }
 
 .settings-section-head {
@@ -226,6 +231,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 12px;
+    padding-bottom: 6px;
 }
 
 .settings-section-title {
@@ -402,7 +408,7 @@
     max-height: 360px;
     overflow-y: auto;
     border: 1px solid var(--color-border);
-    border-radius: 12px;
+    border-radius: 6px;
     background: rgba(255, 255, 255, 0.03);
 }
 
@@ -442,9 +448,11 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    align-self: stretch;
+    align-self: center;
+    justify-self: center;
     width: 22px;
-    min-height: 100%;
+    min-height: 22px;
+    height: 100%;
     padding: 0;
     border: none;
     background: transparent;
@@ -454,7 +462,7 @@
 .settings-account-middle-row,
 .settings-account-quota-row {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: flex-start;
     min-width: 0;
 }
@@ -520,16 +528,27 @@
 
 .settings-account-quota {
     display: flex;
-    align-items: center;
+    flex-direction: column;
+    align-items: flex-start;
     justify-content: flex-start;
-    width: 120px;
-    max-width: 100%;
-    min-width: 0;
+    width: auto;
+    max-width: none;
+    min-width: auto;
+    gap: 6px;
+}
+
+.settings-account-quota-topline {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: auto;
+    min-width: auto;
 }
 
 .settings-account-quota-bar {
     display: inline-flex;
-    width: 100%;
+    flex: 0 0 52px;
+    width: 52px;
     height: 4px;
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.08);
@@ -542,6 +561,32 @@
     height: 100%;
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.28);
+}
+
+.settings-account-quota-percent {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-shrink: 0;
+    min-width: 24px;
+    min-height: 10px;
+    font-size: 9px;
+    line-height: 1;
+    color: var(--color-text-dim);
+    white-space: nowrap;
+}
+
+.settings-account-quota-percent.reset {
+    font-size: 8px;
+    line-height: 1.15;
+    color: rgba(255, 255, 255, 0.42);
+    min-width: 64px;
+    justify-content: flex-start;
+}
+
+.settings-account-quota-percent.unknown {
+    min-width: 16px;
+    justify-content: flex-start;
 }
 
 .settings-account-current-box {
@@ -699,7 +744,15 @@
     }
 
     .settings-body-stack {
-        gap: 14px;
+        gap: 0;
+    }
+
+    .settings-body-stack > .settings-section:first-child {
+        margin-top: 20px;
+    }
+
+    .settings-section + .settings-section {
+        margin-top: 32px;
     }
 
     .settings-section-head {
@@ -707,14 +760,17 @@
         align-items: flex-start;
     }
 
+    .settings-section {
+        padding: 0;
+        gap: 6px;
+    }
+
     .settings-section-head-sticky {
         position: sticky;
         top: 0;
         z-index: 2;
-        margin: 0 -14px;
-        padding: 12px 14px 10px;
+        padding: 0 0 6px;
         background: var(--color-bg);
-        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
     }
 
     .settings-actions {
@@ -742,9 +798,9 @@
     }
 
     .settings-account-selector {
-        align-self: flex-start;
-        min-height: auto;
-        padding-top: 2px;
+        align-self: center;
+        min-height: 22px;
+        padding-top: 0;
     }
 
     .settings-account-top-row,
@@ -755,10 +811,18 @@
     }
 
     .settings-account-quota {
-        align-items: center;
         justify-content: flex-start;
-        width: 72px;
-        max-width: 72px;
+        width: auto;
+        max-width: none;
+    }
+
+    .settings-account-quota-topline {
+        gap: 5px;
+    }
+
+    .settings-account-quota-bar {
+        flex-basis: 44px;
+        width: 44px;
     }
 
     .settings-account-add-row {
@@ -791,17 +855,13 @@
     .settings-account-editor {
         padding: 12px;
         border: 1px solid var(--color-border);
-        border-radius: 10px;
+        border-radius: 6px;
         background: rgba(255, 255, 255, 0.03);
     }
 
     .settings-editor-actions {
         flex-direction: column;
         align-items: stretch;
-    }
-
-    .settings-section:first-child {
-        padding-top: 14px;
     }
 
     .settings-btn,

@@ -174,7 +174,10 @@ function getPreferredQuotaWindow(quota: AccountQuotaInfo | null | undefined) {
 function formatQuotaWindow(window: AccountQuotaWindowInfo | null) {
     if (!window) return "额度未知";
     const parts: string[] = [];
-    if (typeof window.usedPercent === "number") parts.push(`已用 ${Math.round(window.usedPercent)}%`);
+    if (typeof window.usedPercent === "number") {
+        const remainingPercent = Math.max(0, Math.min(100, 100 - window.usedPercent));
+        parts.push(`剩余 ${Math.round(remainingPercent)}%`);
+    }
     if (typeof window.windowMinutes === "number") parts.push(`${window.windowMinutes} 分钟窗口`);
     if (window.resetAt) {
         const resetAt = new Date(window.resetAt);
@@ -190,10 +193,58 @@ function formatQuotaWindow(window: AccountQuotaWindowInfo | null) {
     return parts.join(" · ") || "额度未知";
 }
 
-function getQuotaFillPercent(quota: AccountQuotaInfo | null | undefined) {
+function getQuotaRemainingPercent(quota: AccountQuotaInfo | null | undefined) {
     const window = getPreferredQuotaWindow(quota);
-    const usedPercent = typeof window?.usedPercent === "number" ? window.usedPercent : 0;
-    return Math.max(0, Math.min(100, usedPercent));
+    if (typeof window?.usedPercent !== "number") return null;
+    return Math.max(0, Math.min(100, 100 - window.usedPercent));
+}
+
+function getQuotaStatus(quota: AccountQuotaInfo | null | undefined) {
+    const remainingPercent = getQuotaRemainingPercent(quota);
+    if (remainingPercent === null) {
+        return {
+            fillPercent: 0,
+            label: "--",
+            reset: false,
+            unknown: true,
+        };
+    }
+    if (remainingPercent <= 0) {
+        return {
+            fillPercent: 0,
+            label: `下次重置 ${getQuotaResetLabel(quota) || "--"}`,
+            reset: true,
+            unknown: false,
+        };
+    }
+    return {
+        fillPercent: remainingPercent,
+        label: `${Math.round(remainingPercent)}%`,
+        reset: false,
+        unknown: false,
+    };
+}
+
+function getQuotaResetLabel(quota: AccountQuotaInfo | null | undefined) {
+    const window = getPreferredQuotaWindow(quota);
+    if (!window?.resetAt) return "";
+    const resetAt = new Date(window.resetAt);
+    if (Number.isNaN(resetAt.getTime())) return "";
+    const now = new Date();
+    const isToday = resetAt.getFullYear() === now.getFullYear()
+        && resetAt.getMonth() === now.getMonth()
+        && resetAt.getDate() === now.getDate();
+    return resetAt.toLocaleString("zh-CN", isToday
+        ? {
+            hour: "2-digit",
+            minute: "2-digit",
+        }
+        : {
+            month: "numeric",
+            day: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+        });
 }
 
 function getQuotaLabel(quota: AccountQuotaInfo | null | undefined) {
@@ -741,47 +792,11 @@ function SettingsModal({ onClose, onSaved }: { onClose: () => void; onSaved?: ()
             <div className="settings-modal settings-modal-wide" onClick={(e) => e.stopPropagation()}>
                 <div className="settings-header">
                     <span className="settings-title">设置</span>
-                    <button className="settings-close" onClick={() => { void handleClose(); }}>
+                    <button className="settings-close" aria-label="关闭设置" onClick={() => { void handleClose(); }}>
                         <CloseIcon size={12} />
                     </button>
                 </div>
                 <div className="settings-body settings-body-stack">
-                    <div className="settings-section">
-                        <div className="settings-section-head">
-                            <span className="settings-section-title">服务器</span>
-                        </div>
-                        <div className="settings-row">
-                            <label className="settings-label">服务器地址</label>
-                            {editingServerUrl ? (
-                                <div className="settings-edit-row">
-                                    <input
-                                        className="settings-input"
-                                        type="url"
-                                        value={url}
-                                        onChange={(e) => setUrl(e.target.value)}
-                                        onKeyDown={(e) => e.key === "Enter" && handleSaveServerUrl()}
-                                        autoFocus
-                                    />
-                                    <button className="settings-btn" onClick={handleSaveServerUrl}>保存</button>
-                                    <button
-                                        className="settings-btn settings-btn-dim"
-                                        onClick={() => {
-                                            setEditingServerUrl(false);
-                                            setUrl(getServerUrl() || "");
-                                        }}
-                                    >
-                                        取消
-                                    </button>
-                                </div>
-                            ) : (
-                                <div className="settings-value-row">
-                                    <span className="settings-value">{getServerUrl() || "(未配置)"}</span>
-                                    <button className="settings-btn" onClick={() => setEditingServerUrl(true)}>修改</button>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
                     <div className="settings-section">
                         {editingAccountId && selectedAccount ? (
                             <div className="settings-section-head settings-section-head-sticky settings-section-head-editing">
@@ -984,7 +999,7 @@ function SettingsModal({ onClose, onSaved }: { onClose: () => void; onSaved?: ()
                                 {accounts.length > 0 ? accounts.map((account) => {
                                     const brandVendor = getProviderBrandVendor(account.PROVIDER);
                                     const quota = accountQuotas[account.id] ?? null;
-                                    const quotaFillPercent = getQuotaFillPercent(quota);
+                                    const quotaStatus = getQuotaStatus(quota);
                                     const quotaLabel = getQuotaLabel(quota);
                                     return (
                                         <div
@@ -1033,12 +1048,19 @@ function SettingsModal({ onClose, onSaved }: { onClose: () => void; onSaved?: ()
                                             </div>
                                             <div className="settings-account-quota-row">
                                                 <div className="settings-account-quota" aria-label={quotaLabel} title={quotaLabel}>
-                                                    <span className="settings-account-quota-bar" aria-hidden="true">
+                                                    <div className="settings-account-quota-topline">
+                                                        <span className="settings-account-quota-bar" aria-hidden="true">
+                                                            <span
+                                                                className="settings-account-quota-fill"
+                                                                style={{ width: `${quotaStatus.fillPercent}%` }}
+                                                            />
+                                                        </span>
                                                         <span
-                                                            className="settings-account-quota-fill"
-                                                            style={{ width: `${quotaFillPercent}%` }}
-                                                        />
-                                                    </span>
+                                                            className={`settings-account-quota-percent ${quotaStatus.reset ? "reset" : ""} ${quotaStatus.unknown ? "unknown" : ""}`}
+                                                        >
+                                                            {quotaStatus.label}
+                                                        </span>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </button>
@@ -1058,6 +1080,42 @@ function SettingsModal({ onClose, onSaved }: { onClose: () => void; onSaved?: ()
                         )}
 
                         {error && <div className="settings-error">{error}</div>}
+                    </div>
+
+                    <div className="settings-section">
+                        <div className="settings-section-head">
+                            <span className="settings-section-title">服务器</span>
+                        </div>
+                        <div className="settings-row">
+                            <label className="settings-label">服务器地址</label>
+                            {editingServerUrl ? (
+                                <div className="settings-edit-row">
+                                    <input
+                                        className="settings-input"
+                                        type="url"
+                                        value={url}
+                                        onChange={(e) => setUrl(e.target.value)}
+                                        onKeyDown={(e) => e.key === "Enter" && handleSaveServerUrl()}
+                                        autoFocus
+                                    />
+                                    <button className="settings-btn" onClick={handleSaveServerUrl}>保存</button>
+                                    <button
+                                        className="settings-btn settings-btn-dim"
+                                        onClick={() => {
+                                            setEditingServerUrl(false);
+                                            setUrl(getServerUrl() || "");
+                                        }}
+                                    >
+                                        取消
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="settings-value-row">
+                                    <span className="settings-value">{getServerUrl() || "(未配置)"}</span>
+                                    <button className="settings-btn" onClick={() => setEditingServerUrl(true)}>修改</button>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>
