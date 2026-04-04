@@ -32,31 +32,7 @@ docker run -d \
   anycodex/anycode:latest
 ```
 
-然后在宿主机的 `~/.anycode/settings.json` 里配置账号：
 
-```json
-{
-  "accounts": [
-    {
-      "id": "default",
-      "name": "OpenAI 主账号",
-      "AGENT": "anycode",
-      "PROVIDER": "openai",
-      "MODEL": "gpt-4o",
-      "API_KEY": "sk-xxxxxxxx",
-      "BASE_URL": "https://api.openai.com/v1"
-    }
-  ],
-  "currentAccountId": "default"
-}
-```
-
-| 环境变量 | 说明 | 示例 |
-|---------|------|------|
-| `PORT` | 服务端口 | `2223` |
-| `TLS_CERT` / `TLS_KEY` | TLS 证书路径（用于 HTTPS） | |
-
-`AGENT`、`PROVIDER`、`MODEL`、`API_KEY`、`BASE_URL` 都统一放在 `settings.json` 的账号列表里管理，不再通过环境变量传入。
 
 ## License
 

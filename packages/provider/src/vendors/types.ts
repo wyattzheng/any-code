@@ -62,6 +62,34 @@ export interface VendorApiKeyResolveResult {
   persistedApiKey?: string
 }
 
+export interface VendorQuotaWindow {
+  usedPercent?: number
+  windowMinutes?: number
+  resetAfterSeconds?: number
+  resetAt?: string
+}
+
+export interface VendorQuotaCredits {
+  hasCredits?: boolean
+  unlimited?: boolean
+  balance?: number | null
+}
+
+export interface VendorQuotaResult {
+  updatedAt?: string
+  planType?: string
+  primary?: VendorQuotaWindow
+  secondary?: VendorQuotaWindow
+  credits?: VendorQuotaCredits | null
+}
+
+export interface VendorQuotaInput {
+  apiKey: string
+  agent?: string
+  model?: string
+  baseUrl?: string
+}
+
 export interface VendorTransform {
   message?: (msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>) => ModelMessage[]
   options?: (input: ProviderTransformInput) => Record<string, any>
@@ -128,6 +156,7 @@ export interface VendorProvider {
   prompt?: VendorPrompt
   oauth?: VendorOAuth
   resolveApiKey?: (input: VendorApiKeyResolveInput) => Promise<VendorApiKeyResolveResult>
+  getQuota?: (input: VendorQuotaInput) => Promise<VendorQuotaResult | null>
 }
 
 export interface VendorProviderAccessor {
@@ -139,6 +168,7 @@ export interface VendorProviderAccessor {
   getCustomLoaders(): Record<string, (context: ProviderContext, provider: ProviderInfoLike) => Promise<ProviderLoaderResult>>
   getOAuth(): VendorOAuth | undefined
   resolveApiKey(input: VendorApiKeyResolveInput): Promise<VendorApiKeyResolveResult>
+  getQuota(input: VendorQuotaInput): Promise<VendorQuotaResult | null>
   getOptionsKey(): string | undefined
   applyRequestPatch(patchInput: Omit<ProviderRequestPatchInput, "model"> & { model?: ProviderModelLike }): void
   applyMessageTransforms(msgs: ModelMessage[], options: Record<string, unknown>): ModelMessage[]

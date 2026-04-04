@@ -796,6 +796,33 @@ export class AnyCodeServer {
     }
   }
 
+  async getAccountQuotas() {
+    const settings = new SettingsModel(this.readUserSettingsFile())
+    const quotas: Record<string, unknown> = {}
+
+    for (const account of settings.accounts) {
+      const apiKey = normalizeString(account.API_KEY)
+      if (!apiKey) {
+        quotas[account.id] = null
+        continue
+      }
+
+      try {
+        quotas[account.id] = await VendorRegistry.getVendorProvider({ id: account.PROVIDER }).getQuota({
+          apiKey,
+          agent: normalizeString(account.AGENT),
+          model: normalizeString(account.MODEL),
+          baseUrl: normalizeString(account.BASE_URL),
+        })
+      } catch (error) {
+        console.warn(`⚠  Failed to load quota for account ${account.id}:`, error)
+        quotas[account.id] = null
+      }
+    }
+
+    return { quotas }
+  }
+
   private cleanupOAuthSessions() {
     const now = Date.now()
     for (const [sessionId, session] of this.oauthSessions.entries()) {
@@ -1453,6 +1480,15 @@ function createMainServer(server: AnyCodeServer, cfg: ServerConfig): http.Server
         accounts: settings.accounts ?? [],
         currentAccountId: settings.currentAccountId ?? null,
       }))
+      return
+    }
+
+    if (req.method === "GET" && req.url === "/api/account-quotas") {
+      try {
+        sendJson(res, 200, await server.getAccountQuotas())
+      } catch (error) {
+        sendErrorJson(res, 500, error, "Failed to load account quotas")
+      }
       return
     }
 

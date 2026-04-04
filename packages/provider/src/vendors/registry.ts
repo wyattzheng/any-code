@@ -195,6 +195,15 @@ export const VendorRegistry = {
         return result
       },
 
+      async getQuota(input) {
+        for (const vendor of vendors) {
+          if (!vendor.getQuota) continue
+          const result = await vendor.getQuota(input)
+          if (result) return result
+        }
+        return null
+      },
+
       getOptionsKey() {
         if (!npm) return model?.providerID
         return vendors.find((vendor) => vendor.sdkKeys?.[npm])?.sdkKeys?.[npm] ?? model?.providerID

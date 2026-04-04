@@ -54,6 +54,31 @@ interface ApiKeyNormalizationResponse {
     apiKey: string;
 }
 
+interface AccountQuotaWindowInfo {
+    usedPercent?: number;
+    windowMinutes?: number;
+    resetAfterSeconds?: number;
+    resetAt?: string;
+}
+
+interface AccountQuotaCreditsInfo {
+    hasCredits?: boolean;
+    unlimited?: boolean;
+    balance?: number | null;
+}
+
+interface AccountQuotaInfo {
+    updatedAt?: string;
+    planType?: string;
+    primary?: AccountQuotaWindowInfo;
+    secondary?: AccountQuotaWindowInfo;
+    credits?: AccountQuotaCreditsInfo | null;
+}
+
+interface AccountQuotaResponse {
+    quotas?: Record<string, AccountQuotaInfo | null>;
+}
+
 interface ManualOAuthPrompt {
     accountId: string;
     provider: string;
@@ -137,6 +162,48 @@ function getProviderLabel(provider: string) {
     return PROVIDER_LABELS[key] ?? (provider.trim() || "未命名厂商");
 }
 
+function getPreferredQuotaWindow(quota: AccountQuotaInfo | null | undefined) {
+    const windows = [quota?.primary, quota?.secondary]
+        .filter((item): item is AccountQuotaWindowInfo => Boolean(item));
+    if (windows.length === 0) return null;
+    return [...windows].sort((left, right) => (
+        (left.windowMinutes ?? Number.MAX_SAFE_INTEGER) - (right.windowMinutes ?? Number.MAX_SAFE_INTEGER)
+    ))[0];
+}
+
+function formatQuotaWindow(window: AccountQuotaWindowInfo | null) {
+    if (!window) return "额度未知";
+    const parts: string[] = [];
+    if (typeof window.usedPercent === "number") parts.push(`已用 ${Math.round(window.usedPercent)}%`);
+    if (typeof window.windowMinutes === "number") parts.push(`${window.windowMinutes} 分钟窗口`);
+    if (window.resetAt) {
+        const resetAt = new Date(window.resetAt);
+        if (!Number.isNaN(resetAt.getTime())) {
+            parts.push(`重置 ${resetAt.toLocaleString("zh-CN", {
+                month: "numeric",
+                day: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+            })}`);
+        }
+    }
+    return parts.join(" · ") || "额度未知";
+}
+
+function getQuotaFillPercent(quota: AccountQuotaInfo | null | undefined) {
+    const window = getPreferredQuotaWindow(quota);
+    const usedPercent = typeof window?.usedPercent === "number" ? window.usedPercent : 0;
+    return Math.max(0, Math.min(100, usedPercent));
+}
+
+function getQuotaLabel(quota: AccountQuotaInfo | null | undefined) {
+    const window = getPreferredQuotaWindow(quota);
+    const parts: string[] = [];
+    if (quota?.planType) parts.push(quota.planType);
+    parts.push(formatQuotaWindow(window));
+    return parts.join(" · ");
+}
+
 async function readResponseJson<T>(res: Response): Promise<T & ApiResponseBody> {
     const text = await res.text();
     if (!text.trim()) {
@@ -164,6 +231,7 @@ function SettingsModal({ onClose, onSaved }: { onClose: () => void; onSaved?: ()
     const [editingServerUrl, setEditingServerUrl] = useState(false);
 
     const [accounts, setAccounts] = useState<AccountInfo[]>([]);
+    const [accountQuotas, setAccountQuotas] = useState<Record<string, AccountQuotaInfo | null>>({});
     const [currentAccountId, setCurrentAccountId] = useState<string | null>(null);
     const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
     const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
@@ -268,9 +336,21 @@ function SettingsModal({ onClose, onSaved }: { onClose: () => void; onSaved?: ()
         }
     }, []);
 
+    const fetchAccountQuotas = useCallback(async () => {
+        try {
+            const res = await fetch(`${getApiBase()}/api/account-quotas`);
+            const data = await readResponseJson<AccountQuotaResponse>(res);
+            if (!res.ok || data.error) throw createApiError(res, data, `HTTP ${res.status}`);
+            setAccountQuotas(data.quotas ?? {});
+        } catch {
+            setAccountQuotas({});
+        }
+    }, []);
+
     useEffect(() => {
-        fetchSettings();
-    }, [fetchSettings]);
+        void fetchSettings();
+        void fetchAccountQuotas();
+    }, [fetchAccountQuotas, fetchSettings]);
 
     const sanitizeAccounts = useCallback((items: AccountInfo[]) => (
         items.map((account) => ({
@@ -320,6 +400,7 @@ function SettingsModal({ onClose, onSaved }: { onClose: () => void; onSaved?: ()
                     ? preferredSelectedId
                     : (resolvedCurrentAccountId ?? resolvedAccounts[0]?.id ?? null),
             );
+            await fetchAccountQuotas();
             setDirty(false);
             onSaved?.();
             return true;
@@ -329,7 +410,7 @@ function SettingsModal({ onClose, onSaved }: { onClose: () => void; onSaved?: ()
         } finally {
             setSaving(false);
         }
-    }, [onSaved, sanitizeAccounts, selectedAccountId]);
+    }, [fetchAccountQuotas, onSaved, sanitizeAccounts, selectedAccountId]);
 
     const handleSaveServerUrl = () => {
         setServerUrl(url.trim());
@@ -902,6 +983,9 @@ function SettingsModal({ onClose, onSaved }: { onClose: () => void; onSaved?: ()
                             <div className="settings-account-list">
                                 {accounts.length > 0 ? accounts.map((account) => {
                                     const brandVendor = getProviderBrandVendor(account.PROVIDER);
+                                    const quota = accountQuotas[account.id] ?? null;
+                                    const quotaFillPercent = getQuotaFillPercent(quota);
+                                    const quotaLabel = getQuotaLabel(quota);
                                     return (
                                         <div
                                             key={account.id}
@@ -948,9 +1032,12 @@ function SettingsModal({ onClose, onSaved }: { onClose: () => void; onSaved?: ()
                                                 </div>
                                             </div>
                                             <div className="settings-account-quota-row">
-                                                <div className="settings-account-quota" aria-label="额度占位">
+                                                <div className="settings-account-quota" aria-label={quotaLabel} title={quotaLabel}>
                                                     <span className="settings-account-quota-bar" aria-hidden="true">
-                                                        <span className="settings-account-quota-fill" />
+                                                        <span
+                                                            className="settings-account-quota-fill"
+                                                            style={{ width: `${quotaFillPercent}%` }}
+                                                        />
                                                     </span>
                                                 </div>
                                             </div>
