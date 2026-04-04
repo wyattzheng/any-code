@@ -183,6 +183,18 @@ export const VendorRegistry = {
         return vendors.find((vendor) => vendor.oauth)?.oauth
       },
 
+      async resolveApiKey(input) {
+        let apiKey = input.apiKey
+        for (const vendor of vendors) {
+          if (!vendor.oauth?.resolveApiKey) continue
+          apiKey = await vendor.oauth.resolveApiKey({
+            ...input,
+            apiKey,
+          })
+        }
+        return apiKey
+      },
+
       getOptionsKey() {
         if (!npm) return model?.providerID
         return vendors.find((vendor) => vendor.sdkKeys?.[npm])?.sdkKeys?.[npm] ?? model?.providerID

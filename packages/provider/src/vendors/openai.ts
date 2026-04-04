@@ -1,12 +1,154 @@
 import { createOpenAI } from "@ai-sdk/openai"
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
 import type { ModelMessage } from "ai"
+import { createHash, randomBytes } from "node:crypto"
 import { openAIVendorMetadata } from "./metadata"
 import type { VendorProvider } from "./types"
+
+const OPENAI_OAUTH_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
+const OPENAI_OAUTH_AUDIENCE = "https://api.openai.com/v1"
+const OPENAI_OAUTH_AUTHORIZATION_ENDPOINT = "https://auth.openai.com/authorize"
+const OPENAI_OAUTH_TOKEN_ENDPOINT = "https://auth0.openai.com/oauth/token"
+const OPENAI_OAUTH_SCOPES = "openid profile email offline_access api.connectors.read api.connectors.invoke"
+
+function createPkceVerifier() {
+  return randomBytes(32).toString("base64url")
+}
+
+function createPkceChallenge(codeVerifier: string) {
+  return createHash("sha256").update(codeVerifier).digest("base64url")
+}
+
+function parseOpenAIOAuthApiKey(apiKey: string) {
+  if (!apiKey.startsWith("oauth:")) return undefined
+  const [accessToken = "", refreshToken = "", idToken = ""] = apiKey.slice("oauth:".length).split(":")
+  if (!accessToken.trim()) return undefined
+  return {
+    accessToken: accessToken.trim(),
+    refreshToken: refreshToken.trim(),
+    idToken: idToken.trim(),
+  }
+}
+
+function getOpenAIOAuthAccessToken(apiKey: string) {
+  return parseOpenAIOAuthApiKey(apiKey)?.accessToken
+}
+
+function encodeOpenAIOAuthApiKey(tokens: { accessToken: string, refreshToken?: string, idToken?: string }) {
+  return `oauth:${tokens.accessToken}:${tokens.refreshToken ?? ""}:${tokens.idToken ?? ""}`
+}
+
+function decodeJwtExpiration(token: string) {
+  try {
+    const [, payload] = token.split(".")
+    if (!payload) return undefined
+    const parsed = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"))
+    return typeof parsed.exp === "number" ? parsed.exp * 1000 : undefined
+  } catch {
+    return undefined
+  }
+}
+
+async function exchangeOpenAIToken(params: Record<string, string>) {
+  const res = await fetch(OPENAI_OAUTH_TOKEN_ENDPOINT, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams(params),
+  })
+
+  const text = await res.text()
+  let data: Record<string, any> = {}
+  if (text) {
+    try {
+      data = JSON.parse(text)
+    } catch {
+      throw new Error(text || `OAuth token exchange failed (${res.status})`)
+    }
+  }
+
+  if (!res.ok) {
+    throw new Error(String(data.error_description || data.error || text || `OAuth token exchange failed (${res.status})`))
+  }
+
+  return data
+}
 
 export const openAIVendor: VendorProvider = {
   ...openAIVendorMetadata,
   id: "openai",
+  oauth: {
+    start({ redirectUri, state }) {
+      const codeVerifier = createPkceVerifier()
+      const authUrl = `${OPENAI_OAUTH_AUTHORIZATION_ENDPOINT}?${new URLSearchParams({
+        client_id: OPENAI_OAUTH_CLIENT_ID,
+        redirect_uri: redirectUri,
+        response_type: "code",
+        scope: OPENAI_OAUTH_SCOPES,
+        audience: OPENAI_OAUTH_AUDIENCE,
+        state,
+        code_challenge: createPkceChallenge(codeVerifier),
+        code_challenge_method: "S256",
+      })}`
+      return {
+        authUrl,
+        exchangeData: { codeVerifier },
+      }
+    },
+    async exchangeCode({ code, redirectUri, exchangeData }) {
+      const codeVerifier = exchangeData?.codeVerifier?.trim()
+      if (!codeVerifier) {
+        throw new Error("OpenAI OAuth session is missing PKCE verifier.")
+      }
+
+      const data = await exchangeOpenAIToken({
+        grant_type: "authorization_code",
+        client_id: OPENAI_OAUTH_CLIENT_ID,
+        code,
+        redirect_uri: redirectUri,
+        code_verifier: codeVerifier,
+      })
+
+      const accessToken = typeof data.access_token === "string" ? data.access_token.trim() : ""
+      const refreshToken = typeof data.refresh_token === "string" ? data.refresh_token.trim() : ""
+      const idToken = typeof data.id_token === "string" ? data.id_token.trim() : ""
+
+      if (!accessToken) {
+        throw new Error("OpenAI OAuth completed but no access token was returned.")
+      }
+
+      return {
+        apiKey: encodeOpenAIOAuthApiKey({ accessToken, refreshToken, idToken }),
+      }
+    },
+    async resolveApiKey({ apiKey, agent }) {
+      const tokens = parseOpenAIOAuthApiKey(apiKey)
+      if (!tokens?.refreshToken) return apiKey
+
+      const expiration = decodeJwtExpiration(tokens.accessToken)
+      let nextApiKey = apiKey
+      if (!(expiration && expiration > Date.now() + 5 * 60 * 1000)) {
+        const data = await exchangeOpenAIToken({
+          grant_type: "refresh_token",
+          client_id: OPENAI_OAUTH_CLIENT_ID,
+          refresh_token: tokens.refreshToken,
+        })
+
+        const accessToken = typeof data.access_token === "string" ? data.access_token.trim() : ""
+        if (!accessToken) {
+          throw new Error("OpenAI OAuth refresh completed but no access token was returned.")
+        }
+
+        nextApiKey = encodeOpenAIOAuthApiKey({
+          accessToken,
+          refreshToken: typeof data.refresh_token === "string" ? data.refresh_token.trim() : tokens.refreshToken,
+          idToken: typeof data.id_token === "string" ? data.id_token.trim() : tokens.idToken,
+        })
+      }
+
+      if (agent === "codex") return nextApiKey
+      return getOpenAIOAuthAccessToken(nextApiKey) ?? nextApiKey
+    },
+  },
   npms: ["@ai-sdk/openai", "@ai-sdk/openai-compatible"],
   bundled: {
     "@ai-sdk/openai": createOpenAI,

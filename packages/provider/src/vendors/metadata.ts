@@ -1,6 +1,29 @@
 import type { VendorProvider } from "./types"
 
-type VendorMetadata = Pick<VendorProvider, "id" | "getDefaultModel" | "getDefaultBaseUrl" | "getBrandVendor">
+export interface VendorOAuthUiConfig {
+  buttonLabel: string
+  buttonLabelFilled: string
+  pendingLabel: string
+  helperText: string
+}
+
+type VendorMetadata = Pick<VendorProvider, "id" | "getDefaultModel" | "getDefaultBaseUrl" | "getBrandVendor"> & {
+  getOAuthUi?: () => VendorOAuthUiConfig | undefined
+}
+
+export const antigravityVendorOAuthUi = {
+  buttonLabel: "Google OAuth 登录",
+  buttonLabelFilled: "重新 Google OAuth 登录",
+  pendingLabel: "等待 Google 授权…",
+  helperText: "登录成功后会自动把 OAuth 凭证填入 API_KEY。",
+} satisfies VendorOAuthUiConfig
+
+export const openAIVendorOAuthUi = {
+  buttonLabel: "ChatGPT OAuth 登录",
+  buttonLabelFilled: "重新 ChatGPT OAuth 登录",
+  pendingLabel: "等待 ChatGPT 授权…",
+  helperText: "登录成功后会自动把 OAuth 凭证填入 API_KEY。",
+} satisfies VendorOAuthUiConfig
 
 export const anthropicVendorMetadata = {
   id: "anthropic",
@@ -30,6 +53,9 @@ export const openAIVendorMetadata = {
   getDefaultBaseUrl() {
     return "https://api.openai.com/v1"
   },
+  getOAuthUi() {
+    return openAIVendorOAuthUi
+  },
 } satisfies VendorMetadata
 
 export const antigravityVendorMetadata = {
@@ -42,6 +68,9 @@ export const antigravityVendorMetadata = {
   },
   getBrandVendor() {
     return "google"
+  },
+  getOAuthUi() {
+    return antigravityVendorOAuthUi
   },
 } satisfies VendorMetadata
 
@@ -83,4 +112,8 @@ export function getVendorDefaultBaseUrl(vendor: unknown): string | undefined {
 export function getVendorBrandVendor(vendor: unknown): string | undefined {
   const normalized = normalizeVendorId(vendor)
   return (getVendorMetadata(vendor)?.getBrandVendor?.() ?? normalized) || undefined
+}
+
+export function getVendorOAuthUi(vendor: unknown): VendorOAuthUiConfig | undefined {
+  return getVendorMetadata(vendor)?.getOAuthUi?.()
 }

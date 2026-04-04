@@ -158,7 +158,8 @@ interface OAuthSessionRecord {
   redirectUri: string
   createdAt: number
   status: "pending" | "success" | "error"
-  refreshToken?: string
+  apiKey?: string
+  exchangeData?: Record<string, string>
   error?: string
 }
 
@@ -305,12 +306,13 @@ async function createSessionAgentBinding(
     }
   }
 
-  const chatAgent = await createChatAgent(cfg.agent, createChatAgentConfig(server, cfg, directory, terminal, preview, resumeToken))
+  const runtimeCfg = await resolveRuntimeConfig(cfg)
+  const chatAgent = await createChatAgent(runtimeCfg.agent, createChatAgentConfig(server, runtimeCfg, directory, terminal, preview, resumeToken))
   await chatAgent.init()
   return {
     chatAgent,
-    agentType: cfg.agent,
-    runtimeAgentType: cfg.agent,
+    agentType: runtimeCfg.agent,
+    runtimeAgentType: runtimeCfg.agent,
   }
 }
 
@@ -349,6 +351,51 @@ function createApiError(message: string, code: string) {
   return error
 }
 
+function getFirstHeaderValue(value: string | string[] | undefined) {
+  if (Array.isArray(value)) return normalizeString(value[0])
+  if (typeof value !== "string") return undefined
+  return normalizeString(value.split(",")[0])
+}
+
+function normalizeForwardedToken(value: string | undefined) {
+  return normalizeString(value?.replace(/^"|"$/g, ""))
+}
+
+function getForwardedBaseUrl(req: http.IncomingMessage, cfg: ServerConfig) {
+  const forwarded = normalizeString(req.headers.forwarded)
+  if (forwarded) {
+    const first = forwarded.split(",")[0] ?? ""
+    const protoMatch = first.match(/(?:^|;)\s*proto=([^;]+)/i)
+    const hostMatch = first.match(/(?:^|;)\s*host=([^;]+)/i)
+    const proto = normalizeForwardedToken(protoMatch?.[1])?.replace(/:$/, "")
+    const host = normalizeForwardedToken(hostMatch?.[1])
+    if (host && (proto === "http" || proto === "https")) {
+      return `${proto}://${host}`
+    }
+  }
+
+  const forwardedHost = getFirstHeaderValue(req.headers["x-forwarded-host"])
+  if (!forwardedHost) return undefined
+
+  const forwardedProto = getFirstHeaderValue(req.headers["x-forwarded-proto"])?.replace(/:$/, "")
+  const forwardedPort = getFirstHeaderValue(req.headers["x-forwarded-port"])
+  const protocol = forwardedProto === "http" || forwardedProto === "https"
+    ? forwardedProto
+    : (cfg.tlsCert ? "https" : "http")
+  const host = forwardedHost.includes(":") || !forwardedPort
+    ? forwardedHost
+    : `${forwardedHost}:${forwardedPort}`
+  return `${protocol}://${host}`
+}
+
+async function resolveRuntimeConfig(cfg: ServerConfig): Promise<ServerConfig> {
+  const apiKey = await VendorRegistry.getVendorProvider({ id: cfg.provider }).resolveApiKey({
+    apiKey: cfg.apiKey,
+    agent: cfg.agent,
+  }).catch(() => cfg.apiKey)
+  return apiKey === cfg.apiKey ? cfg : { ...cfg, apiKey }
+}
+
 function normalizePublicBaseUrl(value: unknown) {
   const normalized = normalizeString(value)
   if (!normalized) return undefined
@@ -364,6 +411,9 @@ function normalizePublicBaseUrl(value: unknown) {
 function getRequestBaseUrl(req: http.IncomingMessage, cfg: ServerConfig) {
   const fromOrigin = normalizePublicBaseUrl(req.headers.origin)
   if (fromOrigin) return fromOrigin
+
+  const forwardedBaseUrl = getForwardedBaseUrl(req, cfg)
+  if (forwardedBaseUrl) return forwardedBaseUrl
 
   const referer = normalizeString(req.headers.referer)
   if (referer) {
@@ -702,7 +752,7 @@ export class AnyCodeServer {
     const id = crypto.randomUUID()
     const state = crypto.randomUUID()
     const redirectUri = `${publicBaseUrl.replace(/\/+$/, "")}/api/oauth/${provider}/callback`
-    const { authUrl } = oauth.start({ redirectUri, state })
+    const { authUrl, exchangeData } = oauth.start({ redirectUri, state })
 
     const session: OAuthSessionRecord = {
       id,
@@ -711,6 +761,7 @@ export class AnyCodeServer {
       redirectUri,
       createdAt: Date.now(),
       status: "pending",
+      exchangeData,
     }
     this.oauthSessions.set(id, session)
     this.oauthStateIndex.set(state, id)
@@ -730,7 +781,7 @@ export class AnyCodeServer {
     return {
       sessionId: session.id,
       status: session.status,
-      refreshToken: session.refreshToken,
+      apiKey: session.apiKey,
       error: session.error,
     }
   }
@@ -757,7 +808,7 @@ export class AnyCodeServer {
       return oauthCallbackHtml("登录未完成", description, true)
     }
 
-    if (session.status === "success" && session.refreshToken) {
+    if (session.status === "success" && session.apiKey) {
       return oauthCallbackHtml("登录成功", "You can return to AnyCode now.")
     }
 
@@ -770,9 +821,13 @@ export class AnyCodeServer {
 
     try {
       const oauth = getProviderOAuth(provider)
-      const tokens = await oauth.exchangeCode({ code, redirectUri: session.redirectUri })
+      const tokens = await oauth.exchangeCode({
+        code,
+        redirectUri: session.redirectUri,
+        exchangeData: session.exchangeData,
+      })
       session.status = "success"
-      session.refreshToken = tokens.refreshToken
+      session.apiKey = tokens.apiKey
       session.error = undefined
       return oauthCallbackHtml("登录成功", "Token has been captured. Return to AnyCode and continue.")
     } catch (error: any) {

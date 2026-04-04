@@ -1,4 +1,4 @@
-import { getVendorBrandVendor, getVendorDefaultBaseUrl, getVendorDefaultModel } from "@any-code/provider/vendor-metadata"
+import { getVendorBrandVendor, getVendorDefaultBaseUrl, getVendorDefaultModel, getVendorOAuthUi, type VendorOAuthUiConfig } from "@any-code/provider/vendor-metadata"
 
 export const ANYCODE_DIR_NAME = ".anycode"
 export const SETTINGS_FILE_NAME = "settings.json"
@@ -137,6 +137,10 @@ export function getDefaultBaseUrlForProvider(provider: unknown) {
   const normalized = normalizeString(provider)
   if (!normalized) return DEFAULT_BASE_URL
   return getVendorDefaultBaseUrl(normalized) ?? ""
+}
+
+export function getOAuthUiForProvider(provider: unknown): VendorOAuthUiConfig | undefined {
+  return getVendorOAuthUi(normalizeString(provider) ?? DEFAULT_PROVIDER)
 }
 
 export function normalizeAccount(

@@ -5,6 +5,7 @@ import {
     getDefaultModelForProvider,
     getDuplicateAccountName,
     getForcedProviderForAgent,
+    getOAuthUiForProvider,
     getProviderBrandVendor,
     getProviderOptionsForAgent,
     normalizeProviderForAgent,
@@ -43,7 +44,7 @@ interface OAuthStartResponse {
 
 interface OAuthSessionResponse {
     status: "pending" | "success" | "error";
-    refreshToken?: string;
+    apiKey?: string;
     error?: string;
 }
 
@@ -93,18 +94,6 @@ function createApiError(res: Response, body: ApiResponseBody, fallbackMessage: s
     return error;
 }
 
-function getProviderOAuthConfig(provider: string) {
-    if (provider === "antigravity") {
-        return {
-            buttonLabel: "Google OAuth 登录",
-            buttonLabelFilled: "重新 Google OAuth 登录",
-            pendingLabel: "等待 Google 授权…",
-            helperText: "登录成功后会自动把 refresh token 填入 API_KEY。",
-        };
-    }
-    return null;
-}
-
 const PROVIDER_LABELS: Record<string, string> = {
     anthropic: "Anthropic",
     openai: "OpenAI",
@@ -129,6 +118,15 @@ async function readResponseJson<T>(res: Response): Promise<T & ApiResponseBody> 
     } catch {
         throw new Error(text);
     }
+}
+
+function resolveOAuthPublicBaseUrl() {
+    if (typeof window !== "undefined") {
+        const origin = window.location.origin?.trim();
+        if (origin && /^https?:\/\//i.test(origin)) return origin;
+    }
+    const apiBase = getApiBase().trim();
+    return apiBase || undefined;
 }
 
 function SettingsModal({ onClose, onSaved }: { onClose: () => void; onSaved?: () => void }) {
@@ -165,7 +163,7 @@ function SettingsModal({ onClose, onSaved }: { onClose: () => void; onSaved?: ()
             ? [...options, currentProvider]
             : options;
     }, [selectedAccount]);
-    const selectedAccountOAuth = selectedAccount ? getProviderOAuthConfig(selectedAccount.PROVIDER) : null;
+    const selectedAccountOAuth = selectedAccount ? getOAuthUiForProvider(selectedAccount.PROVIDER) : null;
 
     useEffect(() => {
         accountsRef.current = accounts;
@@ -230,7 +228,7 @@ function SettingsModal({ onClose, onSaved }: { onClose: () => void; onSaved?: ()
     const persistSettings = useCallback(async (
         nextAccounts: AccountInfo[],
         nextCurrentAccountId: string | null,
-        options?: { applyCurrentAccount?: boolean; nextSelectedAccountId?: string | null; closeOnMobile?: boolean },
+        options?: { applyCurrentAccount?: boolean; nextSelectedAccountId?: string | null },
     ) => {
         setSaving(true);
         setError("");
@@ -265,9 +263,6 @@ function SettingsModal({ onClose, onSaved }: { onClose: () => void; onSaved?: ()
             );
             setDirty(false);
             onSaved?.();
-            if (options?.closeOnMobile && typeof window !== "undefined" && window.matchMedia("(max-width: 720px)").matches) {
-                onClose();
-            }
             return true;
         } catch (e: any) {
             setError(e?.message || "保存账号配置失败");
@@ -275,7 +270,7 @@ function SettingsModal({ onClose, onSaved }: { onClose: () => void; onSaved?: ()
         } finally {
             setSaving(false);
         }
-    }, [onClose, onSaved, sanitizeAccounts, selectedAccountId]);
+    }, [onSaved, sanitizeAccounts, selectedAccountId]);
 
     const handleSaveServerUrl = () => {
         setServerUrl(url.trim());
@@ -338,11 +333,10 @@ function SettingsModal({ onClose, onSaved }: { onClose: () => void; onSaved?: ()
         if (!ok) setDirty(true);
     }, [accounts, currentAccountId, editingAccountId, persistSettings, selectedAccountId]);
 
-    const handleActivateAccount = async (accountId: string, closeOnMobile = true) => {
+    const handleActivateAccount = async (accountId: string) => {
         const ok = await persistSettings(accounts, accountId, {
             applyCurrentAccount: true,
             nextSelectedAccountId: accountId,
-            closeOnMobile,
         });
         if (ok) {
             setCurrentAccountId(accountId);
@@ -351,7 +345,7 @@ function SettingsModal({ onClose, onSaved }: { onClose: () => void; onSaved?: ()
 
     const handleAgentOAuthLogin = useCallback(async () => {
         if (!selectedAccount) return;
-        const oauthConfig = getProviderOAuthConfig(selectedAccount.PROVIDER);
+        const oauthConfig = getOAuthUiForProvider(selectedAccount.PROVIDER);
         if (!oauthConfig) return;
 
         const accountId = selectedAccount.id;
@@ -383,15 +377,15 @@ function SettingsModal({ onClose, onSaved }: { onClose: () => void; onSaved?: ()
                 clearOAuthPolling();
                 try { popup?.close(); } catch { /* ignore */ }
 
-                if (data.status === "error" || !data.refreshToken) {
+                if (data.status === "error" || !data.apiKey) {
                     setError(data.error || "OAuth 登录失败");
                     return;
                 }
-                const refreshToken = data.refreshToken;
+                const apiKey = data.apiKey;
 
                 const nextAccounts = accountsRef.current.map((account) => (
                     account.id === accountId
-                        ? { ...account, API_KEY: refreshToken }
+                        ? { ...account, API_KEY: apiKey }
                         : account
                 ));
 
@@ -411,11 +405,11 @@ function SettingsModal({ onClose, onSaved }: { onClose: () => void; onSaved?: ()
         };
 
         try {
-            const publicBaseUrl = getApiBase() || window.location.origin;
+            const publicBaseUrl = resolveOAuthPublicBaseUrl();
             const res = await fetch(`${getApiBase()}/api/oauth/${provider}/start`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ publicBaseUrl }),
+                body: JSON.stringify(publicBaseUrl ? { publicBaseUrl } : {}),
             });
             const data = await readResponseJson<OAuthStartResponse>(res);
             if (!res.ok || data.error) throw createApiError(res, data, `HTTP ${res.status}`);
@@ -595,10 +589,13 @@ function SettingsModal({ onClose, onSaved }: { onClose: () => void; onSaved?: ()
                                     <label className="settings-label">API_KEY</label>
                                     <input
                                         className="settings-input"
-                                        type="password"
+                                        type="text"
                                         value={selectedAccount.API_KEY}
                                         onChange={(e) => updateSelectedAccount({ API_KEY: e.target.value })}
                                         placeholder="输入 API Key"
+                                        autoCapitalize="off"
+                                        autoCorrect="off"
+                                        spellCheck={false}
                                     />
                                     {selectedAccountOAuth && (
                                         <div className="settings-oauth-row">

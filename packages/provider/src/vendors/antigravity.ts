@@ -55,7 +55,7 @@ export const antigravityVendor: VendorProvider = {
         )
       }
 
-      return { refreshToken }
+      return { apiKey: refreshToken }
     },
   },
 }

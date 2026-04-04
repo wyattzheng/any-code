@@ -52,6 +52,11 @@ export interface ProviderRuntimeInput {
   } | null
 }
 
+export interface VendorApiKeyResolveInput {
+  apiKey: string
+  agent?: string
+}
+
 export interface VendorTransform {
   message?: (msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>) => ModelMessage[]
   options?: (input: ProviderTransformInput) => Record<string, any>
@@ -80,20 +85,23 @@ export interface VendorOAuthStartInput {
 
 export interface VendorOAuthStartResult {
   authUrl: string
+  exchangeData?: Record<string, string>
 }
 
 export interface VendorOAuthExchangeInput {
   code: string
   redirectUri: string
+  exchangeData?: Record<string, string>
 }
 
 export interface VendorOAuthExchangeResult {
-  refreshToken: string
+  apiKey: string
 }
 
 export interface VendorOAuth {
   start(input: VendorOAuthStartInput): VendorOAuthStartResult
   exchangeCode(input: VendorOAuthExchangeInput): Promise<VendorOAuthExchangeResult>
+  resolveApiKey?: (input: VendorApiKeyResolveInput) => Promise<string>
 }
 
 export interface VendorProvider {
@@ -121,6 +129,7 @@ export interface VendorProviderAccessor {
   getBundledProvider(): ProviderSDKFactory | undefined
   getCustomLoaders(): Record<string, (context: ProviderContext, provider: ProviderInfoLike) => Promise<ProviderLoaderResult>>
   getOAuth(): VendorOAuth | undefined
+  resolveApiKey(input: VendorApiKeyResolveInput): Promise<string>
   getOptionsKey(): string | undefined
   applyRequestPatch(patchInput: Omit<ProviderRequestPatchInput, "model"> & { model?: ProviderModelLike }): void
   applyMessageTransforms(msgs: ModelMessage[], options: Record<string, unknown>): ModelMessage[]

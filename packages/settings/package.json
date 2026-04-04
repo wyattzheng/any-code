@@ -3,16 +3,16 @@
   "version": "0.0.1",
   "type": "module",
   "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "types": "./index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
+      "types": "./index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.js",
       "default": "./dist/index.js"
     },
     "./shared": {
-      "types": "./dist/shared.d.ts",
+      "types": "./shared.d.ts",
       "import": "./dist/shared.js",
       "require": "./dist/shared.js",
       "default": "./dist/shared.js"
@@ -20,13 +20,18 @@
   },
   "typesVersions": {
     "*": {
+      "*": [
+        "index.d.ts"
+      ],
       "shared": [
-        "dist/shared.d.ts"
+        "shared.d.ts"
       ]
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "index.d.ts",
+    "shared.d.ts"
   ],
   "dependencies": {
     "@any-code/provider": "workspace:*"
