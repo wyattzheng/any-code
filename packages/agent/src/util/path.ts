@@ -10,7 +10,7 @@ export function join(...parts: string[]): string {
     const joined = parts
         .filter(Boolean)
         .join("/")
-    return normalize(joined)
+    return clean(joined)
 }
 
 export function dirname(p: string): string {
@@ -40,7 +40,7 @@ export function isAbsolute(p: string): boolean {
     return p.startsWith("/")
 }
 
-export function normalize(p: string): string {
+export function clean(p: string): string {
     if (!p) return "."
     const isAbs = p.startsWith("/")
     const segments = p.split("/")
@@ -63,8 +63,8 @@ export function normalize(p: string): string {
 }
 
 export function relative(from: string, to: string): string {
-    from = normalize(from)
-    to = normalize(to)
+    from = clean(from)
+    to = clean(to)
     if (from === to) return ""
 
     const fromParts = from.split("/").filter(Boolean)
@@ -95,5 +95,5 @@ export function resolve(...parts: string[]): string {
         resolved = resolved ? part + "/" + resolved : part
         if (isAbsolute(part)) break
     }
-    return normalize(resolved)
+    return clean(resolved)
 }

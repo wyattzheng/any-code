@@ -87,7 +87,7 @@ type JsonRpcRequestMessage = {
   params?: any
 }
 
-type NormalizedUsage = {
+type UsageBreakdown = {
   inputTokens: number
   outputTokens: number
   reasoningTokens: number
@@ -115,7 +115,7 @@ type TurnRuntimeState = {
   thinkingTextByItemId: Map<string, string>
   reasoningSummaryByItemId: Map<string, string[]>
   reasoningRawContentByItemId: Map<string, string[]>
-  turnUsage: NormalizedUsage | null
+  turnUsage: UsageBreakdown | null
   completed: boolean
   failed: boolean
   failedMessage?: string
@@ -126,12 +126,6 @@ function toTrimmedString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined
 }
 
-function normalizeServiceTier(value: unknown): "fast" | "flex" | undefined {
-  const normalized = toTrimmedString(value)?.toLowerCase()
-  if (normalized === "fast" || normalized === "flex") return normalized
-  return undefined
-}
-
 function text(value: unknown): string {
   return toTrimmedString(value) ?? ""
 }
@@ -140,108 +134,118 @@ function stringOrUndefined(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined
 }
 
-function encodeResumeToken(state: ResumeState) {
-  return `${RESUME_TOKEN_PREFIX}${Buffer.from(JSON.stringify(state), "utf8").toString("base64url")}`
+const serviceTierSetting = {
+  pick(value: unknown): "fast" | "flex" | undefined {
+    const tierValue = toTrimmedString(value)?.toLowerCase()
+    if (tierValue === "fast" || tierValue === "flex") return tierValue
+    return undefined
+  },
 }
 
-function parseResumeToken(token: string | undefined): ResumeState | undefined {
-  const tokenValue = text(token)
-  if (!tokenValue.startsWith(RESUME_TOKEN_PREFIX)) return undefined
+const resumeTokenCodec = {
+  encode(state: ResumeState) {
+    return `${RESUME_TOKEN_PREFIX}${Buffer.from(JSON.stringify(state), "utf8").toString("base64url")}`
+  },
+  parse(token: string | undefined): ResumeState | undefined {
+    const tokenValue = text(token)
+    if (!tokenValue.startsWith(RESUME_TOKEN_PREFIX)) return undefined
 
-  try {
-    const parsed = JSON.parse(Buffer.from(tokenValue.slice(RESUME_TOKEN_PREFIX.length), "base64url").toString("utf8"))
-    const threadId = toTrimmedString(parsed?.threadId)
-    if (parsed?.version !== 1 || !threadId) return undefined
-    return {
-      version: 1,
-      threadId,
+    try {
+      const parsed = JSON.parse(Buffer.from(tokenValue.slice(RESUME_TOKEN_PREFIX.length), "base64url").toString("utf8"))
+      const threadId = toTrimmedString(parsed?.threadId)
+      if (parsed?.version !== 1 || !threadId) return undefined
+      return {
+        version: 1,
+        threadId,
+      }
+    } catch {
+      return undefined
     }
-  } catch {
+  },
+}
+
+const tokenClaims = {
+  payload(token: string | undefined): Record<string, any> | undefined {
+    const tokenValue = toTrimmedString(token)
+    if (!tokenValue) return undefined
+
+    try {
+      const [, payload] = tokenValue.split(".")
+      if (!payload) return undefined
+      return JSON.parse(Buffer.from(payload, "base64url").toString("utf8"))
+    } catch {
+      return undefined
+    }
+  },
+  expirationMs(token: string | undefined) {
+    const payload = this.payload(token)
+    return typeof payload?.exp === "number" ? payload.exp * 1000 : undefined
+  },
+  accountId(idToken: string | undefined, accessToken: string | undefined): string | undefined {
+    const payloads = [this.payload(idToken), this.payload(accessToken)]
+
+    for (const payload of payloads) {
+      const direct = toTrimmedString(payload?.account_id)
+      if (direct) return direct
+
+      const auth = payload?.["https://api.openai.com/auth"]
+      const nested = toTrimmedString(auth?.chatgpt_account_id)
+      if (nested) return nested
+    }
+
     return undefined
-  }
+  },
 }
 
-function decodeJwtPayload(token: string | undefined): Record<string, any> | undefined {
-  const tokenValue = toTrimmedString(token)
-  if (!tokenValue) return undefined
+const oauthApiKey = {
+  parse(rawApiKey: string | undefined): OAuthState | undefined {
+    const tokenValue = text(rawApiKey)
+    if (!tokenValue.startsWith("oauth:")) return undefined
 
-  try {
-    const [, payload] = tokenValue.split(".")
-    if (!payload) return undefined
-    return JSON.parse(Buffer.from(payload, "base64url").toString("utf8"))
-  } catch {
-    return undefined
-  }
+    const [accessToken = "", refreshToken = "", idToken = ""] = tokenValue.slice("oauth:".length).split(":")
+    const trimmedAccessToken = accessToken.trim()
+    if (!trimmedAccessToken) return undefined
+
+    return {
+      accessToken: trimmedAccessToken,
+      refreshToken: refreshToken.trim() || undefined,
+      idToken: idToken.trim() || undefined,
+      accountId: tokenClaims.accountId(idToken, accessToken),
+    }
+  },
+  isFresh(accessToken: string | undefined, idToken: string | undefined) {
+    const expiresAt = tokenClaims.expirationMs(accessToken) ?? tokenClaims.expirationMs(idToken)
+    if (!expiresAt) return true
+    return expiresAt - Date.now() > OPENAI_ACCESS_TOKEN_REFRESH_BUFFER_MS
+  },
 }
 
-function decodeJwtExpiration(token: string | undefined) {
-  const payload = decodeJwtPayload(token)
-  return typeof payload?.exp === "number" ? payload.exp * 1000 : undefined
-}
+const openAIEndpoints = {
+  apiBaseUrl(baseUrl: string | undefined) {
+    const baseUrlValue = text(baseUrl).replace(/\/+$/, "")
+    if (!baseUrlValue) return undefined
+    if (baseUrlValue.endsWith(RESPONSES_PATH_SUFFIX)) return baseUrlValue.slice(0, -RESPONSES_PATH_SUFFIX.length)
+    if (baseUrlValue.endsWith(OPENAI_V1_SUFFIX)) return baseUrlValue
+    return `${baseUrlValue}${OPENAI_V1_SUFFIX}`
+  },
+  wantsCustomChatgptBaseUrl(baseUrl: string | undefined) {
+    const value = text(baseUrl)
+    if (!value) return false
 
-function extractOpenAIAccountId(idToken: string | undefined, accessToken: string | undefined): string | undefined {
-  const payloads = [decodeJwtPayload(idToken), decodeJwtPayload(accessToken)]
-
-  for (const payload of payloads) {
-    const direct = toTrimmedString(payload?.account_id)
-    if (direct) return direct
-
-    const auth = payload?.["https://api.openai.com/auth"]
-    const nested = toTrimmedString(auth?.chatgpt_account_id)
-    if (nested) return nested
-  }
-
-  return undefined
-}
-
-function parseOAuthApiKey(rawApiKey: string | undefined): OAuthState | undefined {
-  const tokenValue = text(rawApiKey)
-  if (!tokenValue.startsWith("oauth:")) return undefined
-
-  const [accessToken = "", refreshToken = "", idToken = ""] = tokenValue.slice("oauth:".length).split(":")
-  const trimmedAccessToken = accessToken.trim()
-  if (!trimmedAccessToken) return undefined
-
-  return {
-    accessToken: trimmedAccessToken,
-    refreshToken: refreshToken.trim() || undefined,
-    idToken: idToken.trim() || undefined,
-    accountId: extractOpenAIAccountId(idToken, accessToken),
-  }
-}
-
-function isAccessTokenFresh(accessToken: string | undefined, idToken: string | undefined) {
-  const expiresAt = decodeJwtExpiration(accessToken) ?? decodeJwtExpiration(idToken)
-  if (!expiresAt) return true
-  return expiresAt - Date.now() > OPENAI_ACCESS_TOKEN_REFRESH_BUFFER_MS
-}
-
-function normalizeOpenAIBaseUrl(baseUrl: string | undefined) {
-  const normalized = text(baseUrl).replace(/\/+$/, "")
-  if (!normalized) return undefined
-  if (normalized.endsWith(RESPONSES_PATH_SUFFIX)) return normalized.slice(0, -RESPONSES_PATH_SUFFIX.length)
-  if (normalized.endsWith(OPENAI_V1_SUFFIX)) return normalized
-  return `${normalized}${OPENAI_V1_SUFFIX}`
-}
-
-function shouldUseCustomChatgptBaseUrl(baseUrl: string | undefined) {
-  const value = text(baseUrl)
-  if (!value) return false
-
-  try {
-    const url = new URL(value)
-    return !["api.openai.com", "chatgpt.com", "www.chatgpt.com"].includes(url.hostname)
-  } catch {
-    return true
-  }
-}
-
-function normalizeChatgptBaseUrl(baseUrl: string | undefined) {
-  const normalized = text(baseUrl).replace(/\/+$/, "")
-  if (!normalized || !shouldUseCustomChatgptBaseUrl(normalized)) return undefined
-  if (normalized.includes(CHATGPT_BACKEND_API_SUFFIX)) return normalized
-  if (normalized.endsWith(OPENAI_V1_SUFFIX)) return `${normalized.slice(0, -OPENAI_V1_SUFFIX.length)}${CHATGPT_BACKEND_API_SUFFIX}`
-  return `${normalized}${CHATGPT_BACKEND_API_SUFFIX}`
+    try {
+      const url = new URL(value)
+      return !["api.openai.com", "chatgpt.com", "www.chatgpt.com"].includes(url.hostname)
+    } catch {
+      return true
+    }
+  },
+  chatgptBaseUrl(baseUrl: string | undefined) {
+    const baseUrlValue = text(baseUrl).replace(/\/+$/, "")
+    if (!baseUrlValue || !this.wantsCustomChatgptBaseUrl(baseUrlValue)) return undefined
+    if (baseUrlValue.includes(CHATGPT_BACKEND_API_SUFFIX)) return baseUrlValue
+    if (baseUrlValue.endsWith(OPENAI_V1_SUFFIX)) return `${baseUrlValue.slice(0, -OPENAI_V1_SUFFIX.length)}${CHATGPT_BACKEND_API_SUFFIX}`
+    return `${baseUrlValue}${CHATGPT_BACKEND_API_SUFFIX}`
+  },
 }
 
 async function exchangeOpenAIToken(params: Record<string, string>) {
@@ -300,7 +304,7 @@ async function refreshOAuthState(input: OAuthState) {
     accessToken,
     refreshToken,
     idToken,
-    accountId: extractOpenAIAccountId(idToken, accessToken) ?? input.accountId,
+    accountId: tokenClaims.accountId(idToken, accessToken) ?? input.accountId,
     planType: input.planType,
   } satisfies OAuthState
 }
@@ -315,9 +319,9 @@ function schemaToJsonSchema(parameters: any) {
 }
 
 function basenameFromPath(input: string) {
-  const normalized = input.replaceAll("\\", "/")
-  const parts = normalized.split("/")
-  return parts[parts.length - 1] || normalized
+  const unixPath = input.replaceAll("\\", "/")
+  const parts = unixPath.split("/")
+  return parts[parts.length - 1] || unixPath
 }
 
 function truncateText(input: string, maxLength = 8000) {
@@ -354,10 +358,10 @@ function ensureIndexedTextEntry(state: Map<string, string[]>, itemId: string, in
 }
 
 function joinThinkingSections(parts: string[]) {
-  const normalized = parts
+  const nonEmptyParts = parts
     .map((part) => typeof part === "string" ? part : "")
     .filter((part) => part.length > 0)
-  return normalized.join("\n\n")
+  return nonEmptyParts.join("\n\n")
 }
 
 function extractReasoningDisplayText(item: any) {
@@ -385,14 +389,16 @@ function emitThinkingSnapshot(target: ChatAgentEvent[], state: TurnRuntimeState,
   target.push({ type: "thinking.delta", thinkingContent: delta })
 }
 
-function normalizeUsageBreakdown(usage: any): NormalizedUsage | null {
-  if (!usage || typeof usage !== "object") return null
-  return {
-    inputTokens: Number(usage.inputTokens ?? usage.input_tokens ?? 0) + Number(usage.cachedInputTokens ?? usage.cached_input_tokens ?? 0),
-    outputTokens: Number(usage.outputTokens ?? usage.output_tokens ?? 0),
-    reasoningTokens: Number(usage.reasoningOutputTokens ?? usage.reasoning_output_tokens ?? 0),
-    cost: 0,
-  }
+const usageBreakdown = {
+  fromWire(usage: any): UsageBreakdown | null {
+    if (!usage || typeof usage !== "object") return null
+    return {
+      inputTokens: Number(usage.inputTokens ?? usage.input_tokens ?? 0) + Number(usage.cachedInputTokens ?? usage.cached_input_tokens ?? 0),
+      outputTokens: Number(usage.outputTokens ?? usage.output_tokens ?? 0),
+      reasoningTokens: Number(usage.reasoningOutputTokens ?? usage.reasoning_output_tokens ?? 0),
+      cost: 0,
+    }
+  },
 }
 
 function pushErrorEvent(target: ChatAgentEvent[], state: TurnRuntimeState, message: string | undefined) {
@@ -778,7 +784,7 @@ export class CodexAgent implements IChatAgent {
   private workingDirectory = ""
   private customTools = new Map<string, RuntimeTool>()
   private lastEmittedResumeToken = ""
-  private totalUsage: NormalizedUsage | null = null
+  private totalUsage: UsageBreakdown | null = null
   private lastThreadTokenUsage: any = null
   private activeThreadId: string | null = null
   private activeTurnId: string | null = null
@@ -792,12 +798,12 @@ export class CodexAgent implements IChatAgent {
     this.logger = config.logger ?? consoleLogger
     this.name = config.name || "Codex Agent"
     this.fallbackSessionId = `codex-${Date.now()}`
-    this.resumeState = parseResumeToken(config.sessionId)
+    this.resumeState = resumeTokenCodec.parse(config.sessionId)
   }
 
   get sessionId(): string {
     const threadId = this.activeThreadId ?? this.resumeState?.threadId
-    return threadId ? encodeResumeToken({ version: 1, threadId }) : this.fallbackSessionId
+    return threadId ? resumeTokenCodec.encode({ version: 1, threadId }) : this.fallbackSessionId
   }
 
   async init(): Promise<void> {
@@ -1024,9 +1030,9 @@ export class CodexAgent implements IChatAgent {
       search: codeAgentOptions.search,
       dataPath,
       containsPath: (filepath: string) => {
-        const normalized = resolvePath(filepath)
-        return (worktree ? normalized.startsWith(resolvePath(worktree)) : false)
-          || normalized.startsWith(resolvePath(dataPath))
+        const resolvedPath = resolvePath(filepath)
+        return (worktree ? resolvedPath.startsWith(resolvePath(worktree)) : false)
+          || resolvedPath.startsWith(resolvePath(dataPath))
       },
       config: (codeAgentOptions.config ?? {}) as Record<string, any>,
       settings: codeAgentOptions.settings ?? {},
@@ -1077,7 +1083,7 @@ export class CodexAgent implements IChatAgent {
   private async authenticate() {
     if (this.authenticated) return
     const transport = await this.ensureTransport()
-    const oauth = parseOAuthApiKey(this.config.apiKey)
+    const oauth = oauthApiKey.parse(this.config.apiKey)
 
     if (oauth) {
       const resolved = await this.resolveOAuthState(oauth)
@@ -1111,7 +1117,7 @@ export class CodexAgent implements IChatAgent {
   }
 
   private async resolveOAuthState(input: OAuthState) {
-    if (isAccessTokenFresh(input.accessToken, input.idToken)) {
+    if (oauthApiKey.isFresh(input.accessToken, input.idToken)) {
       return input
     }
     if (!input.refreshToken) {
@@ -1121,15 +1127,15 @@ export class CodexAgent implements IChatAgent {
   }
 
   private buildThreadConfigOverrides() {
-    const oauth = parseOAuthApiKey(this.config.apiKey)
+    const oauth = oauthApiKey.parse(this.config.apiKey)
     const overrides: Record<string, unknown> = {}
 
-    const openaiBaseUrl = normalizeOpenAIBaseUrl(this.config.baseUrl)
+    const openaiBaseUrl = openAIEndpoints.apiBaseUrl(this.config.baseUrl)
     if (!oauth && openaiBaseUrl) {
       overrides.openai_base_url = openaiBaseUrl
     }
 
-    const chatgptBaseUrl = normalizeChatgptBaseUrl(this.config.baseUrl)
+    const chatgptBaseUrl = openAIEndpoints.chatgptBaseUrl(this.config.baseUrl)
     if (oauth && chatgptBaseUrl) {
       overrides.chatgpt_base_url = chatgptBaseUrl
     }
@@ -1150,7 +1156,7 @@ export class CodexAgent implements IChatAgent {
     const threadConfig = this.buildThreadConfigOverrides()
     const cwd = this.workingDirectory || this.toolContext?.directory || undefined
     const model = text(this.config.model) || "gpt-5.4"
-    const serviceTier = normalizeServiceTier(this.config.serviceTier)
+    const serviceTier = serviceTierSetting.pick(this.config.serviceTier)
     const dynamicTools = this.buildDynamicTools()
 
     if (this.activeThreadId) return this.activeThreadId
@@ -1198,7 +1204,7 @@ export class CodexAgent implements IChatAgent {
   private buildTurnStartParams(threadId: string, input: string) {
     const cwd = this.workingDirectory || this.toolContext?.directory || undefined
     const effort = toTrimmedString(this.config.reasoningEffort)
-    const serviceTier = normalizeServiceTier(this.config.serviceTier)
+    const serviceTier = serviceTierSetting.pick(this.config.serviceTier)
 
     return {
       threadId,
@@ -1225,9 +1231,9 @@ export class CodexAgent implements IChatAgent {
 
     if (method === "thread/tokenUsage/updated" && text(params.threadId) === this.activeThreadId) {
       this.lastThreadTokenUsage = params.tokenUsage ?? null
-      this.totalUsage = normalizeUsageBreakdown(params.tokenUsage?.total)
+      this.totalUsage = usageBreakdown.fromWire(params.tokenUsage?.total)
       if (text(params.turnId) === state.turnId) {
-        state.turnUsage = normalizeUsageBreakdown(params.tokenUsage?.last)
+        state.turnUsage = usageBreakdown.fromWire(params.tokenUsage?.last)
       }
       return yielded
     }
@@ -1619,7 +1625,7 @@ export class CodexAgent implements IChatAgent {
         emit: (event: string, data?: any) => this.emitEvent(event, data),
       })
 
-      const normalized: ToolExecutionResult = {
+      const toolResult: ToolExecutionResult = {
         title: result.title || titleOverride || toolName,
         metadata: { ...metadataOverride, ...(result.metadata ?? {}) },
         output: result.output,
@@ -1628,8 +1634,8 @@ export class CodexAgent implements IChatAgent {
       }
 
       this.transport?.respond(message.id, {
-        contentItems: dynamicToolContentItemsFromResult(normalized),
-        success: normalized.success !== false,
+        contentItems: dynamicToolContentItemsFromResult(toolResult),
+        success: toolResult.success !== false,
       })
     } catch (error: any) {
       this.transport?.respond(message.id, {
@@ -1735,7 +1741,7 @@ export class CodexAgent implements IChatAgent {
 
   private emitResumeTokenIfNeeded() {
     if (!this.activeThreadId) return
-    const token = encodeResumeToken({ version: 1, threadId: this.activeThreadId })
+    const token = resumeTokenCodec.encode({ version: 1, threadId: this.activeThreadId })
     if (token === this.lastEmittedResumeToken) return
     this.lastEmittedResumeToken = token
     this.emitEvent("cascade.created", { cascadeId: token })

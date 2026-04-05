@@ -61,7 +61,7 @@ const maybe = (value: unknown) => text(value) || undefined
 const accountNameKey = (value: unknown) => text(value).toLocaleLowerCase()
 const reasoningEffort = (value: unknown) => REASONING_EFFORT_OPTIONS.includes(text(value) as typeof REASONING_EFFORT_OPTIONS[number]) ? text(value) : DEFAULT_REASONING_EFFORT
 const serviceTier = (value: unknown) => SERVICE_TIER_OPTIONS.includes(text(value).toLowerCase() as typeof SERVICE_TIER_OPTIONS[number]) ? text(value).toLowerCase() : undefined
-const OAUTH_KEYS = ["accessToken", "refreshToken", "idToken", "expiresAt", "clientId", "scope", "updatedAt"] as const
+const OAUTH_KEYS = ["accessToken", "refreshToken", "idToken", "accountId", "expiresAt", "clientId", "scope", "updatedAt"] as const
 
 function createAccountId() {
   if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID()

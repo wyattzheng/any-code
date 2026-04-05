@@ -10,9 +10,9 @@ export function getServerUrl(): string {
 }
 
 export function setServerUrl(url: string) {
-    // Normalize: remove trailing slash
-    const normalized = url.replace(/\/+$/, "");
-    localStorage.setItem(STORAGE_KEY, normalized);
+    // Remove the trailing slash so downstream URL joins stay predictable.
+    const trimmedUrl = url.replace(/\/+$/, "");
+    localStorage.setItem(STORAGE_KEY, trimmedUrl);
 }
 
 /** HTTP API base, e.g. "https://test.anycoder.io" or "" */

@@ -66,8 +66,8 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
     }
 
     if (hunks.length === 0) {
-      const normalized = params.patchText.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim()
-      if (normalized === "*** Begin Patch\n*** End Patch") {
+      const patchBody = params.patchText.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim()
+      if (patchBody === "*** Begin Patch\n*** End Patch") {
         throw new Error("patch rejected: empty patch")
       }
       throw new Error("apply_patch verification failed: no hunks found")

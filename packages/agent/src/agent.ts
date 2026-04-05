@@ -338,9 +338,9 @@ export class CodeAgent extends EventEmitter {
                 ; (this._context as any).worktree = dir
                 ; (this._context as any).project = { ...this._context.project, worktree: dir }
                 ; (this._context as any).containsPath = (filepath: string) => {
-                    const normalized = path.resolve(filepath)
-                    return normalized.startsWith(path.resolve(dir)) ||
-                        normalized.startsWith(path.resolve(this.options.dataPath))
+                    const resolvedPath = path.resolve(filepath)
+                    return resolvedPath.startsWith(path.resolve(dir)) ||
+                        resolvedPath.startsWith(path.resolve(this.options.dataPath))
                 }
         }
     }
@@ -388,9 +388,9 @@ export class CodeAgent extends EventEmitter {
             db: this._dbClient,
             tools: [...(this.options.tools ?? [])],
             containsPath: (filepath: string) => {
-                const normalized = path.resolve(filepath)
-                return normalized.startsWith(path.resolve(worktree)) ||
-                    normalized.startsWith(path.resolve(this.options.dataPath))
+                const resolvedPath = path.resolve(filepath)
+                return resolvedPath.startsWith(path.resolve(worktree)) ||
+                    resolvedPath.startsWith(path.resolve(this.options.dataPath))
             },
             // Phase 0: stateless services
             env: this.env,

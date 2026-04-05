@@ -53,7 +53,7 @@ function fmtDur(ms?: number) {
     return ms >= 1000 ? (ms / 1000).toFixed(1) + "s" : ms + "ms";
 }
 
-function normalizeInlineText(value: unknown) {
+function compactInlineText(value: unknown) {
     if (value == null) return "";
     if (typeof value === "string") return value.replace(/\s+/g, " ").trim();
     try {
@@ -64,11 +64,11 @@ function normalizeInlineText(value: unknown) {
 }
 
 function compactPathLabel(value: string) {
-    const normalized = value.trim().replaceAll("\\", "/").replace(/\/+/g, "/");
-    if (!normalized) return "";
-    const trailingSlash = normalized.length > 1 && normalized.endsWith("/");
-    const parts = normalized.split("/").filter(Boolean);
-    if (parts.length === 0) return normalized;
+    const collapsedPath = value.trim().replaceAll("\\", "/").replace(/\/+/g, "/");
+    if (!collapsedPath) return "";
+    const trailingSlash = collapsedPath.length > 1 && collapsedPath.endsWith("/");
+    const parts = collapsedPath.split("/").filter(Boolean);
+    if (parts.length === 0) return collapsedPath;
     if (parts.length === 1) return trailingSlash ? `${parts[0]}/` : parts[0];
     const last = parts[parts.length - 1];
     return trailingSlash ? `${last}/` : last;
@@ -103,7 +103,7 @@ function summarizeApplyPatchFromText(text: string) {
         if (resultMatch) files.push(resultMatch[1].trim());
     }
 
-    if (files.length === 0) return normalizeInlineText(text);
+    if (files.length === 0) return compactInlineText(text);
     const primary = compactPathLabel(files[0]);
     return files.length === 1 ? primary : `${primary} +${files.length - 1}`;
 }
@@ -149,9 +149,9 @@ function summarizeToolInfo(tool: ToolCard) {
             return firstString(tool.args, ["pattern", "query", "include"]);
         case "bash":
         case "Bash":
-            return firstString(tool.args, ["command", "description"]) || normalizeInlineText(tool.title);
+            return firstString(tool.args, ["command", "description"]) || compactInlineText(tool.title);
         default:
-            return normalizeInlineText(tool.title) || normalizeInlineText(tool.args);
+            return compactInlineText(tool.title) || compactInlineText(tool.args);
     }
 }
 

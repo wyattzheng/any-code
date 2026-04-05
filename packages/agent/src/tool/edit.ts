@@ -26,7 +26,7 @@ import { assertExternalDirectory } from "./external-directory"
 
 const MAX_DIAGNOSTICS_PER_FILE = 20
 
-function normalizeLineEndings(text: string): string {
+function toLfLineEndings(text: string): string {
   return text.replaceAll("\r\n", "\n")
 }
 
@@ -90,13 +90,13 @@ export const EditTool = Tool.define("edit", {
       contentOld = await ctx.fs.readText(filePath)
 
       const ending = detectLineEnding(contentOld)
-      const old = convertToLineEnding(normalizeLineEndings(params.oldString), ending)
-      const next = convertToLineEnding(normalizeLineEndings(params.newString), ending)
+      const old = convertToLineEnding(toLfLineEndings(params.oldString), ending)
+      const next = convertToLineEnding(toLfLineEndings(params.newString), ending)
 
       contentNew = replace(contentOld, old, next, params.replaceAll)
 
       diff = trimDiff(
-        createTwoFilesPatch(filePath, filePath, normalizeLineEndings(contentOld), normalizeLineEndings(contentNew)),
+        createTwoFilesPatch(filePath, filePath, toLfLineEndings(contentOld), toLfLineEndings(contentNew)),
       )
       await ctx.ask({
         permission: "edit",
@@ -113,7 +113,7 @@ export const EditTool = Tool.define("edit", {
 
       contentNew = await ctx.fs.readText(filePath)
       diff = trimDiff(
-        createTwoFilesPatch(filePath, filePath, normalizeLineEndings(contentOld), normalizeLineEndings(contentNew)),
+        createTwoFilesPatch(filePath, filePath, toLfLineEndings(contentOld), toLfLineEndings(contentNew)),
       )
       ctx.fileTime.read(ctx.sessionID, filePath)
     })
@@ -358,20 +358,20 @@ export const BlockAnchorReplacer: Replacer = function* (content, find) {
   }
 }
 
-export const WhitespaceNormalizedReplacer: Replacer = function* (content, find) {
-  const normalizeWhitespace = (text: string) => text.replace(/\s+/g, " ").trim()
-  const normalizedFind = normalizeWhitespace(find)
+export const WhitespaceCollapsedReplacer: Replacer = function* (content, find) {
+  const collapseWhitespace = (text: string) => text.replace(/\s+/g, " ").trim()
+  const spaceCollapsedFind = collapseWhitespace(find)
 
   // Handle single line matches
   const lines = content.split("\n")
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
-    if (normalizeWhitespace(line) === normalizedFind) {
+    if (collapseWhitespace(line) === spaceCollapsedFind) {
       yield line
     } else {
       // Only check for substring matches if the full line doesn't match
-      const normalizedLine = normalizeWhitespace(line)
-      if (normalizedLine.includes(normalizedFind)) {
+      const spaceCollapsedLine = collapseWhitespace(line)
+      if (spaceCollapsedLine.includes(spaceCollapsedFind)) {
         // Find the actual substring in the original line that matches
         const words = find.trim().split(/\s+/)
         if (words.length > 0) {
@@ -395,7 +395,7 @@ export const WhitespaceNormalizedReplacer: Replacer = function* (content, find) 
   if (findLines.length > 1) {
     for (let i = 0; i <= lines.length - findLines.length; i++) {
       const block = lines.slice(i, i + findLines.length)
-      if (normalizeWhitespace(block.join("\n")) === normalizedFind) {
+      if (collapseWhitespace(block.join("\n")) === spaceCollapsedFind) {
         yield block.join("\n")
       }
     }
@@ -418,19 +418,19 @@ export const IndentationFlexibleReplacer: Replacer = function* (content, find) {
     return lines.map((line) => (line.trim().length === 0 ? line : line.slice(minIndent))).join("\n")
   }
 
-  const normalizedFind = removeIndentation(find)
+  const deindentedFind = removeIndentation(find)
   const contentLines = content.split("\n")
   const findLines = find.split("\n")
 
   for (let i = 0; i <= contentLines.length - findLines.length; i++) {
     const block = contentLines.slice(i, i + findLines.length).join("\n")
-    if (removeIndentation(block) === normalizedFind) {
+    if (removeIndentation(block) === deindentedFind) {
       yield block
     }
   }
 }
 
-export const EscapeNormalizedReplacer: Replacer = function* (content, find) {
+export const EscapeAwareReplacer: Replacer = function* (content, find) {
   const unescapeString = (str: string): string => {
     return str.replace(/\\(n|t|r|'|"|`|\\|\n|\$)/g, (match, capturedChar) => {
       switch (capturedChar) {
@@ -624,9 +624,9 @@ export function replace(content: string, oldString: string, newString: string, r
     SimpleReplacer,
     LineTrimmedReplacer,
     BlockAnchorReplacer,
-    WhitespaceNormalizedReplacer,
+    WhitespaceCollapsedReplacer,
     IndentationFlexibleReplacer,
-    EscapeNormalizedReplacer,
+    EscapeAwareReplacer,
     TrimmedBoundaryReplacer,
     ContextAwareReplacer,
     MultiOccurrenceReplacer,

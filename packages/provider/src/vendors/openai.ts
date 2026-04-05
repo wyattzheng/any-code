@@ -7,17 +7,26 @@ import { openAIVendorMetadata } from "./metadata"
 import { OAuthTokenState } from "./oauth-state"
 import type { VendorOAuthState, VendorProvider } from "./types"
 
-const OPENAI_OAUTH_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
-const OPENAI_OAUTH_AUTHORIZATION_ENDPOINT = "https://auth.openai.com/oauth/authorize"
-const OPENAI_OAUTH_TOKEN_ENDPOINT = "https://auth.openai.com/oauth/token"
-const OPENAI_OAUTH_REDIRECT_URI = "http://localhost:1455/auth/callback"
-const OPENAI_CODEX_USAGE_ENDPOINT = "https://chatgpt.com/backend-api/codex/usage"
-const OPENAI_OAUTH_SCOPES = "openid profile email offline_access api.connectors.read api.connectors.invoke"
-const OPENAI_OAUTH_REFRESH_SCOPES = "openid profile email"
-const OPENAI_OAUTH_ORIGINATOR = "Codex Desktop"
-const OPENAI_OAUTH_USER_AGENT = "codex-cli/0.91.0"
-const OPENAI_ACCESS_TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000
-const OPENAI_REFRESH_IN_FLIGHT = new Map<string, Promise<Record<string, any>>>()
+const openAI = {
+  oauth: {
+    clientId: "app_EMoamEEZ73f0CkXaXp7hrann",
+    authorizationEndpoint: "https://auth.openai.com/oauth/authorize",
+    tokenEndpoint: "https://auth.openai.com/oauth/token",
+    redirectUri: "http://localhost:1455/auth/callback",
+    scopes: "openid profile email offline_access api.connectors.read api.connectors.invoke",
+    refreshScopes: "openid profile email",
+    originator: "Codex Desktop",
+    userAgent: "codex-cli/0.91.0",
+    accessTokenRefreshBufferMs: 5 * 60 * 1000,
+  },
+  backend: {
+    defaultBaseUrl: "https://chatgpt.com/backend-api",
+    apiHostname: "api.openai.com",
+    chatgptHostnames: new Set(["chatgpt.com", "www.chatgpt.com", "chat.openai.com"]),
+    apiSuffix: "/backend-api",
+  },
+  refreshInFlight: new Map<string, Promise<Record<string, any>>>(),
+}
 
 function createPkceVerifier() {
   return randomBytes(64).toString("hex")
@@ -98,12 +107,173 @@ function parseOpenAIRefreshToken(apiKey: string) {
   return refreshToken
 }
 
-function getOpenAIAccessTokenExpiry(accessToken: string, idToken?: string) {
-  return decodeJwtExpiration(accessToken) ?? (idToken ? decodeJwtExpiration(idToken) : undefined)
-}
-
 function encodeOpenAIRuntimeApiKey(tokens: { accessToken: string, refreshToken?: string, idToken?: string }) {
   return `oauth:${tokens.accessToken}:${tokens.refreshToken ?? ""}:${tokens.idToken ?? ""}`
+}
+
+const tokenClaims = {
+  payload(token: string | undefined) {
+    const tokenValue = toTrimmedString(token)
+    if (!tokenValue) return undefined
+
+    try {
+      const [, payload] = tokenValue.split(".")
+      if (!payload) return undefined
+      return JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as Record<string, any>
+    } catch {
+      return undefined
+    }
+  },
+  expiresAt(accessToken: string | undefined, idToken?: string) {
+    return this.expirationMs(accessToken) ?? (idToken ? this.expirationMs(idToken) : undefined)
+  },
+  expirationMs(token: string | undefined) {
+    const payload = this.payload(token)
+    return typeof payload?.exp === "number" ? payload.exp * 1000 : undefined
+  },
+  accountId(accessToken: string | undefined, idToken: string | undefined) {
+    const payloads = [this.payload(accessToken), this.payload(idToken)]
+
+    for (const payload of payloads) {
+      const direct = toTrimmedString(payload?.account_id)
+      if (direct) return direct
+
+      const auth = payload?.["https://api.openai.com/auth"]
+      const nested = toTrimmedString(auth?.chatgpt_account_id)
+      if (nested) return nested
+    }
+
+    return undefined
+  },
+}
+
+const quotaUsage = {
+  baseUrl(baseUrl: string | undefined) {
+    let baseUrlValue = toTrimmedString(baseUrl)?.replace(/\/+$/, "")
+    if (!baseUrlValue) return openAI.backend.defaultBaseUrl
+
+    try {
+      const url = new URL(baseUrlValue)
+      const hostname = url.hostname.toLowerCase()
+      if (hostname === openAI.backend.apiHostname) return openAI.backend.defaultBaseUrl
+      if (openAI.backend.chatgptHostnames.has(hostname) && !baseUrlValue.includes(openAI.backend.apiSuffix)) {
+        baseUrlValue = `${baseUrlValue}${openAI.backend.apiSuffix}`
+      }
+      return baseUrlValue
+    } catch {
+      return openAI.backend.defaultBaseUrl
+    }
+  },
+  endpoint(baseUrl: string | undefined) {
+    const baseUrlValue = this.baseUrl(baseUrl)
+    const path = baseUrlValue.includes(openAI.backend.apiSuffix)
+      ? "/wham/usage"
+      : "/api/codex/usage"
+    return `${baseUrlValue}${path}`
+  },
+  window(raw: any) {
+    if (!raw || typeof raw !== "object") return undefined
+
+    const usedPercent = readNumber(raw.used_percent)
+    const limitWindowSeconds = readNumber(raw.limit_window_seconds)
+    const windowMinutes = readNumber(raw.window_minutes) ?? (limitWindowSeconds != null ? Math.round(limitWindowSeconds / 60) : undefined)
+    const resetAfterSeconds = readNumber(raw.reset_after_seconds)
+    const resetAt = toIsoTime(raw.reset_at)
+
+    if (usedPercent == null && windowMinutes == null && resetAfterSeconds == null && !resetAt) return undefined
+
+    return {
+      ...(usedPercent != null ? { usedPercent } : {}),
+      ...(windowMinutes != null ? { windowMinutes } : {}),
+      ...(resetAfterSeconds != null ? { resetAfterSeconds } : {}),
+      ...(resetAt ? { resetAt } : {}),
+    }
+  },
+  result(raw: any) {
+    if (!raw || typeof raw !== "object") return null
+
+    const rateLimit = raw.rate_limit && typeof raw.rate_limit === "object" ? raw.rate_limit : raw.rate_limits
+    const primary = this.window(rateLimit?.primary_window ?? rateLimit?.primary)
+    const secondary = this.window(rateLimit?.secondary_window ?? rateLimit?.secondary)
+    const planType = toTrimmedString(raw.plan_type ?? rateLimit?.plan_type)
+    const creditsRaw = raw.credits ?? rateLimit?.credits
+    const credits = creditsRaw && typeof creditsRaw === "object"
+      ? {
+        ...(typeof creditsRaw.has_credits === "boolean" ? { hasCredits: creditsRaw.has_credits } : {}),
+        ...(typeof creditsRaw.unlimited === "boolean" ? { unlimited: creditsRaw.unlimited } : {}),
+        ...(readNumber(creditsRaw.balance) != null ? { balance: readNumber(creditsRaw.balance) ?? null } : {}),
+      }
+      : null
+    const updatedAt = toTrimmedString(raw.updated_at) ?? new Date().toISOString()
+
+    if (!primary && !secondary && !planType && !credits) return null
+
+    return {
+      ...(updatedAt ? { updatedAt } : {}),
+      ...(planType ? { planType } : {}),
+      ...(primary ? { primary } : {}),
+      ...(secondary ? { secondary } : {}),
+      ...(credits ? { credits } : {}),
+    }
+  },
+  async fetch(params: { accessToken: string, accountId?: string, baseUrl?: string }) {
+    const endpoint = this.endpoint(params.baseUrl)
+    const response = await fetch(endpoint, {
+      headers: {
+        authorization: `Bearer ${params.accessToken}`,
+        "user-agent": openAI.oauth.userAgent,
+        ...(params.accountId ? { "chatgpt-account-id": params.accountId } : {}),
+      },
+    })
+
+    const body = await response.text()
+    const contentType = response.headers.get("content-type") ?? ""
+    const snippet = body.trim().slice(0, 240)
+    if (!response.ok) {
+      consoleLogger.warn("[OpenAIProvider] quota usage request failed", {
+        endpoint,
+        status: response.status,
+        contentType,
+        snippet,
+        hasAccountId: Boolean(params.accountId),
+      })
+      throw new Error(body || `Failed to fetch Codex usage (${response.status})`)
+    }
+    if (!body.trim()) {
+      consoleLogger.warn("[OpenAIProvider] quota usage response empty", { endpoint })
+      return null
+    }
+    if (body.trim().startsWith("<")) {
+      consoleLogger.warn("[OpenAIProvider] quota usage response was HTML", {
+        endpoint,
+        contentType,
+        snippet,
+      })
+      throw new Error("Codex usage endpoint returned HTML instead of JSON")
+    }
+
+    let parsed: any
+    try {
+      parsed = JSON.parse(body)
+    } catch (error) {
+      consoleLogger.warn("[OpenAIProvider] quota usage response parse failed", {
+        endpoint,
+        contentType,
+        snippet,
+        error: getErrorMessage(error),
+      })
+      throw error
+    }
+
+    const quota = this.result(parsed)
+    if (!quota) {
+      consoleLogger.warn("[OpenAIProvider] quota usage response mapped to null", {
+        endpoint,
+        keys: parsed && typeof parsed === "object" ? Object.keys(parsed).slice(0, 12) : [],
+      })
+    }
+    return quota
+  },
 }
 
 function createOpenAIOAuthState(
@@ -113,18 +283,20 @@ function createOpenAIOAuthState(
   const expiresAt = tokens.expiresInSeconds != null
     ? new Date(Date.now() + tokens.expiresInSeconds * 1000).toISOString()
     : (
-      getOpenAIAccessTokenExpiry(tokens.accessToken, tokens.idToken)
-        ? new Date(getOpenAIAccessTokenExpiry(tokens.accessToken, tokens.idToken)!).toISOString()
+      tokenClaims.expiresAt(tokens.accessToken, tokens.idToken)
+        ? new Date(tokenClaims.expiresAt(tokens.accessToken, tokens.idToken)!).toISOString()
         : previous?.expiresAt
     )
+  const accountId = tokenClaims.accountId(tokens.accessToken, tokens.idToken) ?? previous?.accountId
   const state = new OAuthTokenState("openai", {
     ...previous,
     accessToken: tokens.accessToken,
     refreshToken: tokens.refreshToken ?? previous?.refreshToken,
     idToken: tokens.idToken ?? previous?.idToken,
+    ...(accountId ? { accountId } : {}),
     ...(expiresAt ? { expiresAt } : {}),
-    clientId: previous?.clientId ?? OPENAI_OAUTH_CLIENT_ID,
-    scope: tokens.scope ?? previous?.scope ?? OPENAI_OAUTH_SCOPES,
+    clientId: previous?.clientId ?? openAI.oauth.clientId,
+    scope: tokens.scope ?? previous?.scope ?? openAI.oauth.scopes,
     updatedAt: new Date().toISOString(),
   })
   return state
@@ -181,70 +353,12 @@ function toIsoTime(value: unknown) {
   return new Date(seconds * 1000).toISOString()
 }
 
-function mapOpenAIQuotaWindow(raw: any) {
-  if (!raw || typeof raw !== "object") return undefined
-
-  const usedPercent = readNumber(raw.used_percent)
-  const limitWindowSeconds = readNumber(raw.limit_window_seconds)
-  const windowMinutes = readNumber(raw.window_minutes) ?? (limitWindowSeconds != null ? Math.round(limitWindowSeconds / 60) : undefined)
-  const resetAfterSeconds = readNumber(raw.reset_after_seconds)
-  const resetAt = toIsoTime(raw.reset_at)
-
-  if (usedPercent == null && windowMinutes == null && resetAfterSeconds == null && !resetAt) return undefined
-
-  return {
-    ...(usedPercent != null ? { usedPercent } : {}),
-    ...(windowMinutes != null ? { windowMinutes } : {}),
-    ...(resetAfterSeconds != null ? { resetAfterSeconds } : {}),
-    ...(resetAt ? { resetAt } : {}),
-  }
-}
-
-function mapOpenAIQuotaResult(raw: any) {
-  if (!raw || typeof raw !== "object") return null
-
-  const rateLimit = raw.rate_limit && typeof raw.rate_limit === "object" ? raw.rate_limit : raw.rate_limits
-  const primary = mapOpenAIQuotaWindow(rateLimit?.primary_window ?? rateLimit?.primary)
-  const secondary = mapOpenAIQuotaWindow(rateLimit?.secondary_window ?? rateLimit?.secondary)
-  const planType = toTrimmedString(raw.plan_type ?? rateLimit?.plan_type)
-  const creditsRaw = rateLimit?.credits
-  const credits = creditsRaw && typeof creditsRaw === "object"
-    ? {
-      ...(typeof creditsRaw.has_credits === "boolean" ? { hasCredits: creditsRaw.has_credits } : {}),
-      ...(typeof creditsRaw.unlimited === "boolean" ? { unlimited: creditsRaw.unlimited } : {}),
-      ...(readNumber(creditsRaw.balance) != null ? { balance: readNumber(creditsRaw.balance) ?? null } : {}),
-    }
-    : null
-  const updatedAt = toTrimmedString(raw.updated_at) ?? new Date().toISOString()
-
-  if (!primary && !secondary && !planType && !credits) return null
-
-  return {
-    ...(updatedAt ? { updatedAt } : {}),
-    ...(planType ? { planType } : {}),
-    ...(primary ? { primary } : {}),
-    ...(secondary ? { secondary } : {}),
-    ...(credits ? { credits } : {}),
-  }
-}
-
-function decodeJwtExpiration(token: string) {
-  try {
-    const [, payload] = token.split(".")
-    if (!payload) return undefined
-    const parsed = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"))
-    return typeof parsed.exp === "number" ? parsed.exp * 1000 : undefined
-  } catch {
-    return undefined
-  }
-}
-
 async function exchangeOpenAIToken(params: Record<string, string>) {
-  const res = await fetch(OPENAI_OAUTH_TOKEN_ENDPOINT, {
+  const res = await fetch(openAI.oauth.tokenEndpoint, {
     method: "POST",
     headers: {
       "content-type": "application/x-www-form-urlencoded",
-      "user-agent": OPENAI_OAUTH_USER_AGENT,
+      "user-agent": openAI.oauth.userAgent,
     },
     body: new URLSearchParams(params),
   })
@@ -289,72 +403,17 @@ async function exchangeOpenAIRefreshToken(params: Record<string, string>) {
   const refreshToken = toTrimmedString(params.refresh_token)
   if (!refreshToken) return exchangeOpenAIToken(params)
 
-  const cacheKey = `${toTrimmedString(params.client_id) ?? OPENAI_OAUTH_CLIENT_ID}\u0000${refreshToken}`
-  const existing = OPENAI_REFRESH_IN_FLIGHT.get(cacheKey)
+  const cacheKey = `${toTrimmedString(params.client_id) ?? openAI.oauth.clientId}\u0000${refreshToken}`
+  const existing = openAI.refreshInFlight.get(cacheKey)
   if (existing) return existing
 
   const promise = exchangeOpenAIToken(params).finally(() => {
-    if (OPENAI_REFRESH_IN_FLIGHT.get(cacheKey) === promise) {
-      OPENAI_REFRESH_IN_FLIGHT.delete(cacheKey)
+    if (openAI.refreshInFlight.get(cacheKey) === promise) {
+      openAI.refreshInFlight.delete(cacheKey)
     }
   })
-  OPENAI_REFRESH_IN_FLIGHT.set(cacheKey, promise)
+  openAI.refreshInFlight.set(cacheKey, promise)
   return promise
-}
-
-async function fetchOpenAICodexUsage(accessToken: string) {
-  const res = await fetch(OPENAI_CODEX_USAGE_ENDPOINT, {
-    headers: {
-      authorization: `Bearer ${accessToken}`,
-      accept: "application/json,text/plain,*/*",
-      "user-agent": OPENAI_OAUTH_USER_AGENT,
-      originator: OPENAI_OAUTH_ORIGINATOR,
-      "openai-beta": "codex-v1",
-    },
-  })
-
-  const text = await res.text()
-  const contentType = res.headers.get("content-type") ?? ""
-  const snippet = text.trim().slice(0, 240)
-  if (!res.ok) {
-    consoleLogger.warn("[OpenAIProvider] quota usage request failed", {
-      status: res.status,
-      contentType,
-      snippet,
-    })
-    throw new Error(text || `Failed to fetch Codex usage (${res.status})`)
-  }
-  if (!text.trim()) {
-    consoleLogger.warn("[OpenAIProvider] quota usage response empty")
-    return null
-  }
-  if (text.trim().startsWith("<")) {
-    consoleLogger.warn("[OpenAIProvider] quota usage response was HTML", {
-      contentType,
-      snippet,
-    })
-    throw new Error("Codex usage endpoint returned HTML instead of JSON")
-  }
-
-  let parsed: any
-  try {
-    parsed = JSON.parse(text)
-  } catch (error) {
-    consoleLogger.warn("[OpenAIProvider] quota usage response parse failed", {
-      contentType,
-      snippet,
-      error: getErrorMessage(error),
-    })
-    throw error
-  }
-
-  const result = mapOpenAIQuotaResult(parsed)
-  if (!result) {
-    consoleLogger.warn("[OpenAIProvider] quota usage response mapped to null", {
-      keys: parsed && typeof parsed === "object" ? Object.keys(parsed).slice(0, 12) : [],
-    })
-  }
-  return result
 }
 
 async function resolveOpenAIOAuthTokens(
@@ -363,22 +422,30 @@ async function resolveOpenAIOAuthTokens(
 ) {
   const allowCodeExchange = options.allowCodeExchange !== false
   const oauthState = OAuthTokenState.from("openai", options.oauth)
-  if (oauthState?.isAccessTokenFresh(OPENAI_ACCESS_TOKEN_REFRESH_BUFFER_MS) && oauthState.accessToken) {
+  const oauthStateAccountId = oauthState
+    ? (oauthState.value.accountId ?? tokenClaims.accountId(oauthState.accessToken, oauthState.idToken))
+    : undefined
+  if (oauthState?.isAccessTokenFresh(openAI.oauth.accessTokenRefreshBufferMs) && oauthState.accessToken) {
+    const nextOauthState = oauthStateAccountId && oauthStateAccountId !== oauthState.value.accountId
+      ? oauthState.withPatch({ accountId: oauthStateAccountId })
+      : oauthState
     return {
-      accessToken: oauthState.accessToken,
-      refreshToken: oauthState.refreshToken,
-      idToken: oauthState.idToken,
-      runtimeApiKey: createOpenAIRuntimeApiKey(oauthState),
-      oauth: oauthState,
+      accessToken: nextOauthState.accessToken,
+      refreshToken: nextOauthState.refreshToken,
+      idToken: nextOauthState.idToken,
+      accountId: oauthStateAccountId,
+      runtimeApiKey: createOpenAIRuntimeApiKey(nextOauthState),
+      oauth: nextOauthState,
+      ...(nextOauthState !== oauthState ? { persistedOAuth: nextOauthState.toJSON() } : {}),
     }
   }
 
   if (oauthState?.refreshToken) {
     const data = await exchangeOpenAIRefreshToken({
       grant_type: "refresh_token",
-      client_id: oauthState.value.clientId ?? OPENAI_OAUTH_CLIENT_ID,
+      client_id: oauthState.value.clientId ?? openAI.oauth.clientId,
       refresh_token: oauthState.refreshToken,
-      scope: OPENAI_OAUTH_REFRESH_SCOPES,
+      scope: openAI.oauth.refreshScopes,
     })
     const accessToken = toTrimmedString(data.access_token)
     if (!accessToken) {
@@ -395,6 +462,7 @@ async function resolveOpenAIOAuthTokens(
       accessToken: nextState.accessToken,
       refreshToken: nextState.refreshToken,
       idToken: nextState.idToken,
+      accountId: nextState.value.accountId,
       runtimeApiKey: createOpenAIRuntimeApiKey(nextState),
       oauth: nextState,
       persistedOAuth: nextState.toJSON(),
@@ -407,7 +475,7 @@ async function resolveOpenAIOAuthTokens(
 
     const data = await exchangeOpenAIToken({
       grant_type: "authorization_code",
-      client_id: OPENAI_OAUTH_CLIENT_ID,
+      client_id: openAI.oauth.clientId,
       code: callback.code,
       redirect_uri: callback.redirectUri,
       code_verifier: callback.codeVerifier,
@@ -436,6 +504,7 @@ async function resolveOpenAIOAuthTokens(
       accessToken: nextState.accessToken,
       refreshToken: nextState.refreshToken,
       idToken: nextState.idToken,
+      accountId: nextState.value.accountId,
       runtimeApiKey: createOpenAIRuntimeApiKey(nextState),
       oauth: nextState,
       persistedOAuth: nextState.toJSON(),
@@ -446,9 +515,9 @@ async function resolveOpenAIOAuthTokens(
   if (refreshToken) {
     const data = await exchangeOpenAIRefreshToken({
       grant_type: "refresh_token",
-      client_id: OPENAI_OAUTH_CLIENT_ID,
+      client_id: openAI.oauth.clientId,
       refresh_token: refreshToken,
-      scope: OPENAI_OAUTH_REFRESH_SCOPES,
+      scope: openAI.oauth.refreshScopes,
     })
 
     const accessToken = toTrimmedString(data.access_token) ?? ""
@@ -468,6 +537,7 @@ async function resolveOpenAIOAuthTokens(
       accessToken: nextState.accessToken,
       refreshToken: nextState.refreshToken,
       idToken: nextState.idToken,
+      accountId: nextState.value.accountId,
       runtimeApiKey: createOpenAIRuntimeApiKey(nextState),
       oauth: nextState,
       persistedOAuth: nextState.toJSON(),
@@ -477,11 +547,12 @@ async function resolveOpenAIOAuthTokens(
   const legacyState = createLegacyOpenAIOAuthState(apiKey)
   if (!legacyState?.accessToken) return null
 
-  if (legacyState.isAccessTokenFresh(OPENAI_ACCESS_TOKEN_REFRESH_BUFFER_MS)) {
+  if (legacyState.isAccessTokenFresh(openAI.oauth.accessTokenRefreshBufferMs)) {
     return {
       accessToken: legacyState.accessToken,
       refreshToken: legacyState.refreshToken,
       idToken: legacyState.idToken,
+      accountId: legacyState.value.accountId,
       runtimeApiKey: createOpenAIRuntimeApiKey(legacyState),
       oauth: legacyState,
       persistedOAuth: legacyState.toJSON(),
@@ -492,9 +563,9 @@ async function resolveOpenAIOAuthTokens(
 
   const data = await exchangeOpenAIRefreshToken({
     grant_type: "refresh_token",
-    client_id: OPENAI_OAUTH_CLIENT_ID,
+    client_id: openAI.oauth.clientId,
     refresh_token: legacyState.refreshToken,
-    scope: OPENAI_OAUTH_REFRESH_SCOPES,
+    scope: openAI.oauth.refreshScopes,
   })
 
   const accessToken = toTrimmedString(data.access_token) ?? ""
@@ -514,6 +585,7 @@ async function resolveOpenAIOAuthTokens(
     accessToken: nextState.accessToken,
     refreshToken: nextState.refreshToken,
     idToken: nextState.idToken,
+    accountId: nextState.value.accountId,
     runtimeApiKey: createOpenAIRuntimeApiKey(nextState),
     oauth: nextState,
     persistedOAuth: nextState.toJSON(),
@@ -527,22 +599,22 @@ export const openAIVendor: VendorProvider = {
     start({ state }) {
       const codeVerifier = createPkceVerifier()
       const oauthState = encodeOpenAIOAuthState({ state, codeVerifier })
-      const authUrl = `${OPENAI_OAUTH_AUTHORIZATION_ENDPOINT}?${new URLSearchParams({
-        client_id: OPENAI_OAUTH_CLIENT_ID,
-        redirect_uri: OPENAI_OAUTH_REDIRECT_URI,
+      const authUrl = `${openAI.oauth.authorizationEndpoint}?${new URLSearchParams({
+        client_id: openAI.oauth.clientId,
+        redirect_uri: openAI.oauth.redirectUri,
         response_type: "code",
-        scope: OPENAI_OAUTH_SCOPES,
+        scope: openAI.oauth.scopes,
         state: oauthState,
         code_challenge: createPkceChallenge(codeVerifier),
         code_challenge_method: "S256",
         id_token_add_organizations: "true",
         codex_cli_simplified_flow: "true",
-        originator: OPENAI_OAUTH_ORIGINATOR,
+        originator: openAI.oauth.originator,
       })}`
       return {
         authUrl,
         state: oauthState,
-        redirectUri: OPENAI_OAUTH_REDIRECT_URI,
+        redirectUri: openAI.oauth.redirectUri,
         captureMode: "manual",
       }
     },
@@ -570,7 +642,7 @@ export const openAIVendor: VendorProvider = {
       ...(resolved.persistedOAuth ? { persistedOAuth: resolved.persistedOAuth } : {}),
     }
   },
-  async getQuota({ apiKey, oauth }) {
+  async getQuota({ apiKey, baseUrl, oauth }) {
     const apiKeyKind = getOpenAIApiKeyKind(apiKey, oauth)
     consoleLogger.info("[OpenAIProvider] quota fetch start", { apiKeyKind })
 
@@ -595,10 +667,15 @@ export const openAIVendor: VendorProvider = {
       return null
     }
 
-    const quota = await fetchOpenAICodexUsage(resolved.accessToken)
+    const quota = await quotaUsage.fetch({
+      accessToken: resolved.accessToken,
+      accountId: resolved.accountId,
+      baseUrl,
+    })
     if (quota) {
       consoleLogger.info("[OpenAIProvider] quota fetch success", {
         apiKeyKind,
+        hasAccountId: Boolean(resolved.accountId),
         hasPrimary: Boolean(quota.primary),
         hasSecondary: Boolean(quota.secondary),
         planType: quota.planType ?? null,

@@ -1,7 +1,7 @@
 import type { VendorOAuthState } from "./types"
 
 const text = (value: unknown) => typeof value === "string" ? value.trim() : ""
-const OAUTH_FIELDS = ["accessToken", "refreshToken", "idToken", "expiresAt", "clientId", "scope", "updatedAt"] as const
+const OAUTH_FIELDS = ["accessToken", "refreshToken", "idToken", "accountId", "expiresAt", "clientId", "scope", "updatedAt"] as const
 
 export class OAuthTokenState {
   readonly value: VendorOAuthState

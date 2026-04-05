@@ -416,8 +416,8 @@ export namespace Patch {
     return result
   }
 
-  // Normalize Unicode punctuation to ASCII equivalents (like Rust's normalize_unicode)
-  function normalizeUnicode(str: string): string {
+  // Fold Unicode punctuation into ASCII equivalents, matching Rust's helper behavior.
+  function foldUnicodePunctuation(str: string): string {
     return str
       .replace(/[\u2018\u2019\u201A\u201B]/g, "'") // single quotes
       .replace(/[\u201C\u201D\u201E\u201F]/g, '"') // double quotes
@@ -474,15 +474,15 @@ export namespace Patch {
     const trim = tryMatch(lines, pattern, startIndex, (a, b) => a.trim() === b.trim(), eof)
     if (trim !== -1) return trim
 
-    // Pass 4: normalized (Unicode punctuation to ASCII)
-    const normalized = tryMatch(
+    // Pass 4: Unicode punctuation folded to ASCII
+    const punctuationFolded = tryMatch(
       lines,
       pattern,
       startIndex,
-      (a, b) => normalizeUnicode(a.trim()) === normalizeUnicode(b.trim()),
+      (a, b) => foldUnicodePunctuation(a.trim()) === foldUnicodePunctuation(b.trim()),
       eof,
     )
-    return normalized
+    return punctuationFolded
   }
 
   function generateUnifiedDiff(oldContent: string, newContent: string): string {

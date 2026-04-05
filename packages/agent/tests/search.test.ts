@@ -62,9 +62,9 @@ describe("Search Providers", () => {
             const files = await provider.listFiles({ cwd: workspace })
             
             expect(files.length).toBe(3)
-            expect(files).toContain(path.normalize("src/core/index.ts"))
-            expect(files).toContain(path.normalize("src/utils/helper.ts"))
-            expect(files).toContain(path.normalize("src/core/test.md"))
+            expect(files).toContain(path.join("src", "core", "index.ts"))
+            expect(files).toContain(path.join("src", "utils", "helper.ts"))
+            expect(files).toContain(path.join("src", "core", "test.md"))
         })
 
         it("should list hidden files if requested", async () => {
@@ -73,7 +73,7 @@ describe("Search Providers", () => {
             
             // Should contain .hidden, but NOT .git files (as .git is typically hard-excluded, our Node/Mem setups do that)
             expect(files).toContain(".hidden")
-            expect(files).not.toContain(path.normalize(".git/config"))
+            expect(files).not.toContain(path.join(".git", "config"))
         })
 
         it("should filter listed files by exact glob patterns", async () => {
@@ -81,8 +81,8 @@ describe("Search Providers", () => {
             const files = await provider.listFiles({ cwd: workspace, glob: ["*.ts"] })
             
             expect(files.length).toBe(2)
-            expect(files).toContain(path.normalize("src/core/index.ts"))
-            expect(files).toContain(path.normalize("src/utils/helper.ts"))
+            expect(files).toContain(path.join("src", "core", "index.ts"))
+            expect(files).toContain(path.join("src", "utils", "helper.ts"))
         })
 
         it("should exclude directories using ! pattern", async () => {
@@ -91,7 +91,7 @@ describe("Search Providers", () => {
             
             // helper.ts is in utils, should show up
             expect(files.length).toBe(1)
-            expect(files).toContain(path.normalize("src/utils/helper.ts"))
+            expect(files).toContain(path.join("src", "utils", "helper.ts"))
         })
 
         it("should respect maxDepth limit", async () => {

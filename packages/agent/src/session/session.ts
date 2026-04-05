@@ -327,7 +327,7 @@ export namespace SessionPrompt {
               break
             case "file:":
               getLog(context).info("file", { mime: part.mime })
-              // have to normalize, symbol search returns absolute paths
+              // Symbol search returns absolute paths, so compare against the decoded file path.
               // Decode the pathname since URL constructor doesn't automatically decode it
               const filepath = fileURLToPath(part.url)
               const s = await context.fs.stat(filepath)

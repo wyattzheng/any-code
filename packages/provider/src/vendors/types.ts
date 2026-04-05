@@ -69,6 +69,7 @@ export interface VendorOAuthState {
   accessToken?: string
   refreshToken?: string
   idToken?: string
+  accountId?: string
   expiresAt?: string
   clientId?: string
   scope?: string
