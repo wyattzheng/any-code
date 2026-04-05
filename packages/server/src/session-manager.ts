@@ -15,6 +15,18 @@ import type { AnyCodeServer, ServerConfig } from "./index"
 const NO_AGENT_TYPE = "noagent"
 const text = (value: unknown) => typeof value === "string" ? value.trim() : ""
 
+async function resolveExistingSessionDirectory(rawDirectory: unknown) {
+  const directory = text(rawDirectory)
+  if (!directory) return ""
+
+  try {
+    const stat = await fsPromises.stat(directory)
+    return stat.isDirectory() ? directory : ""
+  } catch {
+    return ""
+  }
+}
+
 export interface ClientLike {
   readyState: number
   send(data: string): void
@@ -318,14 +330,27 @@ export class SessionManager {
     const liveResumeToken = getUsableResumeToken(entry.runtimeAgentType, tryGetAgentSessionId(previousAgent))
     const shouldKeepResumeToken = !this.server.cfg.apiKey || keepResumeToken
     const resumeToken = shouldKeepResumeToken ? (storedResumeToken || liveResumeToken) : undefined
+    const resolvedDirectory = await resolveExistingSessionDirectory(entry.directory)
 
     if (!shouldKeepResumeToken) {
       this.server.db.update("user_session", { op: "eq", field: "session_id", value: entry.id }, { cascade_id: "" })
     }
 
+    if (entry.directory && !resolvedDirectory) {
+      console.warn(`⚠️  Session ${entry.id} directory no longer exists: ${entry.directory}; clearing persisted directory`)
+      const watcher = this.server.dirWatchManagers.get(entry.id)
+      if (watcher) {
+        watcher.destroy()
+        this.server.dirWatchManagers.delete(entry.id)
+      }
+      entry.directory = ""
+      entry.state.updateFileSystem("")
+      this.server.db.update("user_session", { op: "eq", field: "session_id", value: entry.id }, { directory: "" })
+    }
+
     const terminal = getOrCreateTerminalProvider(this.server, entry.id)
     const preview = getOrCreatePreviewProvider(this.server, this.server.cfg, entry.id)
-    const next = await this.createSessionAgentBinding(entry.id, entry.directory, terminal, preview, preferredAgentType, resumeToken)
+    const next = await this.createSessionAgentBinding(entry.id, resolvedDirectory, terminal, preview, preferredAgentType, resumeToken)
 
     entry.chatAgent = next.chatAgent
     entry.agentType = next.agentType
@@ -333,9 +358,10 @@ export class SessionManager {
     this.persistAgentTypeForWindow(entry.id, entry.agentType)
     this.bindSessionAgentEvents(entry, next.chatAgent)
 
-    if (entry.directory) {
-      try { next.chatAgent.setWorkingDirectory(entry.directory) } catch { /* ignore */ }
-      watchDirectory(this.server, entry.id, entry.directory)
+    if (resolvedDirectory) {
+      entry.directory = resolvedDirectory
+      try { next.chatAgent.setWorkingDirectory(resolvedDirectory) } catch { /* ignore */ }
+      watchDirectory(this.server, entry.id, resolvedDirectory)
     }
 
     this.persistResumeTokenForWindow(entry.id, entry.runtimeAgentType, tryGetAgentSessionId(next.chatAgent))
@@ -356,10 +382,17 @@ export class SessionManager {
     const cached = this.server.sessions.get(sessionId)
     if (cached) return cached
 
-    const dir = (row.directory as string) || ""
+    const persistedDirectory = text(row.directory)
+    const dir = await resolveExistingSessionDirectory(persistedDirectory)
     const preferredAgentType = getPreferredAgentType(typeof row.agent_type === "string" ? row.agent_type : this.server.cfg.agent)
     const resumeToken = getUsableResumeToken(preferredAgentType, (row.cascade_id as string) || undefined)
     console.log(`♻️  Resuming session ${sessionId}, resume_token=${resumeToken || "(none)"}, dir=${dir || "(none)"}`)
+
+    if (persistedDirectory && !dir) {
+      console.warn(`⚠️  Session ${sessionId} directory no longer exists: ${persistedDirectory}; clearing persisted directory`)
+      this.server.db.update("user_session", { op: "eq", field: "session_id", value: sessionId }, { directory: "" })
+    }
+
     const terminal = getOrCreateTerminalProvider(this.server, sessionId)
     const preview = getOrCreatePreviewProvider(this.server, this.server.cfg, sessionId)
     const next = await this.createSessionAgentBinding(sessionId, dir, terminal, preview, preferredAgentType, resumeToken)
