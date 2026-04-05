@@ -93,26 +93,19 @@ interface NoAgentMessageRecord {
   createdAt: number
 }
 
-interface NoAgentStore {
-  load(limit: number): Promise<NoAgentMessageRecord[]> | NoAgentMessageRecord[]
-  append(message: NoAgentMessageRecord): Promise<void> | void
-}
-
 /**
  * NoAgent — placeholder agent used when no account is configured.
  * Keeps the window/session alive and responds with a setup hint.
  */
 export class NoAgent implements IChatAgent {
   readonly name: string
-  private readonly config: ChatAgentConfig & { noAgentStore?: NoAgentStore, noAgentSessionId?: string }
-  private readonly store?: NoAgentStore
+  private readonly config: ChatAgentConfig & { noAgentSessionId?: string }
   private readonly _sessionId: string
   private _initialized = false
   private _history: NoAgentMessageRecord[] = []
 
   constructor(config: ChatAgentConfig) {
-    this.config = config as ChatAgentConfig & { noAgentStore?: NoAgentStore, noAgentSessionId?: string }
-    this.store = this.config.noAgentStore
+    this.config = config as ChatAgentConfig & { noAgentSessionId?: string }
     this.name = config.name || "No Agent"
     this._sessionId = this.config.noAgentSessionId || `noagent-${Date.now()}`
   }
@@ -124,8 +117,6 @@ export class NoAgent implements IChatAgent {
   async init(): Promise<void> {
     if (this._initialized) return
     this._initialized = true
-    const loaded = await this.store?.load(200)
-    this._history = Array.isArray(loaded) ? loaded : []
   }
 
   on(_event: string, _handler: (data: any) => void): void {
@@ -181,7 +172,6 @@ export class NoAgent implements IChatAgent {
       createdAt: Date.now(),
     }
     this._history.push(userMessage)
-    await this.store?.append(userMessage)
 
     const assistantText = "当前还没有配置可用账号。请先打开设置，添加账号的 AGENT、PROVIDER、MODEL、API_KEY 和 BASE_URL，然后再继续对话。"
     const assistantMessage: NoAgentMessageRecord = {
@@ -190,7 +180,6 @@ export class NoAgent implements IChatAgent {
       createdAt: Date.now(),
     }
     this._history.push(assistantMessage)
-    await this.store?.append(assistantMessage)
 
     yield { type: "text.delta", content: assistantText }
     yield { type: "done" }

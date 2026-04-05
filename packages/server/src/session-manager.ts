@@ -43,12 +43,6 @@ export interface SessionEntry {
   state: SessionStateModel
 }
 
-interface NoAgentMessageRecord {
-  role: "user" | "assistant"
-  text: string
-  createdAt: number
-}
-
 interface SessionAgentBinding {
   chatAgent: IChatAgent
   agentType: string
@@ -199,48 +193,8 @@ export class SessionManager {
     }
   }
 
-  private createNoAgentStore(sessionId: string) {
-    return {
-      load: async (limit: number) => this.getPersistedNoAgentMessages(sessionId, limit),
-      append: async (message: NoAgentMessageRecord) => {
-        this.server.db.insert("user_session_message", {
-          session_id: sessionId,
-          role: message.role,
-          text: message.text,
-          time_created: message.createdAt,
-        })
-      },
-    }
-  }
-
-  private getPersistedNoAgentMessages(sessionId: string, limit: number): NoAgentMessageRecord[] {
-    const rows = this.server.db.findMany("user_session_message", {
-      filter: { op: "eq", field: "session_id", value: sessionId },
-      orderBy: [{ field: "id", direction: "desc" }],
-      limit,
-    })
-    return rows.reverse().map((row) => ({
-      role: row.role === "assistant" ? "assistant" : "user",
-      text: typeof row.text === "string" ? row.text : "",
-      createdAt: typeof row.time_created === "number" ? row.time_created : Date.now(),
-    }))
-  }
-
-  private mergeSessionHistoryMessages(noAgentMessages: NoAgentMessageRecord[], runtimeMessages: any[], limit: number) {
-    const persistedNoAgentMessages = noAgentMessages.map((message, index) => (
-      message.role === "user"
-        ? { id: `noagent-user-${index}`, role: "user", text: message.text, createdAt: message.createdAt }
-        : { id: `noagent-assistant-${index}`, role: "assistant", parts: [{ type: "text", content: message.text }], createdAt: message.createdAt }
-    ))
-
-    return [...persistedNoAgentMessages, ...(Array.isArray(runtimeMessages) ? runtimeMessages : [])]
-      .map((message, index) => ({
-        ...message,
-        id: typeof message?.id === "string" && message.id ? message.id : `merged-${index}`,
-        createdAt: typeof message?.createdAt === "number" ? message.createdAt : index,
-      }))
-      .sort((a, b) => a.createdAt === b.createdAt ? String(a.id).localeCompare(String(b.id)) : a.createdAt - b.createdAt)
-      .slice(-limit)
+  private clearPersistedNoAgentMessages(sessionId: string) {
+    this.server.db.remove("user_session_message", { op: "eq", field: "session_id", value: sessionId })
   }
 
   private async createSessionAgentBinding(
@@ -252,11 +206,11 @@ export class SessionManager {
     resumeToken?: string,
   ): Promise<SessionAgentBinding> {
     if (!this.server.cfg.apiKey) {
+      this.clearPersistedNoAgentMessages(sessionId)
       const chatAgent = await createChatAgent(NO_AGENT_TYPE, {
         ...createChatAgentConfig(this.server, this.server.cfg, directory, terminal, preview),
         name: "No Agent",
         noAgentSessionId: sessionId,
-        noAgentStore: this.createNoAgentStore(sessionId),
       } as any)
       await chatAgent.init()
       return { chatAgent, agentType: preferredAgentType, runtimeAgentType: NO_AGENT_TYPE }
@@ -506,9 +460,7 @@ export class SessionManager {
     if (!session) return null
 
     const messages = await session.chatAgent.getSessionMessages({ limit })
-    return session.runtimeAgentType === NO_AGENT_TYPE
-      ? messages
-      : this.mergeSessionHistoryMessages(this.getPersistedNoAgentMessages(session.id, limit), messages, limit)
+    return messages
   }
 
   async handleClientMessage(sessionId: string, client: ClientLike, msg: any) {
