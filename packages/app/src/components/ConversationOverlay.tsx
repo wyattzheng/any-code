@@ -229,15 +229,6 @@ export function ConversationOverlay({ sessionId, fileContext, chatHandlerRef, co
         return () => ro.disconnect();
     }, []);
 
-    // Click on messages area -> enter text input mode and focus
-    // flushSync is required for iOS: .focus() must be in the synchronous
-    // user-gesture chain or Safari won't open the keyboard.
-    const handleMessagesClick = useCallback(() => {
-        flushSync(() => setShowTextInput(false));
-        flushSync(() => setShowTextInput(true));
-        textInputRef.current?.focus();
-    }, []);
-
     // Floating mode toggle — defaults to false (sidebar)
     const [floating, setFloating] = useState(() => {
         try { return localStorage.getItem(STORAGE_KEY_FLOATING) === "true"; } catch { return false; }
@@ -799,7 +790,7 @@ export function ConversationOverlay({ sessionId, fileContext, chatHandlerRef, co
     // ── Shared messages area ──
     const renderMessages = () => (
         <>
-            <div className="conversation-messages" ref={msgsRef} onClick={handleMessagesClick}>
+            <div className="conversation-messages" ref={msgsRef}>
                 {historyLoading && (
                     <div className="conv-loading-overlay" />
                 )}
